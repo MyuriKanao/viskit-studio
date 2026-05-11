@@ -1,0 +1,37 @@
+# Cross-vendor swap fixture #2: openai_compatible @ openrouter endpoint
+providers:
+  vision:
+    protocol: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    model: openai/gpt-4o
+
+  llm:
+    protocol: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    model: openai/gpt-4o
+
+  image_gen:
+    protocol: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    model: google/gemini-2.5-flash-image-preview
+
+  image_edit:
+    protocol: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    model: google/gemini-2.5-flash-image-preview
+
+  embedding:
+    protocol: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    model: nvidia/llama-nemotron-embed-vl-1b-v2
+
+  compliance_screen:
+    protocol: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    model: openai/gpt-4o-mini

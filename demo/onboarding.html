@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<title>欢迎 · AIShop Studio</title>
+<meta name="viewport" content="width=1440"/>
+<link rel="stylesheet" href="tokens.css"/>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500&family=Noto+Serif+SC:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  body { background: var(--ink-base); min-height: 100vh; }
+  .shell { display: grid; grid-template-columns: 1fr 480px; min-height: 100vh; }
+
+  /* LEFT — content */
+  .left { padding: 56px 64px 48px; display: flex; flex-direction: column; }
+  .brand { display: inline-flex; align-items: baseline; gap: 6px; }
+  .brand .b1 { font-family: 'Noto Serif SC',serif; font-weight: 300; font-size: 17px; }
+  .brand .b2 { font-family: var(--font-display); font-style: italic; font-size: 17px; color: var(--accent-soft); }
+  .brand .v { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); margin-left: 4px; letter-spacing: 0.1em; }
+  .step-row { display: flex; align-items: center; gap: 8px; margin-top: 48px; margin-bottom: 32px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.06em; }
+  .step-row .num { color: var(--accent-soft); font-family: var(--font-display); font-style: italic; font-size: 18px; }
+  .step-row .bar { flex: 1; height: 1px; background: var(--border-subtle); position: relative; }
+  .step-row .bar::after { content: ""; position: absolute; left: 0; top: 0; height: 1px; width: 33%; background: var(--accent-soft); }
+
+  h1 { font-family: 'Noto Serif SC', serif; font-weight: 300; font-size: 48px; line-height: 1.15; letter-spacing: -0.015em; margin: 0 0 16px; max-width: 520px; }
+  h1 em { font-family: var(--font-display); font-style: italic; color: var(--accent-soft); font-weight: 400; }
+  .lead { font-size: 15px; color: var(--text-secondary); line-height: 1.6; max-width: 480px; margin: 0 0 40px; }
+
+  .ready-card {
+    background: var(--surface-01); border: 1px solid var(--border-subtle); border-radius: 14px;
+    padding: 20px 22px; max-width: 520px; margin-bottom: 28px;
+  }
+  .ready-card .h { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .ready-card .h .ti { font-family: 'Noto Serif SC', serif; font-weight: 500; font-size: 14px; }
+  .ready-card .h .ok { font-family: var(--font-mono); font-size: 10px; color: var(--success); letter-spacing: 0.1em; margin-left: auto; padding: 2px 8px; border: 1px solid rgba(107,142,90,0.3); border-radius: 999px; display: inline-flex; align-items: center; gap: 5px; }
+  .ready-card .h .ok::before { content:""; width: 5px; height: 5px; border-radius: 50%; background: var(--success); }
+  .ready-card .rows { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+  .ready-card .r { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-mono); font-size: 11px; }
+  .ready-card .r .k { color: var(--text-faint); letter-spacing: 0.04em; }
+  .ready-card .r .v { color: var(--text-primary); }
+  .ready-card .r .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 2px; background: var(--accent); }
+
+  .options { display: flex; flex-direction: column; gap: 10px; max-width: 520px; margin-bottom: 32px; }
+  .opt {
+    display: flex; align-items: center; gap: 16px; padding: 16px 18px;
+    background: var(--surface-01); border: 1px solid var(--border-subtle); border-radius: 12px;
+    cursor: pointer; transition: all var(--t-fast); text-align: left;
+    width: 100%;
+  }
+  .opt:hover { background: var(--surface-02); border-color: var(--border-strong); transform: translateX(2px); }
+  .opt.primary { border-color: rgba(217,119,87,0.35); background: linear-gradient(180deg, var(--accent-wash), transparent 60%), var(--surface-01); }
+  .opt .num { font-family: var(--font-display); font-style: italic; font-size: 26px; color: var(--accent-soft); flex-shrink: 0; width: 32px; text-align: center; }
+  .opt .body { flex: 1; }
+  .opt .ti { font-family: 'Noto Serif SC', serif; font-weight: 500; font-size: 15px; margin-bottom: 4px; }
+  .opt .ds { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .opt .arrow { color: var(--text-faint); font-family: var(--font-mono); font-size: 14px; }
+  .opt:hover .arrow { color: var(--accent-soft); }
+  .opt .badge { font-family: var(--font-mono); font-size: 9px; padding: 2px 6px; border-radius: 3px; background: var(--accent-wash); color: var(--accent-soft); letter-spacing: 0.08em; margin-left: 8px; }
+
+  .skip-row { margin-top: auto; padding-top: 24px; border-top: 1px solid var(--border-hair); display: flex; align-items: center; justify-content: space-between; }
+  .skip-row .l { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); letter-spacing: 0.04em; }
+  .skip-row a { color: var(--text-muted); font-size: 12px; text-decoration: none; }
+  .skip-row a:hover { color: var(--text-primary); }
+  .skip-row a + a { margin-left: 18px; }
+
+  /* RIGHT — sample preview */
+  .right {
+    background: var(--surface-01); border-left: 1px solid var(--border-subtle);
+    padding: 56px 40px; overflow: hidden; position: relative;
+  }
+  .right::before {
+    content: ""; position: absolute; top: -100px; right: -100px; width: 400px; height: 400px;
+    background: radial-gradient(closest-side, var(--accent-wash), transparent 70%);
+    pointer-events: none;
+  }
+  .right .tag { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 14px; position: relative; }
+  .right .sample-h { font-family: 'Noto Serif SC', serif; font-weight: 400; font-size: 20px; margin: 0 0 4px; position: relative; }
+  .right .sample-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-faint); letter-spacing: 0.04em; margin-bottom: 28px; position: relative; }
+
+  .preview-card {
+    background: var(--ink-base); border: 1px solid var(--border-subtle); border-radius: 12px;
+    padding: 18px; position: relative;
+  }
+  .pc-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
+  .pc-bar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .pc-bar .meta { margin-left: auto; color: var(--text-muted); }
+  .pc-label { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin: 14px 0 8px; }
+  .pc-label .n { color: var(--accent-soft); font-family: var(--font-display); font-style: italic; text-transform: none; font-size: 13px; }
+  .pc-heros { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .pc-heros img, .pc-details img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 5px; display: block; }
+  .pc-details { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .pc-details img { aspect-ratio: 2/3; }
+  .pc-tile { position: relative; }
+  .pc-tile .ld { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px var(--surface-02); }
+
+  .activity { margin-top: 28px; position: relative; }
+  .activity .a { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border-hair); }
+  .activity .a:first-child { border-top: none; }
+  .activity .a .t { color: var(--text-faint); width: 56px; }
+  .activity .a .b { color: var(--accent-soft); width: 4px; height: 4px; border-radius: 50%; background: var(--accent-soft); }
+  .activity .a .body { flex: 1; color: var(--text-secondary); }
+  .activity .a .body .em { color: var(--text-primary); }
+
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent); color: #fff;
+    padding: 13px 22px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 500; text-decoration: none;
+    box-shadow: 0 0 0 1px var(--accent-deep), 0 1px 0 rgba(255,255,255,0.12) inset, 0 8px 22px var(--accent-glow);
+    transition: transform var(--t-fast), box-shadow var(--t-fast);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px var(--accent-deep), 0 1px 0 rgba(255,255,255,0.12) inset, 0 14px 32px var(--accent-glow); }
+  .btn-primary .arrow { font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- LEFT -->
+  <div class="left">
+    <a href="landing.html" class="brand">
+      <span class="b1">AIShop</span><span class="b2">Studio</span><span class="v">v0.7</span>
+    </a>
+
+    <div class="step-row">
+      <span class="num">01</span><span>设置工作区</span>
+      <span class="bar"></span>
+      <span>02 创建 Kit · 03 上架</span>
+    </div>
+
+    <h1>欢迎，<em>Lin</em>。<br/>你的工作区已就绪。</h1>
+    <p class="lead">
+      我们替你预配置了 7 个 model endpoint、5 条 routing 规则，以及一份示例 spec。
+      你现在可以直接生成第一份 kit，或者先看看示例。
+    </p>
+
+    <div class="ready-card">
+      <div class="h">
+        <span class="ti">工作区 · lin / brand-a</span>
+        <span class="ok">ready</span>
+      </div>
+      <div class="rows">
+        <div class="r"><span class="k">routing</span><span class="v">5 / 5 endpoints</span></div>
+        <div class="r"><span class="k">cost cap</span><span class="v">$50 / month</span></div>
+        <div class="r"><span class="k">brand color</span><span class="v"><span class="sw"></span>#C4513A</span></div>
+        <div class="r"><span class="k">locale</span><span class="v">zh-CN · 中文优先</span></div>
+        <div class="r"><span class="k">export preset</span><span class="v">天猫 · 京东 · Shopify</span></div>
+        <div class="r"><span class="k">storage</span><span class="v">MinIO · synced 12s</span></div>
+      </div>
+    </div>
+
+    <div class="options">
+      <a href="index.html" class="opt primary">
+        <span class="num">A</span>
+        <div class="body">
+          <div class="ti">从一份 spec 开始 <span class="badge">推荐</span></div>
+          <div class="ds">写一份 markdown，4 分钟后看到 14 张图。可以从模板开始。</div>
+        </div>
+        <span class="arrow">→</span>
+      </a>
+      <a href="index.html#/kit-detail" class="opt">
+        <span class="num">B</span>
+        <div class="body">
+          <div class="ti">先看示例 Kit · 云感针织开衫</div>
+          <div class="ds">完整 14 张图 + spec + 合规报告，5 分钟读懂工作流。</div>
+        </div>
+        <span class="arrow">→</span>
+      </a>
+      <a href="index.html#/providers" class="opt">
+        <span class="num">C</span>
+        <div class="body">
+          <div class="ti">先配置 Providers</div>
+          <div class="ds">接入你自己的 OpenAI / Anthropic / Bedrock key,绕开我们的额度。</div>
+        </div>
+        <span class="arrow">→</span>
+      </a>
+    </div>
+
+    <div class="skip-row">
+      <div class="l">⌘ K 随时呼出 spec 编辑器</div>
+      <div>
+        <a href="#">查看文档</a>
+        <a href="index.html">跳过 →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT — sample preview -->
+  <div class="right">
+    <div class="tag">// SAMPLE KIT · NEW001</div>
+    <div class="sample-h">云感针织开衫</div>
+    <div class="sample-sub">2026-05-11 · 92 / 100 · brand-lock · 4 min 12s · $0.84</div>
+
+    <div class="preview-card">
+      <div class="pc-bar">
+        <span class="dot"></span>
+        <span>kit-NEW001 · ready</span>
+        <span class="meta">14 / 14 generated</span>
+      </div>
+      <div class="pc-label"><span class="n">H1–H5</span> 主图 · 1:1</div>
+      <div class="pc-heros">
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1525507119028-ed4c629a60a3?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1487222477894-8943e31ef7b2?w=300&q=80" alt=""/><span class="ld"></span></div>
+      </div>
+      <div class="pc-label"><span class="n">M1–M9</span> 详情 · 2:3</div>
+      <div class="pc-details">
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1583744946564-b52ac1c389c8?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1485518882345-15568b007407?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1551803091-e20673f15770?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1571513722275-4b41940f54b8?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1564257631407-3deb25f9c47b?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1542060748-10c28b62716f?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1581338834647-b0fb40704e21?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1606502281004-f0a32d4be81d?w=300&q=80" alt=""/><span class="ld"></span></div>
+        <div class="pc-tile"><img src="https://images.unsplash.com/photo-1551803091-e20673f15770?w=300&q=80" alt=""/><span class="ld"></span></div>
+      </div>
+    </div>
+
+    <div class="activity">
+      <div class="a"><span class="t">14:32</span><span class="b"></span><span class="body">spec 解析完成 · <span class="em">14 任务</span> 分发给 router</span></div>
+      <div class="a"><span class="t">14:33</span><span class="b"></span><span class="body">H1–H5 主图 · DashScope <span class="em">5/5 ready</span></span></div>
+      <div class="a"><span class="t">14:35</span><span class="b"></span><span class="body">M4 合规失败 · 自动重生 · <span class="em">ΔE 5.2 → 2.1</span></span></div>
+      <div class="a"><span class="t">14:36</span><span class="b"></span><span class="body">导出 ZIP · 天猫/京东预设 · <span class="em">4 min 12s</span></span></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

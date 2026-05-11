@@ -1,0 +1,49 @@
+# AIShop Studio — example config.yaml
+# Copy this to config.yaml and replace ${...} env-var references with real env exports.
+# DO NOT commit secrets. api_key_env values are NAMES of environment variables only.
+#
+# Provider abstraction (ADR-001): vendor names live ONLY in this file.
+# Compliance screen role (ADR-005 v2): REQUIRED — startup fails if absent.
+
+providers:
+  vision:           # used by style analyzer + multimodal scoring
+    protocol: openai_compatible
+    base_url: https://api.apimart.ai/v1
+    api_key_env: APIMART_API_KEY
+    model: gpt-4o-vision
+
+  llm:              # used by copywriter + content review
+    protocol: anthropic_compatible
+    base_url: https://api.anthropic.com
+    api_key_env: ANTHROPIC_API_KEY
+    model: claude-opus-4-7
+
+  image_gen:        # used by orchestrator
+    protocol: openai_compatible
+    base_url: https://api.apimart.ai/v1
+    api_key_env: APIMART_API_KEY
+    model: gpt-image-2
+
+  image_edit:       # used by text touch-up
+    protocol: openai_compatible
+    base_url: https://api.apimart.ai/v1
+    api_key_env: APIMART_API_KEY
+    model: gpt-image-2-edit
+
+  embedding:        # used by retrieval
+    protocol: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    model: nvidia/llama-nemotron-embed-vl-1b-v2
+
+  # ─── REQUIRED ROLE — see ADR-005 v2 ──────────────────────────────────────
+  # REQUIRED ROLE — do not remove without acknowledging $0.04→$2 per-kit
+  # cost regression (see ADR-005). Default binding is intentional. Do NOT bind to Opus-tier — pre-flight cost balloons 50-100x.
+  # If this stanza is missing at startup, the API exits with
+  #   ERR-PROV-001 missing compliance_screen role
+  # and refuses to serve any request.
+  compliance_screen:
+    protocol: anthropic_compatible
+    base_url: https://api.anthropic.com
+    api_key_env: ANTHROPIC_API_KEY
+    model: claude-haiku-4-5-20251001

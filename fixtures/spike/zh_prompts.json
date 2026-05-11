@@ -1,0 +1,22 @@
+[
+  {"template_id": "H-LIGHT-01",  "zh_text": "优质棉麻",     "brand_color": "#C4513A"},
+  {"template_id": "H-LIGHT-01",  "zh_text": "夏日清凉",     "brand_color": "#C4513A"},
+  {"template_id": "H-LIGHT-01",  "zh_text": "柔软透气",     "brand_color": "#C4513A"},
+  {"template_id": "H-LIGHT-01",  "zh_text": "时尚简约",     "brand_color": "#C4513A"},
+  {"template_id": "H-LIGHT-01",  "zh_text": "轻盈舒适",     "brand_color": "#C4513A"},
+  {"template_id": "H-DARK-01",   "zh_text": "夜间护肤",     "brand_color": "#C4513A"},
+  {"template_id": "H-DARK-01",   "zh_text": "深层修护",     "brand_color": "#C4513A"},
+  {"template_id": "H-DARK-01",   "zh_text": "补水保湿",     "brand_color": "#C4513A"},
+  {"template_id": "H-DARK-01",   "zh_text": "焕活肌肤",     "brand_color": "#C4513A"},
+  {"template_id": "H-DARK-01",   "zh_text": "紧致弹润",     "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-01", "zh_text": "精选原材料",   "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-01", "zh_text": "匠心工艺制造", "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-01", "zh_text": "环保可持续品", "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-01", "zh_text": "细节决定品质", "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-01", "zh_text": "专业检测认证", "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-02", "zh_text": "暗夜星空系列", "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-02", "zh_text": "限量珍藏版本", "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-02", "zh_text": "高端礼盒装扮", "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-02", "zh_text": "经典黑金配色", "brand_color": "#C4513A"},
+  {"template_id": "M-DETAIL-02", "zh_text": "奢华质感升级", "brand_color": "#C4513A"}
+]

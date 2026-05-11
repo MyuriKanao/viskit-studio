@@ -1,0 +1,212 @@
+# Chinese compliance ruleset — 4-tier matrix
+# Ported from: /home/kano/Desktop/ecommerce-visual-copywriting-skill/references/compliance-rules.md
+# References: ADR-005 (compliance_screen role), ADR-009 (zh hard-blocking; en advisory)
+#
+# Schema:
+#   version:    integer schema version
+#   locale:     "zh"
+#   mode:       "enforcing"  (hard-blocking — see ADR-009)
+#   tiers:      mapping of tier_name -> tier definition
+#     label:           human-readable tier name
+#     forbidden_terms: list of {rule_id, term, severity, suggestion?}
+#
+# Severity vocabulary (locale-independent): hard_block | warning | advisory
+# zh ruleset: hard_block on Tier-0 absolutes + Tier-3 effect hints; warning on
+# Tier-1/Tier-2 medicalised wording (less clear-cut → flag-and-review).
+
+version: 1
+locale: zh
+mode: enforcing
+
+tiers:
+  tier_0_general:
+    label: "零层：通用规则（所有产品必过）"
+    forbidden_terms:
+      - rule_id: ZH-T0-001
+        term: "唯一"
+        severity: hard_block
+        suggestion: "之一"
+      - rule_id: ZH-T0-002
+        term: "最"
+        severity: hard_block
+        suggestion: "较为"
+      - rule_id: ZH-T0-003
+        term: "第一"
+        severity: hard_block
+        suggestion: "领先之一"
+      - rule_id: ZH-T0-004
+        term: "绝对"
+        severity: hard_block
+        suggestion: "通常"
+      - rule_id: ZH-T0-005
+        term: "顶级"
+        severity: hard_block
+        suggestion: "上乘"
+      - rule_id: ZH-T0-006
+        term: "极致"
+        severity: hard_block
+        suggestion: "出色"
+      - rule_id: ZH-T0-007
+        term: "完美"
+        severity: hard_block
+        suggestion: "理想"
+      - rule_id: ZH-T0-008
+        term: "100%"
+        severity: hard_block
+        suggestion: "多数情况下"
+      - rule_id: ZH-T0-009
+        term: "国家级"
+        severity: hard_block
+        suggestion: "高规格"
+      - rule_id: ZH-T0-010
+        term: "特效"
+        severity: hard_block
+        suggestion: "有助于"
+      - rule_id: ZH-T0-011
+        term: "国家级最佳"
+        severity: hard_block
+        suggestion: "高规格之一"
+      - rule_id: ZH-T0-012
+        term: "最佳"
+        severity: hard_block
+        suggestion: "较佳"
+      - rule_id: ZH-T0-013
+        term: "无敌"
+        severity: hard_block
+        suggestion: "出色"
+      - rule_id: ZH-T0-014
+        term: "彻底"
+        severity: hard_block
+        suggestion: "显著"
+      - rule_id: ZH-T0-015
+        term: "完全"
+        severity: hard_block
+        suggestion: "大幅"
+
+  tier_1_blue_hat:
+    label: "一层：蓝帽子保健食品（持有保健食品批准文号）"
+    forbidden_terms:
+      - rule_id: ZH-T1-001
+        term: "气色"
+        severity: warning
+        suggestion: "（删除——非批准功能）"
+      - rule_id: ZH-T1-002
+        term: "素颜"
+        severity: warning
+        suggestion: "（删除——非批准功能）"
+      - rule_id: ZH-T1-003
+        term: "祛痘"
+        severity: warning
+        suggestion: "（删除——非批准功能）"
+      - rule_id: ZH-T1-004
+        term: "抗衰"
+        severity: warning
+        suggestion: "（删除——非批准功能）"
+      - rule_id: ZH-T1-005
+        term: "降血糖"
+        severity: warning
+        suggestion: "不具有该功效——请咨询医生"
+      - rule_id: ZH-T1-006
+        term: "提高免疫力"
+        severity: warning
+        suggestion: "（仅当批准功能含此项时方可使用原文）"
+      - rule_id: ZH-T1-007
+        term: "改善睡眠"
+        severity: warning
+        suggestion: "（仅当批准功能含此项时方可使用原文）"
+      - rule_id: ZH-T1-008
+        term: "瘦身"
+        severity: warning
+        suggestion: "无糖分负担"
+      - rule_id: ZH-T1-009
+        term: "减脂"
+        severity: warning
+        suggestion: "无糖分负担"
+
+  tier_2_demedicalize:
+    label: "二层：运动器材/体态管理类（非医疗器械）"
+    forbidden_terms:
+      - rule_id: ZH-T2-001
+        term: "修复"
+        severity: warning
+        suggestion: "体态调整"
+      - rule_id: ZH-T2-002
+        term: "治疗"
+        severity: warning
+        suggestion: "体态管理"
+      - rule_id: ZH-T2-003
+        term: "康复"
+        severity: warning
+        suggestion: "锻炼"
+      - rule_id: ZH-T2-004
+        term: "矫正"
+        severity: warning
+        suggestion: "体态调整"
+      - rule_id: ZH-T2-005
+        term: "腰酸背痛"
+        severity: warning
+        suggestion: "腰背不适"
+      - rule_id: ZH-T2-006
+        term: "骨盆前倾"
+        severity: warning
+        suggestion: "骨盆形态不佳"
+      - rule_id: ZH-T2-007
+        term: "脊柱侧弯"
+        severity: warning
+        suggestion: "背部线条不直"
+      - rule_id: ZH-T2-008
+        term: "椎间盘"
+        severity: warning
+        suggestion: "（删除医学术语——改用体态描述）"
+      - rule_id: ZH-T2-009
+        term: "医疗级"
+        severity: warning
+        suggestion: "科学、系统、规范"
+      - rule_id: ZH-T2-010
+        term: "一定见效"
+        severity: hard_block
+        suggestion: "助力逐步改善"
+
+  tier_3_general_food:
+    label: "三层：普通食品（非保健食品、非药品）⚠️ 最严"
+    forbidden_terms:
+      - rule_id: ZH-T3-001
+        term: "喝走胀闷感"
+        severity: hard_block
+        suggestion: "（删除——禁止功效暗示）"
+      - rule_id: ZH-T3-002
+        term: "喝出好状态"
+        severity: hard_block
+        suggestion: "（删除——禁止功效暗示）"
+      - rule_id: ZH-T3-003
+        term: "日常调理"
+        severity: hard_block
+        suggestion: "（删除——禁止功效暗示）"
+      - rule_id: ZH-T3-004
+        term: "适合糖尿病患者"
+        severity: hard_block
+        suggestion: "（删除——禁止疾病人群绑定）"
+      - rule_id: ZH-T3-005
+        term: "三高人群"
+        severity: hard_block
+        suggestion: "（删除——禁止疾病人群绑定）"
+      - rule_id: ZH-T3-006
+        term: "坚持饮用能"
+        severity: hard_block
+        suggestion: "（删除——禁止效果承诺）"
+      - rule_id: ZH-T3-007
+        term: "促消化"
+        severity: hard_block
+        suggestion: "（删除——普通食品禁止功效宣称）"
+      - rule_id: ZH-T3-008
+        term: "助眠"
+        severity: hard_block
+        suggestion: "（删除——普通食品禁止功效宣称）"
+      - rule_id: ZH-T3-009
+        term: "提神"
+        severity: hard_block
+        suggestion: "（删除——普通食品禁止功效宣称）"
+      - rule_id: ZH-T3-010
+        term: "排毒"
+        severity: hard_block
+        suggestion: "（删除——普通食品禁止功效宣称）"

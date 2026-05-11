@@ -1,0 +1,184 @@
+{
+  "epic": "EPIC-4B — Imagegen Orchestrator + Campaign-Lock",
+  "goal": "Layer concurrency, async polling, campaign-lock, SSE events, pre-flight compliance integration, and remaining iron rules (4, 5, 6, 7, 9) on top of EPIC-4A's working single-image loop. Each enqueued image-gen job carries a routing snapshot per ADR-011 (env-var-name only, never plaintext secrets). Pre-flight is mandatory (no skipped path) and runs BEFORE any image-gen call. SSE channel surfaces per-image status events. Wall-clock target ≤5 min/14 PNGs (verified via concurrency assertion against the FakeImageGen — real-LLM probe deferred to operator).",
+  "plan_reference": ".omc/plans/aishop-studio-v1-plan.md lines 315-336 (EPIC-4B), lines 149-165 (ADR-011 v2 Api Key Resolution)",
+  "spec_reference": ".omc/specs/deep-interview-aishop-img-studio.md (imagegen + queue sections)",
+  "preconditions_satisfied": [
+    "EPIC-4A complete: services/imagegen/{template_loader,prompt_builder,style_synthesizer,color_lock,single_gen}.py shipped + 64 tests passing.",
+    "EPIC-3 complete: services/copywriter/compliance/preflight.py exists with run_preflight(prompts, registry, locale) returning PreflightResult(passed, violations, cost_estimate_usd).",
+    "EPIC-1 complete: services/providers/registry.py exposes Registry.snapshot() / Registry.from_snapshot(), enforces ADR-011 v2 secret-shape regex, raises ProviderConfigError ERR-PROV-001/002/003.",
+    "tests/copywriter/conftest.py FakeRegistry + tests/imagegen/conftest.py FakeImageGen reusable for orchestrator tests.",
+    "EPIC-4A architect non-blocking nits N3 (slot→template hard-coded) + N4 (cost-event role hard-coded 'image_gen') flagged for resolution in EPIC-4B; addressed inside US-4B.3."
+  ],
+  "depends_on_epics": [
+    "EPIC-1 (registry.snapshot/from_snapshot, ProviderConfigError ERR-PROV-001/003)",
+    "EPIC-3 (preflight.run_preflight)",
+    "EPIC-4A (single_gen, prompt_builder, color_lock, FakeImageGen)"
+  ],
+  "stories": [
+    {
+      "id": "US-4B.1",
+      "title": "Iron rules 4, 5, 6, 7, 9 in prompt_builder.py",
+      "description": "Extend services/imagegen/prompt_builder.py to apply iron rules 4 (explicit negation list), 5 (platform-reserved zone exclusions), 6 (3-layer information hierarchy: hero / supporting / foundation), 7 (batch-over-iterate prompt structure — single prompt produces final image, no iteration loop hint), 9 (no-text-by-default — when image_brief.copy is empty AND template variant doesn't request copy, prompt MUST contain an explicit 'no on-image text' assertion). EPIC-4A already shipped rules 1, 2, 3, 8.\n\nTotal iron-rule unit-test files become exactly 9 (services lives at tests/imagegen/test_iron_rule_{1..9}_*.py).",
+      "acceptanceCriteria": [
+        "services/imagegen/prompt_builder.py exposes rule 4 enforcement: returned prompt MUST contain a 'Negative prompt:' section listing at least 4 explicit prohibitions (e.g. 'no warped text, no garbled characters, no logo distortion, no extra fingers'); list is module-level constant `_IRON_RULE_4_NEGATIONS` of type `tuple[str, ...]`",
+        "services/imagegen/prompt_builder.py exposes rule 5 enforcement: when sku_meta.product_type='blue_hat' OR locale='zh', the prompt MUST contain an 'Avoid platform-reserved zones:' line listing at least 3 zones (e.g. 'top-left badge corner, bottom watermark strip, right-hand share-icon column'); module-level constant `_IRON_RULE_5_RESERVED_ZONES`",
+        "services/imagegen/prompt_builder.py exposes rule 6 enforcement: returned prompt MUST contain three labeled lines for hero / supporting / foundation layers, in that order — `Hero layer:`, `Supporting layer:`, `Foundation layer:` — populated from image_brief (hero=visual, supporting=design_note, foundation=template.category_tips fallback to '[implicit]')",
+        "services/imagegen/prompt_builder.py exposes rule 7 enforcement: returned prompt MUST contain a `Generation policy:` line whose value contains 'single-pass' AND 'no iteration loop' (proves the batch-over-iterate stance is explicit in the rendered prompt)",
+        "services/imagegen/prompt_builder.py exposes rule 9 enforcement: when image_brief.copy.strip() is empty AND template.id is not in the curated `_COPY_REQUIRED_TEMPLATES` set, the prompt MUST contain the literal `On-image text policy: NONE — render no text, no captions, no watermarks`. When image_brief.copy IS non-empty, the existing 'On-image text:' line wins (no rule-9 line emitted)",
+        "tests/imagegen/test_iron_rule_4_negation.py exists and passes; asserts the negation section appears + at least 4 distinct prohibitions present",
+        "tests/imagegen/test_iron_rule_5_reserved_zones.py exists and passes; asserts ZH-locale and blue_hat product types both trigger the line; asserts EN-locale + non-blue_hat does NOT include the line (the zones are platform-specific to TaoBao/Tmall)",
+        "tests/imagegen/test_iron_rule_6_layers.py exists and passes; asserts the three labeled layer lines appear in order; asserts foundation falls back to '[implicit]' when template.category_tips is empty",
+        "tests/imagegen/test_iron_rule_7_batch.py exists and passes; asserts the 'Generation policy: single-pass; no iteration loop' line appears verbatim",
+        "tests/imagegen/test_iron_rule_9_no_text.py exists and passes; asserts: (a) empty copy + non-curated template emits the no-text line; (b) non-empty copy suppresses the no-text line; (c) curated template (e.g. 'poster-banner' or 'hero-image' which expect copy) suppresses the no-text line even when copy is empty (caller bug — log a warning instead)",
+        "All 4 EPIC-4A iron-rule tests (test_iron_rule_1_color.py, test_iron_rule_2_ratio.py, test_iron_rule_3_whitespace.py, test_iron_rule_8_zh.py) STILL pass against the extended prompt_builder",
+        "Module passes `uv run ruff check services/imagegen/prompt_builder.py tests/imagegen/test_iron_rule_*.py` with zero violations",
+        "Module passes `uv run mypy services/imagegen/prompt_builder.py` with zero errors (strict)",
+        "`uv run pytest tests/imagegen/test_iron_rule_*.py -q` collects exactly 9 test files and they all pass",
+        "`bash scripts/grep_providers.sh` still exits 0"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-4B.2",
+      "title": "campaign_lock.py — per-kit lock-text with byte-equal first-paragraph guarantee",
+      "description": "services/imagegen/campaign_lock.py builds a per-kit `CampaignLock` describing color palette, font system, light/composition uniformity, and prohibited drifts. The lock-text is prepended to ALL 14 prompts so every image in the kit shares an identical first paragraph (byte-equal), ensuring visual cohesion. Ports the Campaign Style Lock concept documented in `ecom-details-image/README.md`.",
+      "acceptanceCriteria": [
+        "services/imagegen/campaign_lock.py exists exporting `CampaignLock` dataclass (frozen, slots) carrying kit_id: str, brand_color_hex: str, secondary_color_hex: str | None, font_system: str, light_mode: Literal['warm','cool','neutral'], composition_motif: str, prohibited_drifts: tuple[str, ...], locale: Literal['zh','en']",
+        "services/imagegen/campaign_lock.py exports `build_lock(kit_id: str, *, brand_color_hex: str, locale: Literal['zh','en'], style_prompt: str, secondary_color_hex: str | None = None) -> CampaignLock` factory; light_mode is inferred from style_prompt keyword scan ('warm', 'sunset', 'amber', 'gold' → warm; 'cool', 'blue', 'cold', 'mist' → cool; else neutral); composition_motif defaults to 'centered subject, generous whitespace'; prohibited_drifts default = ('no palette drift', 'no font swap', 'no light-mode flip', 'no perspective change')",
+        "services/imagegen/campaign_lock.py exports `render_lock_paragraph(lock: CampaignLock) -> str` which returns the deterministic locked first paragraph. The function MUST be a pure function: same CampaignLock → byte-equal output every call",
+        "services/imagegen/campaign_lock.py exports `apply_lock(lock: CampaignLock, prompt_body: str) -> str` which prepends `render_lock_paragraph(lock) + '\\n\\n'` to prompt_body; the join sentinel is the literal byte sequence `\\n\\n` (LF LF)",
+        "render_lock_paragraph output begins with a byte-stable header line `[Campaign Lock: kit={kit_id}]` so consumers can detect the lock zone via prefix match",
+        "render_lock_paragraph output includes the brand_color_hex (uppercase normalised), font_system, light_mode, composition_motif, and the joined prohibited_drifts list",
+        "tests/imagegen/test_campaign_lock.py asserts: (a) build_lock with identical inputs returns equal CampaignLock instances; (b) render_lock_paragraph is deterministic across 10 invocations; (c) apply_lock prepends the lock and preserves prompt_body; (d) light_mode keyword scan correctly classifies 3 sample style_prompts (warm/cool/neutral); (e) the `_byte_equal_first_paragraph_in_kit` integration helper splits each rendered prompt on the first `\\n\\n` boundary and asserts all 14 first paragraphs are byte-equal",
+        "tests/imagegen/test_campaign_lock_byte_equal.py builds a 14-prompt fixture using the spec from tests/imagegen/conftest.py (or a new helper) and asserts: for kit X with one CampaignLock instance, all 14 prompts produced by `build_prompt(...)` then `apply_lock(...)` share an identical first paragraph (byte-equal). Failing prompt indices are reported in the assertion message",
+        "Module passes `uv run ruff check services/imagegen/campaign_lock.py tests/imagegen/test_campaign_lock*.py` with zero violations",
+        "Module passes `uv run mypy services/imagegen/campaign_lock.py` with zero errors (strict)",
+        "`uv run pytest tests/imagegen/test_campaign_lock.py tests/imagegen/test_campaign_lock_byte_equal.py -q` passes with ≥6 tests"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-4B.3",
+      "title": "orchestrator.py — concurrency cap + routing snapshot threading + cost-event role from snapshot",
+      "description": "services/imagegen/orchestrator.py implements the EPIC-4B fan-out engine. Sequential single_gen.generate_kit is replaced by an async orchestrator that fans out 14 image jobs subject to a per-provider concurrency cap (default 4 from config). Each enqueued job carries a `RoutingSnapshot` capturing per-role provider name, base_url, api_key_env_var (NEVER plaintext secret), model, and cap. Workers resolve the env-var at task-start and use the snapshot, NOT a live registry call (ADR-011). The cost-event `role` field is sourced FROM the snapshot's role binding — resolves EPIC-4A architect nit N4 (was hard-coded 'image_gen').\n\nThis story does NOT yet include preflight (US-4B.4), SSE (US-4B.5), or the routing-snapshot/env-var failure-mode tests (US-4B.6/7) — it ships the fan-out engine + concurrency primitive + snapshot-aware cost-event emission + a happy-path 14-image integration test.",
+      "acceptanceCriteria": [
+        "services/imagegen/orchestrator.py exists exporting `RoutingSnapshot` dataclass (frozen, slots) with fields: providers: dict[str, ProviderBinding] where ProviderBinding (also frozen) carries protocol: Literal['openai_compatible','anthropic_compatible'], base_url: str, api_key_env_var: str, model: str, cap: int (default 4)",
+        "services/imagegen/orchestrator.py exports `capture_snapshot(registry, *, cap: int = 4) -> RoutingSnapshot` helper that calls registry.snapshot() and wraps result into the typed RoutingSnapshot; raises ProviderConfigError ERR-PROV-002 if any value matches the secret-shape regex from registry._SECRET_PATTERN",
+        "services/imagegen/orchestrator.py exports `JobPayload` dataclass (frozen, slots) carrying: kit_id: str, image_id: str, template_id: str, role: str (e.g. 'image_gen'), size: str, prompt: str, brand_color_hex: str, snapshot: RoutingSnapshot, color_lock_threshold: float",
+        "services/imagegen/orchestrator.py exports `JobOutcome` dataclass (frozen, slots) carrying: image_id: str, png_path: Path | None, color_lock_status: Literal['ok','out_of_tolerance','error','failed'], retried: bool, needs_review: bool, error_code: str | None, cost_event: dict[str, Any] | None",
+        "services/imagegen/orchestrator.py exports `OrchestratorResult` dataclass (frozen, slots) carrying: kit_id, png_paths: tuple[Path, ...], compliance_path: Path, cost_path: Path, color_lock_summary: dict[str, int], needs_review: bool, abort_reason: str | None, max_concurrent_observed: int (per-provider)",
+        "services/imagegen/orchestrator.py exports `async def orchestrate_kit(inputs: KitGenerationInputs, *, registry, snapshot: RoutingSnapshot | None = None, cap: int = 4, color_lock_threshold: float = 6.0) -> OrchestratorResult`. When snapshot is None, captures one via capture_snapshot(registry, cap=cap). The function MUST run all 14 image jobs concurrently subject to an asyncio.Semaphore(cap) per role",
+        "Each cost-event row emitted by orchestrate_kit carries `role` field sourced from JobPayload.role (default 'image_gen', taken from snapshot.providers['image_gen'].cap chain, NOT hard-coded) — resolves EPIC-4A architect nit N4. Test asserts cost-event['role'] equals 'image_gen' and cost-event['provider_model'] equals snapshot.providers['image_gen'].model",
+        "orchestrate_kit retries any image with color_lock.status == 'out_of_tolerance' OR 'error' EXACTLY ONCE (re-runs that image only); if the retry also fails, the image's JobOutcome.needs_review = True. The kit-level needs_review flag is set if ANY image needs_review",
+        "max_concurrent_observed in OrchestratorResult MUST be ≤ cap; verified by a CountingFakeImageGen that increments a counter on entry, decrements on exit, and tracks the in-flight peak",
+        "orchestrate_kit writes the same compliance.json (score=null placeholder) and cost.json shape as single_gen.py — both pass single_gen.validate_kit_output()",
+        "tests/imagegen/test_orchestrator_basic.py asserts: (a) 14 PNGs produced; (b) compliance.json + cost.json shape; (c) every cost-event has 'role' and 'provider_model' fields populated from the snapshot, NOT hard-coded literals; (d) integration with prompt_builder (rules 1-9) + campaign_lock (US-4B.2) renders the same byte-equal first paragraph across all 14 prompts",
+        "tests/imagegen/test_orchestrator_concurrency.py uses a CountingFakeImageGen with an asyncio.sleep(0.01) per call to verify: max_concurrent_observed == cap when 14 jobs are dispatched and cap=4; with cap=1 the max never exceeds 1; with cap=14 the max equals 14",
+        "tests/imagegen/test_orchestrator_retry.py uses a FakeImageGen that emits a deliberately wrong-color PNG on the first call for image_id='H3' and a correct one on the retry; asserts (a) H3.retried == True; (b) H3.needs_review == False; (c) kit-level needs_review == False. Second variant: FakeImageGen always emits wrong color → asserts H3.needs_review == True and kit-level needs_review == True after retry exhaustion",
+        "Module passes `uv run ruff check services/imagegen/orchestrator.py tests/imagegen/test_orchestrator_*.py` with zero violations",
+        "Module passes `uv run mypy services/imagegen/orchestrator.py` with zero errors (strict)",
+        "`uv run pytest tests/imagegen/test_orchestrator_basic.py tests/imagegen/test_orchestrator_concurrency.py tests/imagegen/test_orchestrator_retry.py -q` passes with ≥7 tests"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-4B.4",
+      "title": "Pre-flight gate integration — orchestrator aborts kit on hard_block (no skipped path)",
+      "description": "Inside orchestrate_kit, BEFORE any image-gen call, build the union of all 14 assembled prompts and pass them to services.copywriter.compliance.preflight.run_preflight. If passed=False (any hard_block violation), abort the kit before enqueueing ANY image-gen job, set OrchestratorResult.needs_review=True and abort_reason='preflight_failed:{rule_ids}', emit ZERO cost-events with role='image_gen' for that kit (only the preflight cost-event is recorded), and return.\n\nADR-005 v2 fail-loud: there is NO skipped path — preflight is always invoked. If registry.get('compliance_screen') raises ProviderConfigError ERR-PROV-001 at runtime (defence-in-depth), orchestrate_kit propagates it (callers route to needs_review with the error attached).",
+      "acceptanceCriteria": [
+        "orchestrate_kit ALWAYS invokes services.copywriter.compliance.preflight.run_preflight before any image-gen dispatch — verified by FakeComplianceScreen.call_count >= 1 in every test path (happy + abort)",
+        "When preflight returns passed=False with a hard_block violation, orchestrate_kit aborts before any image-gen call — verified by FakeImageGen.call_count == 0 AND no cost-event with role='image_gen' in cost.json (only the preflight event, role='compliance_screen')",
+        "On preflight abort, OrchestratorResult.needs_review == True AND abort_reason starts with 'preflight_failed:' AND lists the matched rule_ids (sorted, comma-joined)",
+        "On preflight abort, compliance.json is still written but with shape `{score: null, version: 1, preflight: {passed: false, violations: [...]}}` (callers in EPIC-7 read this for UI surfacing)",
+        "On preflight abort, cost.json is written with the preflight cost-event included (role='compliance_screen') and the events list is otherwise empty",
+        "On preflight pass (no hard_block), orchestrate_kit proceeds to fan-out as before; cost.json carries one preflight event PLUS 14 image-gen events; compliance.json carries `{score: null, version: 1, preflight: {passed: true, violations: []}}`",
+        "When registry.get('compliance_screen') raises ProviderConfigError ERR-PROV-001 (FakeRegistry.raise_on_get='compliance_screen'), orchestrate_kit propagates the exception unchanged (does NOT swallow). Test asserts pytest.raises(ProviderConfigError) and exc.code == 'ERR-PROV-001'",
+        "tests/imagegen/test_orchestrator_preflight.py covers all six paths above with FakeComplianceScreen carrying hard_block_terms=('国家级最佳',) and a kit whose Spec.hero_sections[0].three_piece.copy contains '国家级最佳' to trigger the abort",
+        "tests/imagegen/test_orchestrator_preflight.py also asserts the v2 `no skipped path` invariant: a hand-crafted PreflightResult mock whose `passed=True` and `violations=()` does NOT skip the call (FakeComplianceScreen.call_count is still 1) — i.e. there is no early-return when violations is empty",
+        "Module passes `uv run ruff check tests/imagegen/test_orchestrator_preflight.py` with zero violations",
+        "Module passes `uv run mypy services/imagegen/orchestrator.py` with zero errors (strict)",
+        "`uv run pytest tests/imagegen/test_orchestrator_preflight.py -q` passes with ≥6 tests"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-4B.5",
+      "title": "SSE channel /api/kits/{kit_id}/events — per-image status events",
+      "description": "Add a server-sent-events route to apps/api/routes/kits.py exposing GET /api/kits/{kit_id}/events. The handler uses fastapi.responses.StreamingResponse with media_type='text/event-stream'. Events are produced by the orchestrator via an in-process asyncio.Queue keyed by kit_id (kept in app.state.kit_event_queues). Event shape: {image_id, status: Literal['enqueued','in_progress','color_locked','out_of_tolerance','needs_review','done'], progress: int 0..14, brand_color_locked: bool}. The orchestrator publishes events as it walks through preflight → enqueue → per-image completion → final.",
+      "acceptanceCriteria": [
+        "apps/api/routes/kits.py exposes GET /api/kits/{kit_id}/events returning fastapi.responses.StreamingResponse with media_type='text/event-stream'",
+        "Each emitted event line conforms to the SSE wire format: `data: <json>\\n\\n` where <json> matches `{image_id: str, status: str, progress: int, brand_color_locked: bool}`",
+        "services/imagegen/orchestrator.py exports `KitEventBus` class with `publish(kit_id: str, event: dict[str, Any]) -> None` and `subscribe(kit_id: str) -> AsyncIterator[dict[str, Any]]`; backed by asyncio.Queue per kit_id; subscribers join late-but-still-receive-historical-events behaviour is OUT OF SCOPE (live tail only)",
+        "orchestrate_kit accepts an optional `event_bus: KitEventBus | None = None` parameter; when provided, publishes: (a) one 'enqueued' event per image immediately after preflight pass; (b) one 'in_progress' event per image when the worker picks it up; (c) one terminal event per image carrying status ∈ {color_locked, out_of_tolerance, needs_review} and brand_color_locked: bool; (d) one final 'done' event with image_id='*' and progress=14",
+        "On preflight abort, the bus emits a single event {image_id: '*', status: 'preflight_failed', progress: 0, brand_color_locked: False} then closes the per-kit queue",
+        "apps/api/routes/kits.py route resolves the bus from app.state.kit_event_bus (set up in apps/api/main.py during startup); returns 404 when no events have ever been published for that kit_id (kit is unknown)",
+        "tests/imagegen/test_sse_route.py uses TestClient with .stream('GET', '/api/kits/{kit_id}/events') to: (a) start a generation in a background task; (b) collect emitted events from the SSE stream; (c) assert the event ordering — at least one 'enqueued', followed by ≥14 image-terminal events, followed by 1 'done'",
+        "tests/imagegen/test_sse_route.py also asserts: (a) the response Content-Type starts with 'text/event-stream'; (b) every emitted line is parseable as `data: <json>` followed by `\\n\\n`; (c) image_id values cover all 14 expected ids (H1..H5, M1..M9)",
+        "tests/imagegen/test_sse_route.py asserts the 404 path: GET /api/kits/<unknown-id>/events returns 404",
+        "Existing tests/imagegen/test_generate_route.py + tests/imagegen/test_output_contract.py + apps/api/tests/test_health.py STILL pass after the route is wired",
+        "Module passes `uv run ruff check apps/api/routes/kits.py tests/imagegen/test_sse_route.py` with zero violations",
+        "Module passes `uv run mypy apps/api/routes/kits.py` with zero errors (strict)",
+        "`uv run pytest tests/imagegen/test_sse_route.py tests/imagegen/test_generate_route.py -q` passes"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-4B.6",
+      "title": "Routing-snapshot honored — tests/queue/test_routing_snapshot.py",
+      "description": "ADR-011 v2 acceptance test: enqueue 5 image-gen jobs bound to 'provider A' (snapshot captured at enqueue); before workers run, swap the live registry to 'provider B'; advance workers; assert all 5 snapshot-bound jobs hit provider A (not B). New jobs enqueued AFTER the swap MUST hit provider B.\n\nThis story creates a new tests/queue/ test directory and validates that orchestrator workers resolve from the JobPayload.snapshot, NOT from a live registry lookup.",
+      "acceptanceCriteria": [
+        "tests/queue/__init__.py exists (empty file) so the test package is collectable",
+        "tests/queue/test_routing_snapshot.py exists and contains the snapshot-stickiness test",
+        "Test setup: build registry_A with image_gen adapter wrapping FakeImageGen with model='fake-A'; capture snapshot_A via orchestrator.capture_snapshot(registry_A); rebuild registry_B with model='fake-B' (different adapter instance); ALL 5 jobs were enqueued with snapshot_A",
+        "Test asserts that running the 5 jobs through orchestrator._dispatch_with_snapshot(jobs, snapshot=snapshot_A, current_registry=registry_B) — i.e. `current_registry` is intentionally B but the snapshot is A — produces cost-events whose `provider_model` field equals 'fake-A' (snapshot wins over current_registry)",
+        "Test asserts that a NEW job enqueued post-swap (orchestrator.capture_snapshot(registry_B)) hits 'fake-B' — proves snapshot freshness for new dispatches",
+        "Test asserts that the snapshot itself contains api_key_env_var as a NAME (e.g. 'TEST_KEY_A') and NOT a plaintext value (regex grep over snapshot dict serialised to JSON)",
+        "orchestrator._dispatch_with_snapshot (or whatever name) accepts (jobs, snapshot, registry_or_factory) and worker code MUST construct adapters from snapshot — verified by test fixture that registers two distinct adapter instances with different `model` strings keyed by name",
+        "The test does NOT require real arq / Redis; it directly drives the dispatcher path orchestrate_kit uses internally. If the dispatcher is async-only, the test wraps it in asyncio.run",
+        "`uv run pytest tests/queue/test_routing_snapshot.py -q` passes with ≥3 tests (snapshot-stickiness, post-swap-fresh, no-secret-in-snapshot)",
+        "Module passes `uv run ruff check tests/queue/test_routing_snapshot.py` with zero violations",
+        "Module passes `uv run mypy tests/queue/test_routing_snapshot.py` with zero errors (strict)"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-4B.7",
+      "title": "Env-var-missing-at-worker — tests/queue/test_env_var_missing.py (ADR-011 v2)",
+      "description": "ADR-011 v2 acceptance test: enqueue an image-gen job with snapshot.providers['image_gen'].api_key_env_var='TEST_KEY_MISSING'; ensure the env var is NOT set at the worker's task-start time; advance the worker; assert it fails the task with code 'ERR-PROV-003' and message containing 'env_var_missing_at_worker', the kit is marked needs_review, and the kit's compliance.json carries reason='env_var_missing: TEST_KEY_MISSING'.\n\nValidates the v2 Api Key Resolution semantics: env-var resolution happens at worker task-start, not at enqueue.",
+      "acceptanceCriteria": [
+        "tests/queue/test_env_var_missing.py exists",
+        "services/imagegen/orchestrator.py exports `resolve_api_key(snapshot: RoutingSnapshot, role: str) -> str` helper that calls os.environ[snapshot.providers[role].api_key_env_var]; raises ProviderConfigError('ERR-PROV-003', f'env_var_missing_at_worker: {env_var_name}', role=role) when the env var is unset OR empty-string",
+        "When orchestrate_kit (or its underlying _dispatch_with_snapshot) catches ProviderConfigError ERR-PROV-003 from a per-image worker, it: (a) marks that image's JobOutcome.needs_review=True with error_code='ERR-PROV-003'; (b) the kit-level needs_review=True; (c) compliance.json is augmented with `key_resolution: {failed_role: 'image_gen', env_var_name: 'TEST_KEY_MISSING', reason: 'env_var_missing'}`",
+        "Test setup: monkeypatch.delenv('TEST_KEY_MISSING', raising=False); build snapshot with image_gen.api_key_env_var='TEST_KEY_MISSING'; run orchestrator.resolve_api_key(snapshot, 'image_gen'); assert pytest.raises(ProviderConfigError) and exc.code == 'ERR-PROV-003'",
+        "Integration test: with env var unset, run orchestrate_kit; assert OrchestratorResult.needs_review == True; assert at least one JobOutcome.error_code == 'ERR-PROV-003'; assert compliance.json carries the key_resolution block with env_var_name='TEST_KEY_MISSING'",
+        "Empty-string variant: monkeypatch.setenv('TEST_KEY_MISSING', ''); resolve_api_key still raises ERR-PROV-003 (empty == missing)",
+        "Test asserts the error message MUST NOT contain a literal secret value (defence-in-depth — only the env var NAME is logged)",
+        "`uv run pytest tests/queue/test_env_var_missing.py -q` passes with ≥4 tests",
+        "Module passes `uv run ruff check tests/queue/test_env_var_missing.py services/imagegen/orchestrator.py` with zero violations",
+        "Module passes `uv run mypy tests/queue/test_env_var_missing.py` with zero errors (strict)"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-4B.8",
+      "title": "Wall-clock fixture test + EPIC-4A regression — orchestrator-driven generate route + 14-image timing",
+      "description": "End-to-end fixture test: drive orchestrate_kit on a 14-image fixture SKU using FakeImageGen (with a small per-call sleep=0.05s to make concurrency visible), assert wall-clock < 5 seconds (proxy for 'concurrency is real, not sequential'), and assert ≥12/14 color-locked at threshold ΔE<6. Also rewires apps/api/routes/kits.py POST /api/kits/{kit_id}/generate to call orchestrate_kit (replacing the EPIC-4A direct generate_kit call) so the route now benefits from concurrency, preflight, and SSE eventing.\n\nAll 64 EPIC-4A tests + new EPIC-4B tests must pass.",
+      "acceptanceCriteria": [
+        "apps/api/routes/kits.py POST /api/kits/{kit_id}/generate now invokes services.imagegen.orchestrator.orchestrate_kit (instead of services.imagegen.single_gen.generate_kit). The response shape stays the same (kit_id, png_paths, compliance_path, cost_path, color_lock_summary) PLUS a new `needs_review: bool` field and `abort_reason: str | None` field",
+        "Existing tests/imagegen/test_generate_route.py PASSES against the new orchestrator-backed route — happy-path, 409 on null style_prompt, 422 on locale mismatch, 503 on no registry — all still hold",
+        "tests/imagegen/test_wall_clock.py exists with a CountingFakeImageGen that sleeps 0.05s per call; asserts orchestrate_kit on a 14-image fixture spec finishes in < 5 seconds wall-clock (proxy for concurrency: 14 × 0.05s sequentially would be 0.7s but the assertion guards against accidental 14× regressions when cap is set high enough); the test is skipped when running under -k coverage to avoid CI flakiness",
+        "tests/imagegen/test_wall_clock.py asserts ≥12/14 color_lock_summary['ok'] when FakeImageGen synthesises the brand color (deterministic) — should be 14/14 in the fake but the test floor is the spec's 12/14",
+        "tests/imagegen/test_wall_clock.py asserts the compliance.json + cost.json + 14 PNGs contract (delegates to single_gen.validate_kit_output)",
+        "tests/imagegen/test_wall_clock.py asserts cost.json includes the preflight event with role='compliance_screen' (not skipped)",
+        "All 229 EPIC-0/1/2/3/4A tests STILL pass after the route swap (no regression)",
+        "Single full-suite run `uv run pytest -q` collects ≥229 + new EPIC-4B tests = expected ~260+ tests; all pass",
+        "`uv run ruff check services/imagegen/ apps/api/routes/kits.py tests/imagegen/ tests/queue/` clean across EPIC-4B scope",
+        "`uv run mypy services/imagegen/orchestrator.py services/imagegen/campaign_lock.py services/imagegen/prompt_builder.py apps/api/routes/kits.py` clean (strict)",
+        "`bash scripts/grep_providers.sh` still exits 0",
+        "EPIC-4A architect nit N3 (slot→template hard-coded in single_gen.py): verified explicitly deferred — captured as a single-line entry in progress.txt under 'EPIC-4B deferred items' (config.yaml lift will land in EPIC-9 with operator A/B endpoints work, not EPIC-4B). N4 was already addressed in US-4B.3"
+      ],
+      "passes": true
+    }
+  ]
+}

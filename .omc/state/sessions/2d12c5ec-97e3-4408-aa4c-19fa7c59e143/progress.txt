@@ -1,0 +1,338 @@
+# EPIC-2 Retrieval (Milvus + Bestseller Ingest) — Ralph Progress Log
+
+Started: 2026-05-11 (continuing same session 2d12c5ec)
+Session: 2d12c5ec-97e3-4408-aa4c-19fa7c59e143
+Plan reference: .omc/plans/aishop-studio-v1-plan.md lines 239-260
+ADR-009: zh/en asymmetric maturity + cross-locale fallback
+
+## Repo baseline at start of EPIC-2
+- services/providers/ shipped in EPIC-1 (54 tests passing, ruff+mypy strict clean, grep-providers clean)
+- registry.boot(config_path) wired into apps/api/main.py startup
+- pymilvus>=2.4 in pyproject.toml; pymilvus[model] NOT installed (needed for BM25 sparse — US-2.3 adds it)
+- apps/api/lib/milvus_client.py — stub-grade ping_milvus() returning connected/disconnected
+- apps/api/routes/ has only health.py
+- fixtures/ has sample-kit/ and spike/ — bestsellers.csv does NOT exist yet (sample fixtures created by US-2.3)
+- Makefile `ingest-corpus` target is a TBD stub (US-2.6 replaces it)
+- types-PyYAML in dev deps; mypy override for pymilvus.* via [[tool.mypy.overrides]]
+
+## Strategy
+- Use FakeMilvusClient (in-memory dict store) for ALL unit tests in this Ralph cycle — real Milvus integration tests are gated by env (out of EPIC-2 scope to spin up Docker for this iteration)
+- BM25 sparse vector encoder loaded lazily so test imports don't require pymilvus[model]
+- Locale report writes to .omc/research/corpus-locale-report.json (allowlisted by grep-providers)
+
+## Story ordering rationale (DAG)
+- US-2.1 (schema) → no deps → Stage A
+- US-2.2 (filters) → no deps → Stage A
+- US-2.3 (ingest) → deps: US-2.1, US-2.2, services/providers/registry (DONE in EPIC-1)
+- US-2.4 (hybrid_search) → deps: US-2.1, US-2.2
+- US-2.5 (search route) → deps: US-2.4, registry
+- US-2.6 (CLI + Makefile + locale banner) → deps: US-2.3
+- US-2.7 (integration tests + P@3 + latency) → deps: US-2.1..US-2.5
+
+Stages:
+- Stage A: US-2.1 + US-2.2 in parallel
+- Stage B: US-2.3 + US-2.4 in parallel (after Stage A)
+- Stage C: US-2.5 + US-2.6 + US-2.7 in parallel (after Stage B)
+
+## Learnings as we go
+(will be appended after each story completes)
+
+## EPIC-2 ALL 7 STORIES COMPLETE (2026-05-11)
+- US-2.1 schema.py (15 fields, INDEX_PARAMS)
+- US-2.2 filters.py (FilterSpec, build_expression, SQL-injection-safe)
+- US-2.3 ingest.py (modes + cascade + locale report) + migration 0002
+- US-2.4 hybrid_search.py (dense+sparse+RRF + fallback_locale)
+- US-2.5 apps/api/routes/retrieval.py + main.py router include
+- US-2.6 scripts/ingest_corpus.py CLI + Makefile + ADR-009 banner
+- US-2.7 conftest.py FakeMilvusClient + ground_truth.json + groundtruth/latency tests
+
+## STEP 7 ARCHITECT VERDICT: APPROVED-WITH-NITS
+All 7 ACs ✅. No blocking issues. 2 nits + 5 optimality observations.
+- N1: groundtruth test is a contract-test, not quality-test → docstring updated in deslop
+- N2: @app.on_event deprecation → pre-existing, EPIC-1 scope
+- Optimality: BM25 in route is dead-code for image-only queries → simplified in deslop
+- Other optimality (deferred): fallback score caveat, Any-typed milvus client → Protocol, schema field duplication
+
+## STEP 7.5 DESLOP COMPLETE
+- apps/api/routes/retrieval.py: dropped _bm25_sparse_query() function; inlined as _SPARSE_STUB = {0: 1.0} with comment explaining image-only query path and EPIC-3 follow-up
+- tests/retrieval/test_hybrid_groundtruth.py: added CONTRACT TEST docstring per N1
+
+## STEP 7.6 POST-DESLOP REGRESSION GREEN
+- 102 pytest passed
+- ruff clean
+- mypy strict clean (8 source files)
+- grep-providers clean
+
+## Ready for /oh-my-claudecode:cancel (Step 8)
+
+
+# ============================================================
+# EPIC-3 — Copywriter + Compliance  (2026-05-11)
+# ============================================================
+
+## Strategy
+- Stage A (parallel): US-3.1 (rules YAML + loader) + US-3.2 (scorer) — but US-3.2 depends on US-3.1 schema. Build in order US-3.1 → US-3.2.
+- Stage B (parallel): US-3.3 (ground-truth) + US-3.4 (preflight) — both rest only on US-3.2 scorer + rules.
+- Stage C (parallel): US-3.5 (SOP) + US-3.6 (OCR) — independent; both depend on EPIC-1 fake adapters.
+- Stage D: US-3.7 (route + bilingual integration) — wires everything together.
+
+## Story ordering rationale (DAG)
+- US-3.1 (rules) → no deps → Stage A
+- US-3.2 (scorer) → deps: US-3.1 → Stage A2
+- US-3.3 (ground-truth) → deps: US-3.1 + US-3.2 → Stage B
+- US-3.4 (preflight) → deps: US-3.1 (rules for system prompt) + registry → Stage B
+- US-3.5 (SOP) → deps: registry (fake ChatLLM) → Stage C
+- US-3.6 (OCR) → deps: registry (fake VisionLLM) → Stage C
+- US-3.7 (spec route) → deps: US-3.2 + US-3.5 → Stage D
+
+## Test infrastructure plan
+- Build a tests/copywriter/conftest.py with FakeChatLLM, FakeVisionLLM, FakeComplianceScreen, FakeRegistry mirroring the EPIC-2 _fake_runtime.py pattern.
+- FakeChatLLM emits canned JSON shaped for sop.generate_spec.
+- FakeVisionLLM emits canned structured payloads for compliance_screen and OCR.
+- All preflight/cost tests use a fixed 0.003 USD-per-call fake — no real API.
+
+## Learnings as we go
+(append after each story completes)
+
+
+## EPIC-3 ALL 7 STORIES COMPLETE (2026-05-11)
+- US-3.1 services/copywriter/compliance/rules/{zh,en}.yaml + rules_loader.py (4 tiers, 41 zh entries, 7 en entries, all en non-hard_block)
+- US-3.2 services/copywriter/compliance/scorer.py (Violation, ScoreResult, score_text, score_spec; advisory-mode downgrade)
+- US-3.3 fixtures/compliance/zh_ground_truth.yaml (52 pairs, ≥10/tier + 6 negative controls) + test_compliance_ground_truth.py (≥90% overall, ≥80% per-tier)
+- US-3.4 services/copywriter/compliance/preflight.py (single call, ERR-PROV-001 propagation, no skipped branch) + test_preflight.py + test_preflight_cost.py (100×0.003 = $0.30 ≤ $0.50)
+- US-3.5 services/copywriter/sop.py (SkuMeta, SellingPoint, ThreePiece, HeroSection, DetailSection, Spec, SopError, generate_spec, render_markdown) + 12 prompt files (6 × 2 locales)
+- US-3.6 services/copywriter/ocr.py (TextBox, OcrResult, extract_text) + fixtures/copywriter/ocr_fixtures.yaml (10 entries) + tolerance test passing 10/10 within ±2 Levenshtein
+- US-3.7 apps/api/routes/copywriter.py + main.py router include; bilingual integration; 503/422/502 contract; hard_block-lowers-score test
+
+## Test count: 165 passed (102 EPIC-0/1/2 + 63 EPIC-3)
+## EPIC-3 ruff: clean (services/copywriter/, apps/api/routes/copywriter.py, tests/copywriter/)
+## EPIC-3 mypy strict: clean (8 source files)
+## grep-providers: clean
+## Pre-existing nits flagged (NOT EPIC-3 regressions, deferred):
+##   - 52 ruff errors in apps/api/lib/, apps/api/tests/, packages/, scripts/ (UP041, N818, etc — EPIC-0/1 code)
+##   - 3 mypy errors in apps/api/tests/{test_config_io,conftest,test_health}.py (missing return annotations on test fns)
+##   - on_event deprecation warning (pre-existing from EPIC-1)
+
+## STEP 7 ARCHITECT VERDICT (Opus): APPROVED
+All 7 ACs PASS with no blocking issues. 4 non-blocking optimality nits surfaced:
+  N1: scorer.py __all__.append at end of file → make static __all__ at top
+  N2: load_ruleset called per request, no cache → add functools.lru_cache
+  N3: preflight.py silent severity coercion masks adapter bugs → add logger.warning
+  N4: copywriter.py sp.title[:16] section key collision risk → use index-based keys
+
+## STEP 7.5 DESLOP COMPLETE (4 architect nits cleaned)
+- scorer.py: __all__ static at module top; removed runtime append; doc comment retained
+- rules_loader.py: load_ruleset wrapped in @lru_cache(maxsize=4); Ruleset is frozen so cache value is safe to share
+- preflight.py: unknown-severity coercion now emits logger.warning with rule_id context (defence-in-depth observability)
+- apps/api/routes/copywriter.py: section keys now `selling_point.{idx}` (collision-free) instead of title[:16] prefix
+
+## STEP 7.6 POST-DESLOP REGRESSION GREEN
+- 165 pytest passed (102 EPIC-0/1/2 + 63 EPIC-3)
+- ruff clean (services/copywriter/, apps/api/routes/copywriter.py, tests/copywriter/)
+- mypy strict clean (8 EPIC-3 source files)
+- grep-providers clean
+
+## Ready for /oh-my-claudecode:cancel (Step 8)
+
+
+# ============================================================
+# EPIC-4A — Imagegen MVP Loop  (2026-05-11)
+# ============================================================
+
+## Hard gate check
+- Spike report exists: .omc/research/chinese-text-fail-rate-spike.md (n=20, 4 templates, overall 30% fail rate ≤ 40% threshold)
+- Default EPIC-5 budget multiplier 1.0× applies; no ADR-012 escalation required
+- EPIC-4A coding cleared to start (no user sign-off needed since fail rate ≤ 40%)
+
+## Dependencies acquired
+- Pillow, colormath, colorthief added to pyproject.toml + uv synced
+- colormath 3.0.0 uses deprecated numpy.asscalar — color_lock.py installs a one-line shim before importing colormath
+
+## Strategy
+- Stage A (parallel): US-4A.1 (templates+loader) + US-4A.8 (spike acknowledgment) — both independent, no LLM
+- Stage B (parallel): US-4A.2 (iron rules) + US-4A.3 (style synthesizer) + US-4A.4 (color_lock) — all independent given Stage A done
+- Stage C: US-4A.7 (color_lock_math fixtures + test) — depends on US-4A.4
+- Stage D: US-4A.5 (single_gen) — depends on US-4A.1+2+4
+- Stage E: US-4A.6 (route + contract test) — depends on US-4A.5
+
+## Test infrastructure plan
+- Re-use tests/copywriter/conftest.py FakeChatLLM/FakeVisionLLM/FakeRegistry
+- Add tests/imagegen/conftest.py with FakeImageGen producing synthetic PNG bytes
+- Synthetic PNGs generated via PIL.Image.new('RGB', (W,H), color) → bytesIO → PNG bytes
+- All tests run without real LLM/image-gen network calls
+
+## Learnings as we go
+(append after each story completes)
+
+
+## EPIC-4A ALL 8 STORIES COMPLETE (2026-05-11)
+- US-4A.1 services/imagegen/templates/{zh,en}/01..25.json (50 total) + template_loader.py (Template, load_template, list_templates, @lru_cache)
+- US-4A.2 services/imagegen/prompt_builder.py (PromptInputs, build_prompt, iron rules 1/2/3/8; zh font hint + ≤10 char truncation; hex validation)
+- US-4A.3 services/imagegen/style_synthesizer.py (synthesize_style, bilingual prompt routing, ≤100-word truncation, empty-response StyleSynthesisError)
+- US-4A.4 services/imagegen/color_lock.py (ColorLockResult, verify, EventLogRecord, to_event_log; numpy.asscalar shim before colormath import; try/except → status='error')
+- US-4A.5 services/imagegen/single_gen.py (KitGenerationInputs, KitGenerationResult, generate_kit, validate_kit_output; 5×1024² hero + 9×1024×1536 detail; compliance.json + cost.json)
+- US-4A.6 apps/api/routes/kits.py (POST /api/kits/{id}/generate; 409 on null style_prompt; 422 locale mismatch; 503 no registry; pydantic ConfigDict alias for `copy` field collision)
+- US-4A.7 fixtures/imagegen/color_lock_math.yaml (24 entries, 5 scenario tags; ≥18/20 agreement test)
+- US-4A.8 .omc/research/epic-4a-cost-probe.md + scripts/probe_epic_4a.py CLI + Makefile epic-4a-probe target
+
+## Test count: 229 passed (165 EPIC-0/1/2/3 + 64 EPIC-4A)
+## EPIC-4A ruff: clean (services/imagegen/, apps/api/routes/kits.py, tests/imagegen/, scripts/probe_epic_4a.py)
+## EPIC-4A mypy strict: clean (8 source files)
+## grep-providers: clean
+
+## Key learnings
+- colormath 3.0.0 uses numpy.asscalar removed in numpy 1.24+ → installed one-line shim before colormath import; documented in color_lock.py
+- Pydantic v2 BaseModel.copy collides with field `copy` → used Field(alias='copy') + ConfigDict(populate_by_name=True)
+- FakeImageGen scans prompt for `Brand color: #RRGGBB` to synthesise a PNG that color_lock will lock against → deterministic tests
+- Hero-slot template assignment: H1→hero-image, H2→lifestyle-scene, H3→before-after, H4→ugc-style, H5→poster-banner
+- Detail-slot template assignment: M1→lifestyle-scene, M2→detail-macro, M3→exploded-view, M4→ugc-style, M5→packaging, M6→size-spec, M7→infographic, M8→poster-banner, M9→social-media
+
+## STEP 7 ARCHITECT VERDICT (Opus, THOROUGH): APPROVED-WITH-NITS
+All 8 ACs PASS; color-lock fixture set 24/24 vs the ≥18/24 floor; no hard contracts broken (Principle 2, color-lock try/except, two-protocol abstraction, ADR-005 fail-loud, output contract all hold).
+Non-blocking nits:
+  N1: single_gen.py cost-event uses `output_path.stem` (e.g. "H1") instead of Template.id (e.g. "hero-image")
+  N2: prompt_builder.py always emits "On-image text: ..." even when copy is empty
+  N3: slot→template mapping hard-coded (defer to EPIC-4B for config-yaml lift)
+  N4: role='image_gen' literal in cost-event (defer to EPIC-4B routing-snapshot)
+  N5: style_synthesizer top-1 image only (already documented as v1 limitation)
+  N6: asscalar lambda style (functionally fine)
+
+## STEP 7.5 DESLOP COMPLETE (architect nits N1+N2 cleaned; N3-N6 explicitly deferred)
+- services/imagegen/single_gen.py: _build_section_prompt now returns (prompt, Template); _generate_one_image accepts the resolved template and threads template.id into the cost-event (was output_path.stem)
+- services/imagegen/prompt_builder.py: skip the "On-image text: ..." line when copy_text.strip() is empty — keeps no-text-by-default templates clean
+
+## STEP 7.6 POST-DESLOP REGRESSION GREEN
+- 229 pytest passed (165 EPIC-0/1/2/3 + 64 EPIC-4A)
+- ruff clean (EPIC-4A scope)
+- mypy strict clean (8 EPIC-4A source files)
+- grep-providers clean
+
+## Ready for /oh-my-claudecode:cancel (Step 8)
+
+
+# ============================================================
+# EPIC-4B — Imagegen Orchestrator + Campaign-Lock  (2026-05-11)
+# ============================================================
+
+## Plan reference
+- .omc/plans/aishop-studio-v1-plan.md lines 315-336 (EPIC-4B), lines 149-165 (ADR-011 v2 Api Key Resolution)
+
+## Story DAG / staging
+- Stage A (parallel): US-4B.1 (iron rules 4-7+9) + US-4B.2 (campaign_lock) — both modify/extend prompt_builder + add new module; independent.
+- Stage B: US-4B.3 (orchestrator core + concurrency + snapshot + cost-event role from snapshot) — depends on Stage A so the orchestrator can integrate the new prompt_builder + campaign_lock.
+- Stage C (parallel): US-4B.4 (preflight integration) + US-4B.5 (SSE channel) — both consume orchestrator's event/abort surface.
+- Stage D (parallel): US-4B.6 (routing-snapshot test) + US-4B.7 (env-var-missing test) — independent ADR-011 acceptance tests.
+- Stage E: US-4B.8 (route swap to orchestrator + wall-clock fixture + EPIC-4A regression) — depends on all prior stories.
+
+## EPIC-4B deferred items (architect nits NOT closed in 4B; tracked here for downstream lift)
+- N3 (single_gen.py slot→template mapping hard-coded): defer to EPIC-9 (operator A/B endpoints work). 4B keeps the existing _HERO_TEMPLATE_BY_ID / _DETAIL_TEMPLATE_BY_ID dicts; orchestrator uses single_gen's template-lookup path so the lift is one-place when EPIC-9 ships.
+
+
+## US-4B.1 COMPLETE (Iron rules 4-9 in prompt_builder.py)
+- prompt_builder.py: rule 4 (negation list, 6 prohibitions), rule 5 (platform-reserved zones, zh OR blue_hat trigger), rule 6 (3-layer hierarchy hero/supporting/foundation, fallback to '[implicit]'), rule 7 (single-pass policy sentinel), rule 9 (no-text-by-default with curated copy-bearing carve-out + warning).
+- _COPY_REQUIRED_TEMPLATES = {hero-image, poster-banner, infographic, social-media}.
+- 5 new test files (test_iron_rule_{4,5,6,7,9}_*.py); pytest -q tests/imagegen/test_iron_rule_*.py → 34 passed across 9 files.
+- _factory.py extended: product_type override + template override + make_template_without_category_tips helper.
+- ruff + mypy strict + grep-providers clean.
+
+## US-4B.2 COMPLETE (campaign_lock.py + byte-equal first-paragraph)
+- services/imagegen/campaign_lock.py: CampaignLock dataclass (frozen, slots), build_lock(), render_lock_paragraph() (pure), apply_lock() (LF-LF separator).
+- Light-mode keyword scan: warm/cool/neutral with curated keyword tables.
+- Defaults: font_system, composition_motif, prohibited_drifts (4 items).
+- 12 unit tests (test_campaign_lock.py) + 3 byte-equal kit tests (test_campaign_lock_byte_equal.py); 15/15 passing.
+- ruff + mypy strict clean.
+
+
+## US-4B.3 COMPLETE (orchestrator.py concurrency + routing snapshot + cost-event role from snapshot)
+- services/imagegen/orchestrator.py: RoutingSnapshot/ProviderBinding/JobPayload/JobOutcome/OrchestratorResult dataclasses; capture_snapshot(); resolve_api_key(); default_adapter_factory(); KitEventBus; orchestrate_kit() async fan-out.
+- _ConcurrencyCounter (thread-safe Lock-guarded in-flight counter); asyncio.Semaphore(cap) gates per-provider concurrency.
+- One-retry on color-lock failure (out_of_tolerance OR error). Both attempts share the same output_path (overwrite).
+- Cost-event role + provider_model sourced from JobPayload.role + snapshot.providers[role].model — resolves architect nit N4.
+- services/imagegen/_slot_map.py: lifted HERO_TEMPLATE_BY_ID + DETAIL_TEMPLATE_BY_ID + load_template_for_section out of single_gen so orchestrator + single_gen share one source of truth (still hard-coded; lift to config.yaml deferred to EPIC-9 per N3).
+- tests/imagegen/conftest.py extended: model_name + per_call_sleep_seconds + color_override + thread-safe in-flight counter on FakeImageGen; make_kit_inputs helper; autouse env-var fixture.
+- tests/copywriter/conftest.py: FakeRegistry.snapshot() shape mirrors real Registry.snapshot() with snapshot_overrides knob.
+- 13 orchestrator tests passing (test_orchestrator_basic.py + _concurrency.py + _retry.py).
+
+## US-4B.4 COMPLETE (preflight integration)
+- orchestrate_kit always invokes preflight.run_preflight (no skipped path) — verified by FakeComplianceScreen.call_count == 1.
+- Hard-block abort: zero image_gen calls; needs_review=True; abort_reason='preflight_failed:<rule_ids>'; compliance.json carries preflight.passed=False + violations list.
+- ProviderConfigError ERR-PROV-001 propagated when registry.get('compliance_screen') raises (defence-in-depth).
+- 7 tests passing (test_orchestrator_preflight.py).
+
+## US-4B.5 COMPLETE (SSE channel /api/kits/{kit_id}/events)
+- apps/api/main.py wires KitEventBus into app.state at startup.
+- apps/api/routes/kits.py adds GET /api/kits/{kit_id}/events with StreamingResponse media_type='text/event-stream'; SSE wire format `data: <json>\n\n`; 404 on unknown kit_id.
+- Orchestrator publishes per-image events: enqueued (×14) → in_progress → terminal (color_locked/needs_review) → done (image_id='*', progress=14).
+- 5 SSE tests passing.
+
+## US-4B.6 COMPLETE (routing snapshot stickiness)
+- tests/queue/test_routing_snapshot.py: snap_a captured from registry_A; orchestrator with snap_a + adapter_factory keyed by binding.model routes ALL 14 jobs to fake_A even with current_registry=registry_B; new snap from registry_B routes to fake_B.
+- Snapshot serialisation regex-checked: env-var NAMES travel through, plaintext secrets do NOT (capture_snapshot raises ERR-PROV-002 on regex hit).
+- 4 tests passing.
+
+## US-4B.7 COMPLETE (env-var-missing-at-worker)
+- orchestrator.resolve_api_key(snapshot, role) raises ProviderConfigError ERR-PROV-003 when env var unset OR empty-string; message contains env-var NAME only (no secret).
+- orchestrate_kit catches ERR-PROV-003 per image: marks image needs_review with error_code=ERR-PROV-003; kit needs_review=True; compliance.json gets key_resolution: {failed_role, env_var_name, reason: 'env_var_missing'}; cost.json carries 14 failed events with error_code+env_var_missing fields.
+- 5 tests passing (test_env_var_missing.py).
+
+## US-4B.8 COMPLETE (route swap + wall-clock + EPIC-4A regression)
+- apps/api/routes/kits.py POST /generate now invokes await orchestrate_kit (replaces sequential generate_kit). Response gains needs_review + abort_reason fields.
+- All 7 EPIC-4A test_generate_route.py tests still pass against the orchestrator-backed route.
+- tests/imagegen/test_wall_clock.py: cap=4 with 14×0.05s FakeImageGen sleep finishes in <0.5s (well under 5s budget); ≥12/14 color-locked floor; preflight cost-event present with role='compliance_screen'; output contract validates.
+- 4 wall-clock tests passing.
+
+## Test count (full suite): 305 passed (229 EPIC-0/1/2/3/4A + 76 EPIC-4B)
+- Iron rules: 34 (9 files, 4-9 new + 1-3+8 carried)
+- Campaign lock: 15 (12 unit + 3 byte-equal)
+- Orchestrator basic: 6
+- Orchestrator concurrency: 4
+- Orchestrator retry: 3
+- Orchestrator preflight: 7
+- SSE route: 5
+- Wall-clock: 4
+- Queue routing snapshot: 4
+- Queue env var missing: 5
+- (EPIC-4A path retained: test_single_gen + test_output_contract + test_generate_route + others)
+
+## Tooling status (all green for EPIC-4B scope)
+- ruff check services/imagegen/ apps/api/routes/kits.py apps/api/main.py tests/imagegen/ tests/queue/ → clean
+- mypy strict services/imagegen/{orchestrator,campaign_lock,prompt_builder,_slot_map,single_gen}.py apps/api/{routes/kits,main}.py → 7 source files clean
+- grep-providers → clean
+
+## Ready for Step 7 architect verification
+
+## STEP 7 ARCHITECT VERDICT (Opus, THOROUGH): APPROVED-WITH-NITS
+Two independent architect runs (a75d7094667737c1f + a58f8eaf9b6b1f09b) both rendered APPROVED-WITH-NITS.
+- All 8 ACs PASS, all 9 hard invariants HOLD.
+- 305 pytest passed; ruff + mypy strict + grep-providers all clean.
+- N4 (cost-event role hard-coded) RESOLVED in US-4B.3.
+- N3 (slot→template hard-coded) explicitly DEFERRED to EPIC-9.
+- 13 non-blocking optimality nits surfaced across the two runs (env-var cost-event semantics, SSE progress field, KitEventBus GC, _publish helper consistency, magic numbers, ERR-PROV code semantic, etc.).
+
+## STEP 7.5 DESLOP COMPLETE
+Bounded to EPIC-4B changed-file set; addressed the highest-value nits:
+- tests/imagegen/conftest.py: removed dead `_scan_image_id` helper (always returned "?") — inlined the default in FakeImageGen.generate.
+- tests/imagegen/test_campaign_lock_byte_equal.py: lifted duplicate _HERO_TEMPLATE_BY_ID/_DETAIL_TEMPLATE_BY_ID and replaced with `from services.imagegen._slot_map import HERO_TEMPLATE_BY_ID, DETAIL_TEMPLATE_BY_ID` (single source of truth restored).
+- services/imagegen/orchestrator.py:
+  - Added `_BRAND_COLOR_LOCKED_FLOOR = 12` constant; replaced `summary["ok"] >= 12` magic number.
+  - Replaced `assert color_lock is not None` with explicit `if color_lock is None: raise RuntimeError(...)` (prod-safe under -O).
+  - Routed enqueued + done events through `_publish` helper for consistent bus-None handling.
+  - Dropped `summary.get(...,0)+1` defensive-style; summary dict is pre-seeded with all 4 status keys (consistent style).
+  - Dropped dead `item.get("__sentinel__") is True` branch in KitEventBus.subscribe — only `item is self._CLOSE_SENTINEL` is reachable via the public API.
+  - Fixed semantic: capture_snapshot now raises ERR-PROV-002 (snapshot-shape integrity) for "unknown protocol" instead of misusing ERR-PROV-003 (which is reserved for env_var_missing_at_worker per ADR-011 v2).
+
+Deferred-as-defensible (per architect notes):
+- N1 (env-var-missing emits 14 cost-event rows with role='image_gen'): test pins this; defensible product choice; downstream EPIC-7/9 consumers filter on error_code IS NULL.
+- N2 (SSE progress always 0 per-image): UI-tier optimization for EPIC-7.
+- N4 (retry overwrites discarded attempt PNG): out of v1 scope.
+- N5 (KitEventBus queues never GC'd): single-tenant workbench is fine for v1; revisit when EPIC-7 lands persistent kit-history.
+- N6 (image_id/kit_id kwargs advisory at real adapter): forward-compat by Protocol; FakeImageGen-only path.
+- _publish vs direct-publish coexistence (architect 2 N3): now consistent — all event emissions thread through `_publish`.
+
+## STEP 7.6 POST-DESLOP REGRESSION GREEN
+- `uv run pytest -q` → 305 passed in 51.21s
+- `uv run ruff check services/imagegen/ apps/api/routes/kits.py apps/api/main.py tests/imagegen/ tests/queue/ tests/copywriter/conftest.py` → All checks passed!
+- `uv run mypy --strict` (7 source files) → Success: no issues found in 7 source files
+- `bash scripts/grep_providers.sh` → clean — no vendor names leaked outside allowed paths
+
+## Ready for /oh-my-claudecode:cancel (Step 8)

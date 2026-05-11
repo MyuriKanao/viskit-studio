@@ -1,0 +1,105 @@
+# AIShop Image Studio — infrastructure stack
+#
+# EPIC-0 Risk note (Milvus on Linux):
+#   If Milvus fails to start with "permission denied" on the data volume,
+#   run: sudo chmod 777 ./milvus_data  (or the named-volume host path under
+#   /var/lib/docker/volumes/).  This is a known upstream issue with the
+#   milvusdb/milvus image on Linux hosts.
+
+services:
+
+  # ─── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aishop
+      POSTGRES_PASSWORD: aishop
+      POSTGRES_DB: aishop
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aishop"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── MinIO (object storage) ─────────────────────────────────────────────────
+  # Defined before Milvus because Milvus depends_on it (even with embedded etcd
+  # the image benefits from object-store readiness in some configurations).
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3-compatible API
+      - "9001:9001"   # web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── MinIO bucket init (one-shot) ──────────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing local/aishop-kits &&
+        echo 'Bucket aishop-kits ready.'
+      "
+    restart: "no"
+
+  # ─── Milvus (vector DB, standalone with embedded etcd) ─────────────────────
+  milvus:
+    image: milvusdb/milvus:v2.4.13
+    command: milvus run standalone
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_CONFIG_PATH: /milvus/configs/embedEtcd.yaml
+    ports:
+      - "19530:19530"  # gRPC SDK
+      - "9091:9091"    # metrics / health
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9091/healthz"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ─── Redis (session cache — localhost-only per ADR-011) ─────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"   # bound to loopback only (ADR-011)
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  milvus_data:
+  redis_data:
+  minio_data:

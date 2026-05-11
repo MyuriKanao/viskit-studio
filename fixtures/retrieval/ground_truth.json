@@ -1,0 +1,24 @@
+{
+  "queries": [
+    {"query_id": "zh-q01", "image_path": "/img/zh-q01.png", "locale": "zh", "matches": ["/img/zh-m01a.png", "/img/zh-m01b.png"]},
+    {"query_id": "zh-q02", "image_path": "/img/zh-q02.png", "locale": "zh", "matches": ["/img/zh-m02a.png"]},
+    {"query_id": "zh-q03", "image_path": "/img/zh-q03.png", "locale": "zh", "matches": ["/img/zh-m03a.png", "/img/zh-m03b.png", "/img/zh-m03c.png"]},
+    {"query_id": "zh-q04", "image_path": "/img/zh-q04.png", "locale": "zh", "matches": ["/img/zh-m04a.png"]},
+    {"query_id": "zh-q05", "image_path": "/img/zh-q05.png", "locale": "zh", "matches": ["/img/zh-m05a.png", "/img/zh-m05b.png"]},
+    {"query_id": "zh-q06", "image_path": "/img/zh-q06.png", "locale": "zh", "matches": ["/img/zh-m06a.png"]},
+    {"query_id": "zh-q07", "image_path": "/img/zh-q07.png", "locale": "zh", "matches": ["/img/zh-m07a.png", "/img/zh-m07b.png"]},
+    {"query_id": "zh-q08", "image_path": "/img/zh-q08.png", "locale": "zh", "matches": ["/img/zh-m08a.png", "/img/zh-m08b.png", "/img/zh-m08c.png"]},
+    {"query_id": "zh-q09", "image_path": "/img/zh-q09.png", "locale": "zh", "matches": ["/img/zh-m09a.png"]},
+    {"query_id": "zh-q10", "image_path": "/img/zh-q10.png", "locale": "zh", "matches": ["/img/zh-m10a.png", "/img/zh-m10b.png"]},
+    {"query_id": "zh-q11", "image_path": "/img/zh-q11.png", "locale": "zh", "matches": ["/img/zh-m11a.png"]},
+    {"query_id": "zh-q12", "image_path": "/img/zh-q12.png", "locale": "zh", "matches": ["/img/zh-m12a.png", "/img/zh-m12b.png"]},
+    {"query_id": "zh-q13", "image_path": "/img/zh-q13.png", "locale": "zh", "matches": ["/img/zh-m13a.png", "/img/zh-m13b.png", "/img/zh-m13c.png"]},
+    {"query_id": "zh-q14", "image_path": "/img/zh-q14.png", "locale": "zh", "matches": ["/img/zh-m14a.png"]},
+    {"query_id": "en-q01", "image_path": "/img/en-q01.png", "locale": "en", "matches": ["/img/en-m01a.png", "/img/en-m01b.png"]},
+    {"query_id": "en-q02", "image_path": "/img/en-q02.png", "locale": "en", "matches": ["/img/en-m02a.png"]},
+    {"query_id": "en-q03", "image_path": "/img/en-q03.png", "locale": "en", "matches": ["/img/en-m03a.png", "/img/en-m03b.png"]},
+    {"query_id": "en-q04", "image_path": "/img/en-q04.png", "locale": "en", "matches": ["/img/en-m04a.png", "/img/en-m04b.png", "/img/en-m04c.png"]},
+    {"query_id": "en-q05", "image_path": "/img/en-q05.png", "locale": "en", "matches": ["/img/en-m05a.png"]},
+    {"query_id": "en-q06", "image_path": "/img/en-q06.png", "locale": "en", "matches": ["/img/en-m06a.png", "/img/en-m06b.png"]}
+  ]
+}

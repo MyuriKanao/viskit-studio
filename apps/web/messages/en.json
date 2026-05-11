@@ -1,0 +1,139 @@
+{
+  "welcome": "AIShop Studio · Workbench",
+  "sidebar": {
+    "dashboard": "Dashboard",
+    "catalog": "Catalog",
+    "newKit": "New Kit",
+    "vault": "Vault",
+    "templates": "Templates",
+    "queue": "Queue",
+    "editor": "Editor",
+    "providers": "Providers",
+    "settings": "Settings"
+  },
+  "topbar": {
+    "title": "AIShop Studio",
+    "health": "Health",
+    "healthLoading": "Checking…",
+    "healthOk": "OK",
+    "healthWarn": "Warning",
+    "healthError": "Error",
+    "locale": "Switch locale",
+    "theme": "Switch theme",
+    "palette": "Command palette"
+  },
+  "palette": {
+    "placeholder": "Type a command…",
+    "empty": "No matching commands",
+    "headingGo": "Go to",
+    "headingPrefs": "Preferences",
+    "goDashboard": "Go to Dashboard",
+    "toggleLocale": "Toggle locale (zh ↔ en)",
+    "toggleTheme": "Toggle theme (dark ↔ light)"
+  },
+  "dashboard": {
+    "kpis_title": "Weekly Pulse",
+    "pulse_subtitle_pattern": "{DATE_RANGE} → {DATE_RANGE} 2026",
+    "refresh_button": "Refresh",
+    "filter_button": "Filter",
+    "recent_kits_title": "Recent Kits",
+    "view_grid_button": "Grid view",
+    "view_list_button": "List view",
+    "new_kit_button": "New Kit",
+    "queue_title": "Generation Queue",
+    "queue_subtitle_pattern": "{count} jobs in progress",
+    "pause_all_button": "Pause all",
+    "kpi_kits_label": "Kits this week",
+    "kpi_compliance_label": "Avg compliance",
+    "kpi_manual_edit_label": "Avg manual edit time",
+    "kpi_api_spend_label": "API spend MTD"
+  },
+  "kitDetail": {
+    "title": "Kit Detail",
+    "spec_column_title": "Specification",
+    "compliance_label": "Compliance score",
+    "cost_label": "Generation cost",
+    "pending_state": "Computing…",
+    "refresh_button": "Refresh",
+    "fix_text_cta": "Fix text",
+    "regenerate_cta": "Regenerate",
+    "status_ready": "Ready",
+    "status_generating": "Generating",
+    "status_needs_review": "Needs review",
+    "status_queued": "Queued",
+    "status_failed": "Failed",
+    "image_status_ready": "Image ready",
+    "image_status_generating": "Image generating",
+    "image_status_queued": "Image queued",
+    "image_status_failed": "Image failed"
+  },
+  "providers": {
+    "page_title": "Providers",
+    "sankey_title": "Routing visualisation",
+    "active_routing_label": "Active routing",
+    "add_endpoint_button": "Add endpoint",
+    "view_yaml_toggle": "View YAML",
+    "latency_label": "Latency",
+    "health_status_healthy": "Healthy",
+    "health_status_degraded": "Degraded",
+    "health_status_down": "Down",
+    "health_status_unknown": "Unknown",
+    "table_col_name": "Name",
+    "table_col_role": "Role",
+    "table_col_model": "Model",
+    "table_col_latency": "Latency (ms)",
+    "table_col_status": "Status",
+    "table_col_actions": "Actions",
+    "save_endpoint_button": "Save endpoint",
+    "modal_title": "Add endpoint"
+  },
+  "providersDialog": {
+    "drift_title": "Config conflict",
+    "your_edit_label": "Your edit",
+    "on_disk_label": "On disk now",
+    "proposed_label": "Proposed",
+    "use_on_disk_button": "Use on-disk",
+    "force_your_edit_button": "Force your edit",
+    "save_merged_button": "Save merged",
+    "lock_timeout_toast": "Config is locked — retrying in {retry_after_s}s",
+    "lock_retry_label": "Retrying…"
+  },
+  "editor": {
+    "title": "Text Touch-up Editor",
+    "tools": {
+      "select": "Select",
+      "text": "Text",
+      "move": "Move",
+      "inpaint": "AI Inpaint",
+      "undo": "Undo",
+      "redo": "Redo"
+    },
+    "history": {
+      "empty": "No history yet",
+      "cap": "History capped at 50 steps"
+    },
+    "inpaint": {
+      "streaming": "Inpainting…",
+      "error": "Inpaint failed",
+      "aborted": "Aborted",
+      "cancel": "Cancel"
+    },
+    "ocr": {
+      "loading": "Detecting text…",
+      "error": "OCR failed"
+    }
+  },
+  "onboarding": {
+    "page_title": "Welcome",
+    "welcome_copy": "Welcome to AIShop Studio — your e-commerce marketing kit generation workbench",
+    "cta_new_kit_label": "Create new kit",
+    "cta_sample_kit_label": "View sample kit",
+    "cta_providers_label": "Configure providers",
+    "workspace_ready_title": "Workspace ready",
+    "endpoints_count_label": "Configured endpoints",
+    "monthly_cap_label": "Monthly cap",
+    "brand_color_label": "Brand color",
+    "default_locale_label": "Default locale",
+    "export_preset_label": "Export preset"
+  }
+}

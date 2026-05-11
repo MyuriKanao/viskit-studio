@@ -1,0 +1,1141 @@
+components:
+  schemas:
+    ComplianceOut:
+      properties:
+        advisory:
+          title: Advisory
+          type: boolean
+        locale:
+          title: Locale
+          type: string
+        score:
+          title: Score
+          type: integer
+        violations:
+          items:
+            $ref: '#/components/schemas/ViolationOut'
+          title: Violations
+          type: array
+      required:
+        - score
+        - violations
+        - advisory
+        - locale
+      title: ComplianceOut
+      type: object
+    DetailSectionIn:
+      properties:
+        id:
+          enum:
+            - M1
+            - M2
+            - M3
+            - M4
+            - M5
+            - M6
+            - M7
+            - M8
+            - M9
+          title: Id
+          type: string
+        three_piece:
+          $ref: '#/components/schemas/ThreePieceIn'
+      required:
+        - id
+        - three_piece
+      title: DetailSectionIn
+      type: object
+    EditAccepted:
+      properties:
+        job_id:
+          title: Job Id
+          type: string
+      required:
+        - job_id
+      title: EditAccepted
+      type: object
+    EditRequest:
+      properties:
+        kit_id:
+          anyOf:
+            - pattern: ^[A-Za-z0-9_-]{1,64}$
+              type: string
+            - type: 'null'
+          description: Optional kit id for MinIO sidecar write; safe-character allowlist guards the object-store path.
+          title: Kit Id
+        mask_box:
+          additionalProperties:
+            type: integer
+          description: x,y,w,h
+          title: Mask Box
+          type: object
+        new_text:
+          title: New Text
+          type: string
+      required:
+        - mask_box
+        - new_text
+      title: EditRequest
+      type: object
+    GenerateRequest:
+      properties:
+        brand_color_hex:
+          pattern: ^#[0-9A-Fa-f]{6}$
+          title: Brand Color Hex
+          type: string
+        locale:
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+        spec:
+          $ref: '#/components/schemas/SpecIn'
+        style_prompt:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Style Prompt
+      required:
+        - spec
+        - brand_color_hex
+        - locale
+      title: GenerateRequest
+      type: object
+    GenerateResponse:
+      properties:
+        abort_reason:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Abort Reason
+        color_lock_summary:
+          additionalProperties:
+            type: integer
+          title: Color Lock Summary
+          type: object
+        compliance_path:
+          title: Compliance Path
+          type: string
+        cost_path:
+          title: Cost Path
+          type: string
+        kit_id:
+          title: Kit Id
+          type: string
+        needs_review:
+          title: Needs Review
+          type: boolean
+        png_paths:
+          items:
+            type: string
+          title: Png Paths
+          type: array
+      required:
+        - kit_id
+        - png_paths
+        - compliance_path
+        - cost_path
+        - color_lock_summary
+        - needs_review
+      title: GenerateResponse
+      type: object
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          title: Detail
+          type: array
+      title: HTTPValidationError
+      type: object
+    HeroSectionIn:
+      properties:
+        id:
+          enum:
+            - H1
+            - H2
+            - H3
+            - H4
+            - H5
+          title: Id
+          type: string
+        three_piece:
+          $ref: '#/components/schemas/ThreePieceIn'
+      required:
+        - id
+        - three_piece
+      title: HeroSectionIn
+      type: object
+    KitListItem:
+      properties:
+        id:
+          title: Id
+          type: integer
+        locale:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Locale
+        name:
+          title: Name
+          type: string
+        name_en:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Name En
+        score:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Score
+        sku:
+          title: Sku
+          type: string
+        status:
+          title: Status
+          type: string
+        thumbs:
+          items:
+            anyOf:
+              - type: string
+              - type: 'null'
+          title: Thumbs
+          type: array
+      required:
+        - id
+        - sku
+        - name
+        - name_en
+        - status
+        - score
+        - locale
+        - thumbs
+      title: KitListItem
+      type: object
+    KitListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/KitListItem'
+          title: Items
+          type: array
+        total:
+          title: Total
+          type: integer
+      required:
+        - items
+        - total
+      title: KitListResponse
+      type: object
+    OcrResponse:
+      properties:
+        boxes:
+          items:
+            $ref: '#/components/schemas/TextBoxOut'
+          title: Boxes
+          type: array
+        engine:
+          title: Engine
+          type: string
+        version:
+          title: Version
+          type: string
+      required:
+        - boxes
+        - engine
+        - version
+      title: OcrResponse
+      type: object
+    OnboardingNeededResponse:
+      properties:
+        needs_onboarding:
+          title: Needs Onboarding
+          type: boolean
+      required:
+        - needs_onboarding
+      title: OnboardingNeededResponse
+      type: object
+    ProviderHealthRow:
+      properties:
+        endpoint_id:
+          title: Endpoint Id
+          type: string
+        last_check:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Last Check
+        latency_ms:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Latency Ms
+        role:
+          title: Role
+          type: string
+        status:
+          anyOf:
+            - enum:
+                - ok
+                - warn
+                - error
+              type: string
+            - type: 'null'
+          title: Status
+        unbound:
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+          title: Unbound
+      required:
+        - endpoint_id
+        - role
+        - status
+        - latency_ms
+        - last_check
+      title: ProviderHealthRow
+      type: object
+    ProvidersSummaryResponse:
+      properties:
+        brand_color:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Brand Color
+        default_locale:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Default Locale
+        endpoints_count:
+          title: Endpoints Count
+          type: integer
+        export_preset:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Export Preset
+        monthly_cap_usd:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Monthly Cap Usd
+      required:
+        - endpoints_count
+        - monthly_cap_usd
+        - brand_color
+        - default_locale
+        - export_preset
+      title: ProvidersSummaryResponse
+      type: object
+    QueueJob:
+      properties:
+        current_stage:
+          title: Current Stage
+          type: string
+        eta_ms:
+          title: Eta Ms
+          type: integer
+        kit_id:
+          title: Kit Id
+          type: string
+        locale:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Locale
+        name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Name
+        sku:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Sku
+        stages:
+          items:
+            enum:
+              - done
+              - active
+              - queued
+            type: string
+          title: Stages
+          type: array
+      required:
+        - kit_id
+        - sku
+        - name
+        - locale
+        - stages
+        - current_stage
+        - eta_ms
+      title: QueueJob
+      type: object
+    SaveEndpointsRequest:
+      properties:
+        expected_sha256:
+          title: Expected Sha256
+          type: string
+        new_yaml:
+          title: New Yaml
+          type: string
+      required:
+        - new_yaml
+        - expected_sha256
+      title: SaveEndpointsRequest
+      type: object
+    SaveEndpointsResponse:
+      properties:
+        new_sha256:
+          title: New Sha256
+          type: string
+      required:
+        - new_sha256
+      title: SaveEndpointsResponse
+      type: object
+    SearchHitOut:
+      properties:
+        image_url:
+          title: Image Url
+          type: string
+        metadata:
+          additionalProperties: true
+          title: Metadata
+          type: object
+        score:
+          title: Score
+          type: number
+      required:
+        - image_url
+        - score
+        - metadata
+      title: SearchHitOut
+      type: object
+    SearchRequest:
+      properties:
+        filters:
+          $ref: '#/components/schemas/_Filters'
+          default: {}
+        image:
+          title: Image
+          type: string
+        top_k:
+          default: 10
+          title: Top K
+          type: integer
+      required:
+        - image
+      title: SearchRequest
+      type: object
+    SearchResponse:
+      properties:
+        hits:
+          items:
+            $ref: '#/components/schemas/SearchHitOut'
+          title: Hits
+          type: array
+      required:
+        - hits
+      title: SearchResponse
+      type: object
+    SellingPointIn:
+      properties:
+        evidence:
+          title: Evidence
+          type: string
+        priority:
+          enum:
+            - high
+            - medium
+            - low
+          title: Priority
+          type: string
+        title:
+          title: Title
+          type: string
+      required:
+        - title
+        - priority
+        - evidence
+      title: SellingPointIn
+      type: object
+    SkuMetaIn:
+      properties:
+        brand:
+          title: Brand
+          type: string
+        category:
+          title: Category
+          type: string
+        name:
+          title: Name
+          type: string
+        price:
+          title: Price
+          type: number
+        product_type:
+          enum:
+            - blue_hat
+            - sports
+            - general_food
+            - other
+          title: Product Type
+          type: string
+        sku:
+          title: Sku
+          type: string
+      required:
+        - sku
+        - name
+        - brand
+        - category
+        - product_type
+        - price
+      title: SkuMetaIn
+      type: object
+    Sparks:
+      properties:
+        compliance:
+          items:
+            type: number
+          title: Compliance
+          type: array
+        cost:
+          items:
+            type: number
+          title: Cost
+          type: array
+        kits:
+          items:
+            type: integer
+          title: Kits
+          type: array
+      required:
+        - kits
+        - compliance
+        - cost
+      title: Sparks
+      type: object
+    SpecIn:
+      properties:
+        detail_sections:
+          items:
+            $ref: '#/components/schemas/DetailSectionIn'
+          maxItems: 9
+          minItems: 9
+          title: Detail Sections
+          type: array
+        hero_sections:
+          items:
+            $ref: '#/components/schemas/HeroSectionIn'
+          maxItems: 5
+          minItems: 5
+          title: Hero Sections
+          type: array
+        locale:
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+        selling_points:
+          items:
+            $ref: '#/components/schemas/SellingPointIn'
+          minItems: 1
+          title: Selling Points
+          type: array
+        sku_meta:
+          $ref: '#/components/schemas/SkuMetaIn'
+      required:
+        - locale
+        - sku_meta
+        - selling_points
+        - hero_sections
+        - detail_sections
+      title: SpecIn
+      type: object
+    SpecRequest:
+      properties:
+        locale:
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+        selling_points:
+          items:
+            $ref: '#/components/schemas/SellingPointIn'
+          minItems: 1
+          title: Selling Points
+          type: array
+        sku_meta:
+          $ref: '#/components/schemas/SkuMetaIn'
+      required:
+        - sku_meta
+        - selling_points
+        - locale
+      title: SpecRequest
+      type: object
+    SpecResponse:
+      properties:
+        compliance:
+          $ref: '#/components/schemas/ComplianceOut'
+        spec_markdown:
+          title: Spec Markdown
+          type: string
+      required:
+        - spec_markdown
+        - compliance
+      title: SpecResponse
+      type: object
+    TextBoxOut:
+      properties:
+        confidence:
+          title: Confidence
+          type: number
+        h:
+          title: H
+          type: integer
+        text:
+          title: Text
+          type: string
+        w:
+          title: W
+          type: integer
+        x:
+          title: X
+          type: integer
+        'y':
+          title: 'Y'
+          type: integer
+      required:
+        - x
+        - 'y'
+        - w
+        - h
+        - text
+        - confidence
+      title: TextBoxOut
+      type: object
+    ThreePieceIn:
+      properties:
+        copy:
+          title: Copy
+          type: string
+        design_note:
+          title: Design Note
+          type: string
+        visual:
+          title: Visual
+          type: string
+      required:
+        - visual
+        - copy
+        - design_note
+      title: ThreePieceIn
+      type: object
+    ValidationError:
+      properties:
+        ctx:
+          title: Context
+          type: object
+        input:
+          title: Input
+        loc:
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+          title: Location
+          type: array
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+      required:
+        - loc
+        - msg
+        - type
+      title: ValidationError
+      type: object
+    ViolationOut:
+      properties:
+        location:
+          title: Location
+          type: string
+        matched_text:
+          title: Matched Text
+          type: string
+        rule_id:
+          title: Rule Id
+          type: string
+        severity:
+          enum:
+            - hard_block
+            - warning
+            - advisory
+          title: Severity
+          type: string
+        suggestion:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Suggestion
+      required:
+        - rule_id
+        - severity
+        - location
+        - matched_text
+      title: ViolationOut
+      type: object
+    WeeklyMetricsResponse:
+      properties:
+        api_spend_usd_mtd:
+          title: Api Spend Usd Mtd
+          type: number
+        avg_compliance:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Avg Compliance
+        avg_manual_edit_min:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Avg Manual Edit Min
+        kits_this_week:
+          title: Kits This Week
+          type: integer
+        sparks:
+          $ref: '#/components/schemas/Sparks'
+      required:
+        - kits_this_week
+        - avg_compliance
+        - avg_manual_edit_min
+        - api_spend_usd_mtd
+        - sparks
+      title: WeeklyMetricsResponse
+      type: object
+    _Filters:
+      properties:
+        category:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Category
+        fallback_locale:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Fallback Locale
+        locale:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Locale
+        min_sales:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Min Sales
+        season:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Season
+      title: _Filters
+      type: object
+info:
+  title: AIShop Studio API
+  version: 0.1.0
+openapi: 3.1.0
+paths:
+  /api/images/{image_id}/edit:
+    post:
+      operationId: start_edit_api_images__image_id__edit_post
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditRequest'
+        required: true
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditAccepted'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Start Edit
+      tags:
+        - editor
+  /api/images/{image_id}/edit/events:
+    get:
+      operationId: edit_events_api_images__image_id__edit_events_get
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+        - in: query
+          name: job_id
+          required: true
+          schema:
+            title: Job Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Edit Events
+      tags:
+        - editor
+  /api/images/{image_id}/ocr:
+    post:
+      operationId: ocr_image_api_images__image_id__ocr_post
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OcrResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Ocr Image
+      tags:
+        - editor
+  /api/kits:
+    get:
+      description: |-
+        Return the latest ``limit`` kits joined with their product catalog row.
+
+        ``thumbs`` is the concatenation of up-to-5 hero png_paths (slot 1..5) and
+        up-to-9 detail png_paths (M1..M9) — 14 slots total, NULL-padded for any
+        missing rows.  Callers render placeholder cells for NULL entries.
+
+        ``recent`` is currently advisory; the route always sorts by ``created_at
+        DESC``.  The flag exists so the frontend can call ``/api/kits?recent=true``
+        without a 404 from a path mismatch.
+      operationId: list_kits_api_kits_get
+      parameters:
+        - in: query
+          name: recent
+          required: false
+          schema:
+            default: false
+            title: Recent
+            type: boolean
+        - in: query
+          name: limit
+          required: false
+          schema:
+            default: 6
+            maximum: 50
+            minimum: 1
+            title: Limit
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KitListResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Kits
+      tags:
+        - imagegen
+  /api/kits/{kit_id}/events:
+    get:
+      description: |-
+        Stream per-image status events for *kit_id* as text/event-stream.
+
+        Returns 404 when the kit_id has never been published to the bus
+        (callers can use this as a "kit not started" signal).  Each line
+        conforms to the SSE wire format::
+
+            data: {"image_id": "H1", "status": "color_locked", "progress": 0,
+                   "brand_color_locked": true}
+      operationId: get_kit_events_api_kits__kit_id__events_get
+      parameters:
+        - in: path
+          name: kit_id
+          required: true
+          schema:
+            title: Kit Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Kit Events
+      tags:
+        - imagegen
+  /api/kits/{kit_id}/generate:
+    post:
+      description: Generate the 14-image kit for *kit_id*.
+      operationId: post_generate_api_kits__kit_id__generate_post
+      parameters:
+        - in: path
+          name: kit_id
+          required: true
+          schema:
+            title: Kit Id
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Post Generate
+      tags:
+        - imagegen
+  /api/kits/{kit_id}/spec:
+    post:
+      description: Generate the marketing spec for *kit_id* under the requested locale.
+      operationId: create_spec_api_kits__kit_id__spec_post
+      parameters:
+        - in: path
+          name: kit_id
+          required: true
+          schema:
+            title: Kit Id
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpecRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpecResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Spec
+      tags:
+        - copywriter
+  /api/metrics/weekly:
+    get:
+      description: Aggregate live metrics — current-ISO-week kits + 12-week sparklines.
+      operationId: get_weekly_metrics_api_metrics_weekly_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyMetricsResponse'
+          description: Successful Response
+      summary: Get Weekly Metrics
+      tags:
+        - metrics
+  /api/onboarding/needed:
+    get:
+      description: Return whether onboarding is needed for this workspace.
+      operationId: get_onboarding_needed_api_onboarding_needed_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingNeededResponse'
+          description: Successful Response
+      summary: Get Onboarding Needed
+      tags:
+        - onboarding
+  /api/providers/endpoints:
+    post:
+      description: Save the new config YAML body.  ADR-010 v2 lock+checksum semantics.
+      operationId: save_endpoints_api_providers_endpoints_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveEndpointsRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveEndpointsResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Save Endpoints
+      tags:
+        - providers
+  /api/providers/health:
+    get:
+      description: |-
+        Per-role health snapshot derived from ``app.state.registry``.
+
+        Latency probes are not yet implemented (status/latency_ms stubbed to
+        None).  When a known role has no binding, the row carries the role
+        name in ``unbound`` so the frontend can render the warning chip.
+      operationId: get_provider_health_api_providers_health_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ProviderHealthRow'
+                title: Response Get Provider Health Api Providers Health Get
+                type: array
+          description: Successful Response
+      summary: Get Provider Health
+      tags:
+        - providers
+  /api/providers/summary:
+    get:
+      description: Summary of the on-disk ``config.yaml``.
+      operationId: get_provider_summary_api_providers_summary_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProvidersSummaryResponse'
+          description: Successful Response
+      summary: Get Provider Summary
+      tags:
+        - providers
+  /api/queue/active:
+    get:
+      description: Return the snapshot of active kits.  Empty list when idle.
+      operationId: get_active_queue_api_queue_active_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/QueueJob'
+                title: Response Get Active Queue Api Queue Active Get
+                type: array
+          description: Successful Response
+      summary: Get Active Queue
+      tags:
+        - queue
+  /api/retrieval/search:
+    post:
+      description: POST /api/retrieval/search — embed query image + hybrid retrieve.
+      operationId: search_api_retrieval_search_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Search
+      tags:
+        - retrieval
+  /health:
+    get:
+      description: |-
+        Probe Postgres, Milvus, Redis, MinIO concurrently with a 2s timeout each.
+        Returns overall status 'ok' if all four connected, else 'degraded'.
+      operationId: health_health_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+      summary: Health

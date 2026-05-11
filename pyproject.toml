@@ -1,0 +1,67 @@
+[project]
+name = "aishop-img-studio-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic[email]>=2.5",
+    "sqlalchemy>=2",
+    "psycopg[binary]",
+    "pymilvus>=2.4",
+    "redis",
+    "minio",
+    "arq",
+    "bcrypt",
+    "pyyaml",
+    "python-multipart",
+    "httpx",
+    "tenacity",
+    "Pillow",
+    "colormath",
+    "colorthief",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "mypy",
+    "respx",
+    "pre-commit",
+    "datamodel-code-generator",
+    "types-PyYAML",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "apps/api/tests"]
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+
+[[tool.mypy.overrides]]
+module = [
+    "pymilvus.*",
+    "minio.*",
+    "redis.*",
+    "redis.asyncio.*",
+    "colormath.*",
+    "colorthief.*",
+]
+ignore_missing_imports = true
+
+# uv workspace — monorepo Python packages installed via path-includes.
+# services/* glob excludes __pycache__ which Python auto-creates inside services/
+# from importing the services/__init__.py top-level package marker.
+[tool.uv.workspace]
+members = ["apps/api", "services/*"]
+exclude = ["services/__pycache__"]

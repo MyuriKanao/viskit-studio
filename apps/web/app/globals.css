@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== AIShop Studio — Design Tokens ===== */
+
+:root {
+  /* surfaces — cooler ink, warm tone reserved for text + accent */
+  --ink-base: #0b0b0e;
+  --ink-base-l: #faf7f2;
+  --surface-01: #131318;
+  --surface-02: #1c1c24;
+  --surface-03: #23232d;
+  --surface-glass: rgba(28, 28, 36, 0.62);
+  --border-subtle: #26262f;
+  --border-strong: #34343f;
+  --border-hair: rgba(240, 232, 221, 0.06);
+
+  /* text */
+  --text-primary: #f0e8dd;
+  --text-secondary: #c6bba9;
+  --text-muted: #948a7e;
+  --text-faint: #5c544b;
+
+  /* brand accent — 古铜红 */
+  --accent: #c4513a;
+  --accent-soft: #d97757;
+  --accent-deep: #8e3525;
+  --accent-glow: rgba(196, 81, 58, 0.22);
+  --accent-wash: rgba(196, 81, 58, 0.1);
+
+  /* semantic */
+  --success: #6b8e5a;
+  --warning: #c4924a;
+  --danger: #a23e2f;
+  --info: #4a6f8e;
+  --neutral: #948a7e;
+
+  /* type */
+  --font-display: "Instrument Serif", "Source Han Serif SC", "Songti SC", ui-serif, serif;
+  --font-sans: "Inter", "PingFang SC", "Noto Sans SC", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+
+  /* radii */
+  --r-input: 4px;
+  --r-card: 20px;
+  --r-std: 12px;
+  --r-pill: 999px;
+
+  /* spacing — base 8, breathe at 24/32/48/64 */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  /* shadows — only on lift */
+  --shadow-lift: 0 12px 32px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-glass: 0 24px 48px rgba(0, 0, 0, 0.45);
+
+  /* motion */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 160ms;
+  --t-std: 240ms;
+  --t-slow: 400ms;
+}
+
+html[data-theme="light"] {
+  --ink-base: #faf7f2;
+}
+
+body {
+  background: var(--ink-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  margin: 0;
+}

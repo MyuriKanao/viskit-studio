@@ -1,0 +1,239 @@
+# zh compliance ground-truth — hand-labelled pairs for EPIC-3 acceptance.
+# Each pair: id, tier label, input_text (Chinese), expected_violations (rule_ids).
+# The scorer must agree on detected rule-id sets with ≥ 90% of these pairs
+# globally, and ≥ 80% per tier.
+#
+# Tier label meanings (must match a key in services/copywriter/compliance/rules/zh.yaml):
+#   tier_0_general          → universal absolutes
+#   tier_1_blue_hat         → 保健食品 batch-licence boundary
+#   tier_2_demedicalize     → 运动器材 medicalisation
+#   tier_3_general_food     → 普通食品 strictest tier
+
+pairs:
+  # --- tier_0_general (positive examples) ----------------------------------
+  - id: T0-001-weiyi
+    tier: tier_0_general
+    input_text: "本品独家配方非市面唯一可选"
+    expected_violations: [ZH-T0-001]
+  - id: T0-002-zui
+    tier: tier_0_general
+    input_text: "出货迅速 最快下单当天发货"
+    expected_violations: [ZH-T0-002]
+  - id: T0-003-diyi
+    tier: tier_0_general
+    input_text: "上市以来稳居销量第一"
+    expected_violations: [ZH-T0-003]
+  - id: T0-004-juedui
+    tier: tier_0_general
+    input_text: "绝对值得入手好物推荐"
+    expected_violations: [ZH-T0-004]
+  - id: T0-005-dingji
+    tier: tier_0_general
+    input_text: "采用顶级面料一体成型"
+    expected_violations: [ZH-T0-005]
+  - id: T0-006-jizhi
+    tier: tier_0_general
+    input_text: "带来极致舒适触感体验"
+    expected_violations: [ZH-T0-006]
+  - id: T0-007-wanmei
+    tier: tier_0_general
+    input_text: "完美贴合您的身形曲线"
+    expected_violations: [ZH-T0-007]
+  - id: T0-008-bfb
+    tier: tier_0_general
+    input_text: "采用100%棉麻面料亲肤"
+    expected_violations: [ZH-T0-008]
+  - id: T0-009-guojiaji
+    tier: tier_0_general
+    input_text: "通过国家级实验室检测合格"
+    expected_violations: [ZH-T0-009]
+  - id: T0-010-texiao
+    tier: tier_0_general
+    input_text: "特效配方让您耳目一新"
+    expected_violations: [ZH-T0-010]
+  - id: T0-011-guojiaji-zuijia
+    tier: tier_0_general
+    input_text: "由国家级最佳设计师操刀"
+    expected_violations:
+      - ZH-T0-002
+      - ZH-T0-009
+      - ZH-T0-011
+      - ZH-T0-012
+  - id: T0-012-wudi
+    tier: tier_0_general
+    input_text: "无敌耐磨实测三年不破损"
+    expected_violations: [ZH-T0-013]
+  - id: T0-013-chedi
+    tier: tier_0_general
+    input_text: "彻底解决您的烦恼"
+    expected_violations: [ZH-T0-014]
+  - id: T0-014-zuidijia
+    tier: tier_0_general
+    input_text: "全网最低价就在本店"
+    expected_violations: [ZH-T0-002]
+
+  # --- tier_0_general (negative controls) ----------------------------------
+  - id: T0-NEG-001
+    tier: tier_0_general
+    input_text: "本品采用 GOTS 认证有机棉面料"
+    expected_violations: []
+  - id: T0-NEG-002
+    tier: tier_0_general
+    input_text: "黑色简约线条 适合通勤搭配"
+    expected_violations: []
+
+  # --- tier_1_blue_hat (positive examples) ---------------------------------
+  - id: T1-001-qise
+    tier: tier_1_blue_hat
+    input_text: "由内而外散发好气色每一天"
+    expected_violations: [ZH-T1-001]
+  - id: T1-002-suyan
+    tier: tier_1_blue_hat
+    input_text: "服用后让您素颜也自信出门"
+    expected_violations: [ZH-T1-002]
+  - id: T1-003-qudou
+    tier: tier_1_blue_hat
+    input_text: "辅助呵护肌肤祛痘消炎舒缓"
+    expected_violations: [ZH-T1-003]
+  - id: T1-004-kangshuai
+    tier: tier_1_blue_hat
+    input_text: "天然抗衰因子助您年轻态"
+    expected_violations: [ZH-T1-004]
+  - id: T1-005-jiangxuetang
+    tier: tier_1_blue_hat
+    input_text: "辅助控糖人群降血糖配方"
+    expected_violations: [ZH-T1-005]
+  - id: T1-006-mianyili
+    tier: tier_1_blue_hat
+    input_text: "强健体魄提高免疫力配方"
+    expected_violations: [ZH-T1-006]
+  - id: T1-007-shuimian
+    tier: tier_1_blue_hat
+    input_text: "助您一夜安稳改善睡眠质量"
+    expected_violations: [ZH-T1-007]
+  - id: T1-008-shoushen
+    tier: tier_1_blue_hat
+    input_text: "代餐瘦身轻松一夏出行"
+    expected_violations: [ZH-T1-008]
+  - id: T1-009-jianzhi
+    tier: tier_1_blue_hat
+    input_text: "无糖配方助力减脂期食用"
+    expected_violations: [ZH-T1-009]
+  - id: T1-010-multi
+    tier: tier_1_blue_hat
+    input_text: "气色透亮 素颜也精神奕奕"
+    expected_violations: [ZH-T1-001, ZH-T1-002]
+
+  # --- tier_1_blue_hat (negative controls) ---------------------------------
+  - id: T1-NEG-001
+    tier: tier_1_blue_hat
+    input_text: "蓝帽子保健食品 批文齐全可查"
+    expected_violations: []
+  - id: T1-NEG-002
+    tier: tier_1_blue_hat
+    input_text: "原料源自高原直采优选"
+    expected_violations: []
+
+  # --- tier_2_demedicalize (positive examples) -----------------------------
+  - id: T2-001-xiufu
+    tier: tier_2_demedicalize
+    input_text: "针对运动损伤修复加速"
+    expected_violations: [ZH-T2-001]
+  - id: T2-002-zhiliao
+    tier: tier_2_demedicalize
+    input_text: "用于治疗肌肉劳损疼痛"
+    expected_violations: [ZH-T2-002]
+  - id: T2-003-kangfu
+    tier: tier_2_demedicalize
+    input_text: "术后康复期居家使用"
+    expected_violations: [ZH-T2-003]
+  - id: T2-004-jiaozheng
+    tier: tier_2_demedicalize
+    input_text: "支撑脊椎矫正不良姿势"
+    expected_violations: [ZH-T2-004]
+  - id: T2-005-yaosuan
+    tier: tier_2_demedicalize
+    input_text: "缓解久坐腰酸背痛人群"
+    expected_violations: [ZH-T2-005]
+  - id: T2-006-gupen
+    tier: tier_2_demedicalize
+    input_text: "针对骨盆前倾设计支撑"
+    expected_violations: [ZH-T2-006]
+  - id: T2-007-jizhu
+    tier: tier_2_demedicalize
+    input_text: "适合脊柱侧弯爱好者使用"
+    expected_violations: [ZH-T2-007]
+  - id: T2-008-zhuijianpan
+    tier: tier_2_demedicalize
+    input_text: "保护椎间盘减少日常压力"
+    expected_violations: [ZH-T2-008]
+  - id: T2-009-yiliaoji
+    tier: tier_2_demedicalize
+    input_text: "采用医疗级精度仪器加工"
+    expected_violations: [ZH-T2-009]
+  - id: T2-010-yidingjianxiao
+    tier: tier_2_demedicalize
+    input_text: "坚持锻炼一定见效贵在持续"
+    expected_violations: [ZH-T2-010]
+
+  # --- tier_2_demedicalize (negative controls) -----------------------------
+  - id: T2-NEG-001
+    tier: tier_2_demedicalize
+    input_text: "瑜伽辅助带 适合体态训练入门"
+    expected_violations: []
+  - id: T2-NEG-002
+    tier: tier_2_demedicalize
+    input_text: "符合人体工学的曲线设计"
+    expected_violations: []
+
+  # --- tier_3_general_food (positive examples) -----------------------------
+  - id: T3-001-zhangmen
+    tier: tier_3_general_food
+    input_text: "饭后一杯轻松喝走胀闷感"
+    expected_violations: [ZH-T3-001]
+  - id: T3-002-haozhuangtai
+    tier: tier_3_general_food
+    input_text: "每天一袋喝出好状态新选择"
+    expected_violations: [ZH-T3-002]
+  - id: T3-003-richangtiaoli
+    tier: tier_3_general_food
+    input_text: "适合日常调理身体的茶饮"
+    expected_violations: [ZH-T3-003]
+  - id: T3-004-tangniabing
+    tier: tier_3_general_food
+    input_text: "包装贴心适合糖尿病患者随身"
+    expected_violations: [ZH-T3-004]
+  - id: T3-005-sangao
+    tier: tier_3_general_food
+    input_text: "推荐三高人群日常饮用"
+    expected_violations: [ZH-T3-005]
+  - id: T3-006-jianchi
+    tier: tier_3_general_food
+    input_text: "坚持饮用能保持精神状态"
+    expected_violations: [ZH-T3-006]
+  - id: T3-007-cuxiaohua
+    tier: tier_3_general_food
+    input_text: "天然食材促消化舒心配方"
+    expected_violations: [ZH-T3-007]
+  - id: T3-008-zhumian
+    tier: tier_3_general_food
+    input_text: "睡前一杯助眠好选择"
+    expected_violations: [ZH-T3-008]
+  - id: T3-009-tishen
+    tier: tier_3_general_food
+    input_text: "下午茶时光提神好伴侣"
+    expected_violations: [ZH-T3-009]
+  - id: T3-010-paidu
+    tier: tier_3_general_food
+    input_text: "每日一杯轻松排毒养颜"
+    expected_violations: [ZH-T3-010]
+
+  # --- tier_3_general_food (negative controls) -----------------------------
+  - id: T3-NEG-001
+    tier: tier_3_general_food
+    input_text: "速溶冲泡 30 秒即享原味"
+    expected_violations: []
+  - id: T3-NEG-002
+    tier: tier_3_general_food
+    input_text: "100g 装罐 配料表清晰可查"
+    expected_violations: []

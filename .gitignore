@@ -1,0 +1,33 @@
+# Node / pnpm
+node_modules/
+.pnpm-store/
+dist/
+.next/
+.turbo/
+# Keep pnpm-lock.yaml and uv.lock; ignore other lock files
+yarn.lock
+package-lock.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Environment — never commit secrets
+.env
+# .env.example is intentionally kept
+
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/settings.json
+# .vscode/extensions.json is intentionally kept
+
+# Docker volumes
+volumes/

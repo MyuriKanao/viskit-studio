@@ -1,0 +1,139 @@
+{
+  "welcome": "AIShop Studio · 工作台",
+  "sidebar": {
+    "dashboard": "总览",
+    "catalog": "目录",
+    "newKit": "新建套包",
+    "vault": "图库",
+    "templates": "模板",
+    "queue": "队列",
+    "editor": "编辑器",
+    "providers": "服务商",
+    "settings": "设置"
+  },
+  "topbar": {
+    "title": "AIShop Studio",
+    "health": "健康检查",
+    "healthLoading": "检测中…",
+    "healthOk": "正常",
+    "healthWarn": "警告",
+    "healthError": "异常",
+    "locale": "切换语言",
+    "theme": "切换主题",
+    "palette": "命令面板"
+  },
+  "palette": {
+    "placeholder": "输入命令…",
+    "empty": "无匹配结果",
+    "headingGo": "跳转",
+    "headingPrefs": "偏好",
+    "goDashboard": "前往总览",
+    "toggleLocale": "切换语言（中 ↔ EN）",
+    "toggleTheme": "切换主题（深 ↔ 浅）"
+  },
+  "dashboard": {
+    "kpis_title": "本周 Pulse",
+    "pulse_subtitle_pattern": "{DATE_RANGE} → {DATE_RANGE} 2026",
+    "refresh_button": "刷新",
+    "filter_button": "筛选",
+    "recent_kits_title": "近期套包",
+    "view_grid_button": "网格视图",
+    "view_list_button": "列表视图",
+    "new_kit_button": "新建套包",
+    "queue_title": "生成队列",
+    "queue_subtitle_pattern": "{count} 项任务进行中",
+    "pause_all_button": "全部暂停",
+    "kpi_kits_label": "本周套包数",
+    "kpi_compliance_label": "平均合规分",
+    "kpi_manual_edit_label": "平均人工编辑时长",
+    "kpi_api_spend_label": "本月 API 花费"
+  },
+  "kitDetail": {
+    "title": "套包详情",
+    "spec_column_title": "规格说明",
+    "compliance_label": "合规评分",
+    "cost_label": "生成成本",
+    "pending_state": "计算中…",
+    "refresh_button": "刷新",
+    "fix_text_cta": "修正文案",
+    "regenerate_cta": "重新生成",
+    "status_ready": "就绪",
+    "status_generating": "生成中",
+    "status_needs_review": "待审核",
+    "status_queued": "排队中",
+    "status_failed": "失败",
+    "image_status_ready": "图片就绪",
+    "image_status_generating": "图片生成中",
+    "image_status_queued": "图片排队中",
+    "image_status_failed": "图片失败"
+  },
+  "providers": {
+    "page_title": "服务商管理",
+    "sankey_title": "路由可视化",
+    "active_routing_label": "当前路由",
+    "add_endpoint_button": "添加端点",
+    "view_yaml_toggle": "查看 YAML",
+    "latency_label": "延迟",
+    "health_status_healthy": "健康",
+    "health_status_degraded": "降级",
+    "health_status_down": "离线",
+    "health_status_unknown": "未知",
+    "table_col_name": "名称",
+    "table_col_role": "角色",
+    "table_col_model": "模型",
+    "table_col_latency": "延迟 (ms)",
+    "table_col_status": "状态",
+    "table_col_actions": "操作",
+    "save_endpoint_button": "保存端点",
+    "modal_title": "添加端点"
+  },
+  "providersDialog": {
+    "drift_title": "配置冲突",
+    "your_edit_label": "你的编辑",
+    "on_disk_label": "磁盘现有",
+    "proposed_label": "提议合并",
+    "use_on_disk_button": "使用磁盘版本",
+    "force_your_edit_button": "强制保存你的编辑",
+    "save_merged_button": "保存合并结果",
+    "lock_timeout_toast": "配置已锁定 — {retry_after_s} 秒后重试",
+    "lock_retry_label": "重试中…"
+  },
+  "editor": {
+    "title": "文本修补编辑器",
+    "tools": {
+      "select": "选择",
+      "text": "文字",
+      "move": "移动",
+      "inpaint": "AI 重绘",
+      "undo": "撤销",
+      "redo": "重做"
+    },
+    "history": {
+      "empty": "暂无历史",
+      "cap": "历史已达上限 50 步"
+    },
+    "inpaint": {
+      "streaming": "重绘中…",
+      "error": "重绘失败",
+      "aborted": "已取消",
+      "cancel": "取消"
+    },
+    "ocr": {
+      "loading": "正在识别文字…",
+      "error": "文字识别失败"
+    }
+  },
+  "onboarding": {
+    "page_title": "欢迎使用",
+    "welcome_copy": "欢迎来到 AIShop Studio —— 你的电商营销套包生成工作台",
+    "cta_new_kit_label": "创建新套包",
+    "cta_sample_kit_label": "查看示例套包",
+    "cta_providers_label": "配置服务商",
+    "workspace_ready_title": "工作台就绪",
+    "endpoints_count_label": "已配置端点",
+    "monthly_cap_label": "月度上限",
+    "brand_color_label": "品牌色",
+    "default_locale_label": "默认语言",
+    "export_preset_label": "导出预设"
+  }
+}

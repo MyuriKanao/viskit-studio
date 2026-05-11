@@ -1,0 +1,202 @@
+{
+  "epic": "EPIC-6 — Web Shell (Next.js base)",
+  "goal": "Ship the Next.js 14 web shell — global layout chrome (Sidebar + Topbar), 5 atomic components, i18n routing, theme toggle, command-palette stub, real-API integration via TanStack Query backed by build-time-generated typed clients from FastAPI's live /openapi.json, and the first routable page (/dashboard) with a Placeholder content area — at design-brief.md fidelity (≤3 sRGB units pixel parity vs demo/index.html#dashboard for shell chrome only) and Lighthouse-equivalent a11y ≥90.",
+  "spec_reference": ".omc/specs/deep-interview-epic-6-web-shell.md (8-round deep-interview, ambiguity 7%)",
+  "plan_reference": ".omc/plans/aishop-studio-v1-plan.md lines 359-379",
+  "preconditions_satisfied": [
+    "EPIC-0..4B backend complete (305 pytest passing).",
+    "apps/web Next.js 14.2.29 + React 18.3.1 + Tailwind 3.4.17 + Biome scaffold from EPIC-0.",
+    "next-intl 3.26.5 INSTALLED with [locale]/ routes + i18n/routing.ts + i18n/request.ts + middleware.ts + messages/ folder.",
+    "tokens.css ALREADY ported to apps/web/app/globals.css.",
+    "packages/schemas/ has openapi.yaml (paths: {} placeholder), python/models.py + ts/index.ts generated; gen:ts + gen:py scripts exist.",
+    "apps/api/main.py boots; FastAPI auto-emits /openapi.json from pydantic models; /api/health returns {status, postgres, milvus, redis, minio}.",
+    "demo/components.jsx, dashboard.jsx, providers.jsx, kit-detail.jsx, tweaks-panel.jsx are mockup-grade reference files (NOT to be ported verbatim)."
+  ],
+  "depends_on_epics": [
+    "EPIC-0 (Next.js skeleton + tokens.css + tsconfig + biome.json)",
+    "EPIC-1 (FastAPI + /api/health route + pydantic models for OpenAPI generation)",
+    "(All other backend EPICs feed routes into /openapi.json that the typed-client generator picks up.)"
+  ],
+  "stories": [
+    {
+      "id": "US-6.1",
+      "title": "Tailwind config — extend theme tokens from tokens.css; add tsconfig path aliases",
+      "description": "Stage A foundation. apps/web/tailwind.config.ts gets a `theme.extend` block mapping all CSS-variable categories from tokens.css (color/spacing/typography/radii/shadows/motion) into Tailwind utility classes. apps/web/tsconfig.json gains `@/components/*`, `@/lib/*`, `@/hooks/*` path aliases (currently only `@/*` → root). Single source of truth: tokens.css OWNS the values; tailwind.config.ts ONLY references via `var(--token-name)` so no drift is possible.",
+      "acceptanceCriteria": [
+        "apps/web/tailwind.config.ts exists with `theme.extend.colors` mapping at least: ink-base, ink-base-l, surface-01, surface-02, surface-03, surface-glass, ink-secondary, ink-muted, ink-faint, accent, accent-soft, accent-deep, accent-glow, accent-wash, success, warning, danger, info, neutral — every value MUST be `var(--<token>)` (string literal containing 'var(--')",
+        "tailwind.config.ts theme.extend.spacing maps s-1 .. s-8 + breathe-24 / breathe-32 / breathe-48 / breathe-64 to var(--s-N) / var(--breathe-N)",
+        "tailwind.config.ts theme.extend.fontFamily defines `serif: var(--font-serif)`, `sans: var(--font-sans)`, `mono: var(--font-mono)`",
+        "tailwind.config.ts theme.extend.borderRadius maps r-input/r-card/r-std/r-pill",
+        "tailwind.config.ts theme.extend.boxShadow maps lift + glass",
+        "tailwind.config.ts theme.extend.transitionTimingFunction maps ease + ease-spring + transitionDuration maps t-fast/t-std/t-slow",
+        "apps/web/tsconfig.json `compilerOptions.paths` adds `@/components/*`, `@/lib/*`, `@/hooks/*`, `@/app/*` aliases (in addition to existing `@/*`)",
+        "`pnpm --filter web build` (or equivalent Next.js build) succeeds with the new tailwind config — no PostCSS errors",
+        "tests/web/test_tailwind_tokens.spec.ts (new Playwright OR a node-side assertion script via vitest if vitest is present) verifies that compiling a Tailwind utility class like `bg-surface-01` produces a CSS rule whose value contains `var(--surface-01)` (proves the mapping isn't drifted)",
+        "Drift guard: `apps/web/scripts/check-token-drift.mjs` exists — reads tokens.css, extracts every `--<name>` declaration, asserts every name appears at least once in tailwind.config.ts (or is in an explicit allowlist file). Add to package.json scripts as `check:tokens`. CI runs this before build."
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-6.2",
+      "title": "shadcn/ui install + initial primitive set + Biome reconciliation",
+      "description": "Stage A. Install shadcn/ui 2.x via the CLI (no postinstall side-effects). Pull the 6 primitives EPIC-6 needs: button, dialog, dropdown-menu, command (cmdk wrapper), tooltip, popover. Configure components.json to write to apps/web/components/ui/ with the @/components/ui alias. Reconcile Biome formatting against shadcn-generated files (add `.biomeignore` patterns OR adjust biome.json `files.ignore`).",
+      "acceptanceCriteria": [
+        "apps/web/components.json exists configured with: schema=https://ui.shadcn.com/schema.json, style=default, rsc=true, tsx=true, tailwind.config=tailwind.config.ts, tailwind.css=app/globals.css, tailwind.baseColor=neutral, tailwind.cssVariables=true, aliases.components=@/components, aliases.ui=@/components/ui, aliases.utils=@/lib/utils, aliases.hooks=@/hooks",
+        "apps/web/components/ui/{button,dialog,dropdown-menu,command,tooltip,popover}.tsx all exist with the standard shadcn implementation",
+        "apps/web/lib/utils.ts exports `cn(...inputs: ClassValue[])` (the standard shadcn clsx + tailwind-merge helper)",
+        "apps/web/package.json devDeps include: tailwind-merge, class-variance-authority, lucide-react, @radix-ui/react-dialog, @radix-ui/react-dropdown-menu, @radix-ui/react-tooltip, @radix-ui/react-popover, cmdk, clsx",
+        "Biome reconciliation: biome.json `files.ignore` (or a new .biomeignore) excludes apps/web/components/ui/** so shadcn-generated formatting doesn't fight Biome. Verified by `pnpm --filter web lint` exiting 0 with the shadcn files present",
+        "TypeScript: `pnpm --filter web typecheck` exits 0 with the shadcn files present (no implicit any, all imports resolved)",
+        "Smoke: a temporary apps/web/app/_smoke/page.tsx that imports each shadcn primitive renders without runtime error in `next dev` AND is removed before story completion (replaced by real usage in later stories)",
+        "shadcn tooling install does NOT touch existing apps/web/app/globals.css beyond appending the `@layer base` block shadcn requires; the existing tokens.css contents at the top of globals.css remain untouched"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-6.3",
+      "title": "pnpm gen:api — build-time TanStack-Query typed-client generator from FastAPI /openapi.json",
+      "description": "Stage B. Add an apps/web/scripts/gen-api.mjs that: (1) boots `uvicorn apps.api.main:app` on a free port via Python subprocess; (2) polls /api/health until ready (5s timeout); (3) fetches /openapi.json; (4) writes the result into packages/schemas/openapi.yaml (overwriting paths: {}); (5) runs `openapi-typescript` to produce packages/schemas/ts/api-paths.ts; (6) cleanly shuts uvicorn down. apps/web/package.json gets a `gen:api` script. CI/Makefile runs gen:api BEFORE pnpm -r build.",
+      "acceptanceCriteria": [
+        "apps/web/scripts/gen-api.mjs exists and is executable via node",
+        "apps/web/package.json devDeps include `openapi-typescript@^7` and `js-yaml@^4`",
+        "apps/web/package.json scripts include `gen:api` invoking node scripts/gen-api.mjs",
+        "Running `pnpm --filter web gen:api` (with apps/api importable + uv venv active): boots uvicorn on a free port, fetches /openapi.json, overwrites packages/schemas/openapi.yaml, generates packages/schemas/ts/api-paths.ts, kills uvicorn, exits 0",
+        "After gen:api, packages/schemas/openapi.yaml `paths` key is non-empty (not `{}`); contains at least `/api/health` and `/api/kits/{kit_id}/generate` and `/api/kits/{kit_id}/events` and `/api/copywriter/spec` and `/api/retrieval/search`",
+        "After gen:api, packages/schemas/ts/api-paths.ts exists exporting `paths` and `components` types from openapi-typescript",
+        "Makefile target `gen-api` exists wrapping `pnpm --filter web gen:api`",
+        "Makefile target `web-build` (or the existing `dev` target's web-build sub-step) runs `make gen-api` before `pnpm --filter web build`",
+        "scripts/gen-api.mjs handles uvicorn boot timeout gracefully — if /api/health doesn't return 200 within 5s, exits 1 with a clear error message (no zombie processes)",
+        "scripts/gen-api.mjs uses a high random port (50000-60000 range) to avoid clashes with running dev servers",
+        "Idempotent: running gen:api twice in a row produces byte-identical packages/schemas/ts/api-paths.ts"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-6.4",
+      "title": "TanStack Query 5 setup + apps/web/lib/api/ typed client + useHealth() hook",
+      "description": "Stage B. Install @tanstack/react-query@5 + @tanstack/react-query-devtools@5. Wire QueryClientProvider into the root layout (must be a Client Component). apps/web/lib/api/client.ts exports a typed fetch wrapper that uses the openapi-typescript-generated `paths` type; apps/web/hooks/use-health.ts exports `useHealth()` returning `{data, isLoading, isError}` with the response typed against the generated `paths['/api/health']['get']['responses']['200']`.",
+      "acceptanceCriteria": [
+        "apps/web/package.json deps include @tanstack/react-query@^5 and devDeps include @tanstack/react-query-devtools@^5 + openapi-fetch@^0.13",
+        "apps/web/lib/api/client.ts exports `apiClient` constructed via `createClient<paths>({baseUrl})` from openapi-fetch, where `paths` is imported from packages/schemas/ts/api-paths",
+        "apiClient.baseUrl is read from `process.env.NEXT_PUBLIC_API_BASE_URL` with default `http://localhost:8000`",
+        "apps/web/components/providers/query-provider.tsx is a Client Component (`'use client'` at the top) exporting `<QueryProvider>` that wraps children with a singleton QueryClient + dev-only ReactQueryDevtools",
+        "apps/web/hooks/use-health.ts exports `useHealth()` with return type explicitly typed as `UseQueryResult<paths['/api/health']['get']['responses']['200']['content']['application/json'], Error>`",
+        "useHealth() calls apiClient.GET('/api/health') and returns the typed response; refetchInterval=15s",
+        "apps/web/app/layout.tsx wraps {children} with <QueryProvider> (and chains under any existing providers)",
+        "`pnpm --filter web typecheck` passes with the new hook + provider — proves the openapi-typescript-generated types flow through openapi-fetch into useQuery",
+        "Smoke test: tests/web/api-client.spec.ts (Playwright) starts apps/api via the gen-api uvicorn pattern (or assumes a running server in CI), hits useHealth() through the page DOM, asserts the StatusChip renders 'ok' (deferred to US-6.7+ since chip lives in topbar — for this story, an inline `<HealthIndicator />` smoke component on the / route is acceptable)"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-6.5",
+      "title": "5 atoms — StatusChip, ComplianceRing, Sparkline, LocaleFlag, Placeholder (shadcn/Tailwind-based)",
+      "description": "Stage C. Port the 5 atomic components from demo/components.jsx into TSX under apps/web/components/atoms/. Each is a pure presentational client component (no API calls). All use shadcn primitives where applicable (e.g. Tooltip on hovered StatusChip), Tailwind utility classes referencing tokens, and full a11y attributes (aria-label on every interactive/iconographic element).",
+      "acceptanceCriteria": [
+        "apps/web/components/atoms/status-chip.tsx exports `StatusChip({status, label, ariaLabel?})` where status: 'ok' | 'warn' | 'error' | 'pending'. Renders a colored chip per status (ok=success, warn=warning, error=danger, pending=neutral) with accessible label",
+        "apps/web/components/atoms/compliance-ring.tsx exports `ComplianceRing({score, size?})` rendering an SVG donut with the score 0-100 colored per threshold (>=80 success, 60-79 warning, <60 danger). aria-label='Compliance score: {score}%'",
+        "apps/web/components/atoms/sparkline.tsx exports `Sparkline({data: number[], color?, width?, height?})` rendering an SVG path. aria-hidden='true' (decorative)",
+        "apps/web/components/atoms/locale-flag.tsx exports `LocaleFlag({locale: 'zh' | 'en', size?})` rendering a small flag icon with aria-label='Chinese' or 'English'",
+        "apps/web/components/atoms/placeholder.tsx exports `Placeholder({label, targetEpic?})` rendering a dashed-border centered card with the label and an optional 'Coming in EPIC-X' subtext. aria-label='Placeholder for {label}'",
+        "All 5 atoms live under apps/web/components/atoms/ with the corresponding kebab-case filename",
+        "Each atom is exportable via `import { StatusChip } from '@/components/atoms/status-chip'` (uses @/components alias from US-6.1)",
+        "Each atom file passes Biome + tsc strict",
+        "tests/web/atoms.spec.ts (Playwright) renders each atom on a smoke page apps/web/app/_atoms-smoke/page.tsx (gated behind NODE_ENV !== 'production') and asserts the aria-labels are present + visible. Smoke page is removed OR gated before US-6.10's CI run",
+        "Each atom uses Tailwind utility classes referencing the theme tokens (e.g. `bg-success`, `text-ink-secondary`) — NO inline `style={{color: '#...'}}` hex codes"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-6.6",
+      "title": "Sidebar — 9 nav items with aria-disabled state for 8 not-yet-implemented routes",
+      "description": "Stage C. Port demo/components.jsx:Sidebar (lines 128-202) into apps/web/components/shell/sidebar.tsx. 9 nav items: Dashboard, Catalog, New Kit, Vault, Templates, Queue, Editor, Providers, Settings. Only Dashboard is enabled (links to /dashboard via next/link); the other 8 render with aria-disabled=true, greyed-out visual treatment, and a shadcn Tooltip on hover ('Coming in EPIC-X'). Active nav item highlighted via usePathname() comparison. Locale-aware labels via next-intl useTranslations().",
+      "acceptanceCriteria": [
+        "apps/web/components/shell/sidebar.tsx exports `<Sidebar />` as a Client Component",
+        "Sidebar renders exactly 9 nav items (sourced from a typed array constant `SIDEBAR_NAV_ITEMS` in apps/web/lib/nav.ts)",
+        "Each NAV_ITEM has shape: `{ id, labelKey, href, icon, enabled, comingInEpic? }` — strictly typed",
+        "Dashboard item: enabled=true, href='/dashboard', icon=lucide-react LayoutDashboard. Other 8: enabled=false with comingInEpic populated",
+        "Disabled items render with `aria-disabled=true`, opacity-50 + cursor-not-allowed Tailwind utilities, and a shadcn `<Tooltip>` showing 'Coming in EPIC-{N}'",
+        "Disabled items prevent navigation: clicking does NOT change route (use `<button>` for disabled, `<Link>` for enabled to be semantically correct)",
+        "Active route highlight: when pathname matches NAV_ITEM.href, the item gets `bg-surface-02 text-accent` Tailwind classes",
+        "Labels rendered via next-intl `useTranslations('sidebar')` — each labelKey resolves to both zh + en in apps/web/messages/{zh,en}.json under the `sidebar.<id>` key",
+        "Sidebar uses Tailwind utility classes (no app.css imports, no styled-jsx)",
+        "tests/web/sidebar.spec.ts (Playwright) renders / and asserts: 9 nav items present; only Dashboard is enabled; the 8 disabled have aria-disabled=true; tooltip text 'Coming in EPIC-7' (for kit-detail/onboarding/etc.) appears on hover for at least one disabled item"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-6.7",
+      "title": "Topbar — health StatusChip + locale toggle + theme toggle + ⌘K trigger",
+      "description": "Stage C. Port demo/components.jsx:Topbar (lines 205-235) into apps/web/components/shell/topbar.tsx. Renders: app title (or logo placeholder), middle-area health StatusChip driven by useHealth() (US-6.4), right-side controls: locale toggle (LocaleFlag dropdown via shadcn DropdownMenu), theme toggle (button toggling data-theme attribute), ⌘K command-palette trigger (button + visible keyboard hint).",
+      "acceptanceCriteria": [
+        "apps/web/components/shell/topbar.tsx exports `<Topbar />` as a Client Component",
+        "Topbar renders the app title 'AIShop Studio' (locale-aware via next-intl)",
+        "Topbar renders a `<StatusChip />` whose status is driven by useHealth() — 'pending' while loading, 'ok' on response, 'error' on isError",
+        "Topbar locale toggle: shadcn DropdownMenu trigger showing current `<LocaleFlag />`; menu items 中文 / English; clicking writes a NEXT_LOCALE cookie (path=/, max-age=31536000) AND navigates to the same pathname under the new locale (e.g. /zh/dashboard ↔ /en/dashboard) using next/navigation router",
+        "Topbar theme toggle: a `<button>` toggling `data-theme` attribute on `<html>` between 'dark' (default) and 'light' AND writes a localStorage key `aishop:theme` so reload preserves the choice",
+        "Topbar ⌘K trigger: a `<button>` with aria-label='Open command palette' + visible 'kbd' chip showing '⌘K' (or 'Ctrl+K' on non-Mac via UA detection or just '⌘K / Ctrl+K' static text). Clicking dispatches an event the CommandPalette listens to OR sets an `open` state lifted to the layout",
+        "Every interactive element has explicit aria-label",
+        "Topbar uses shadcn primitives (DropdownMenu for locale; Button for theme/⌘K) and Tailwind tokens (no app.css)",
+        "tests/web/topbar.spec.ts (Playwright) asserts: title visible; StatusChip rendered with status 'ok' (after API health responds); locale dropdown contains 中文 + English options; theme toggle exists with aria-label; ⌘K button visible with kbd hint"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-6.8",
+      "title": "⌘K command palette — cmdk-based with 3 commands",
+      "description": "Stage C. apps/web/components/shell/command-palette.tsx wraps shadcn `<Command>` (cmdk) into a `<CommandDialog>` that opens on ⌘K (or Ctrl+K) keypress AND on Topbar trigger. Initial commands: 'Go to Dashboard' (next/router push to /dashboard), 'Toggle locale (zh ↔ en)' (calls the same locale-toggle code path as Topbar), 'Toggle theme (dark ↔ light)' (calls theme-toggle code path).",
+      "acceptanceCriteria": [
+        "apps/web/components/shell/command-palette.tsx exists exporting `<CommandPalette />` as a Client Component",
+        "Renders shadcn `<CommandDialog>` (cmdk under the hood) with 3 `<CommandItem>` entries",
+        "Global keyboard listener: `e.metaKey && e.key === 'k'` OR `e.ctrlKey && e.key === 'k'` toggles open state (preventDefault to avoid browser shortcut conflict)",
+        "Esc closes the palette (cmdk handles by default)",
+        "'Go to Dashboard' item: onSelect calls `router.push('/dashboard')` then closes the palette",
+        "'Toggle locale' item: onSelect cycles zh ↔ en via the shared cookie+navigate helper used by Topbar",
+        "'Toggle theme' item: onSelect cycles dark ↔ light via the shared theme-toggle helper used by Topbar",
+        "All command labels are next-intl localized via `useTranslations('palette')`",
+        "Command palette has explicit role='dialog' aria-modal='true' aria-labelledby semantics (cmdk provides; verify present in DOM)",
+        "tests/web/command-palette.spec.ts (Playwright) asserts: ⌘K opens the palette; 3 commands visible; clicking 'Go to Dashboard' navigates the page; Esc closes it"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-6.9",
+      "title": "Root layout integration + / and /dashboard routes + i18n wire-up + theme provider",
+      "description": "Stage C. apps/web/app/layout.tsx becomes the integration root: wraps {children} in QueryProvider + NextIntlClientProvider + ThemeProvider (writes data-theme on html). apps/web/app/[locale]/layout.tsx provides the next-intl locale context. apps/web/app/[locale]/page.tsx is `/` and redirects to `/<locale>/dashboard` via redirect(). apps/web/app/[locale]/dashboard/page.tsx is `/dashboard` and renders the shell (Sidebar + Topbar) with a `<Placeholder label='Dashboard' targetEpic={7} />` content area.",
+      "acceptanceCriteria": [
+        "apps/web/app/layout.tsx wraps children with `<QueryProvider><html lang={'zh' or dynamic}><body>{children}</body></html></QueryProvider>` AND adds `<ThemeProvider>` initialising data-theme from localStorage on mount",
+        "apps/web/app/[locale]/layout.tsx exists with NextIntlClientProvider wrapping the locale-scoped subtree; receives messages from getMessages()",
+        "apps/web/app/[locale]/page.tsx redirects to `/${locale}/dashboard` using next/navigation redirect()",
+        "apps/web/app/[locale]/dashboard/page.tsx renders `<div className='grid grid-cols-[240px_1fr] grid-rows-[64px_1fr] h-screen'><Sidebar /><Topbar /><main><Placeholder label='Dashboard' targetEpic={7} /></main></div>` (or equivalent layout grid with Tailwind tokens)",
+        "next-intl middleware routes `/` to `/zh/dashboard` (default locale per i18n/routing.ts) — verified by Playwright following the redirect chain",
+        "apps/web/middleware.ts is unchanged from EPIC-0 next-intl scaffold (or only minimally extended for theme cookie reading)",
+        "apps/web/messages/zh.json + apps/web/messages/en.json gain `sidebar.{dashboard,catalog,newKit,vault,templates,queue,editor,providers,settings}` entries + `topbar.{title,health,locale,theme,palette}` entries + `palette.{dashboard,locale,theme}` entries",
+        "Pre-existing apps/web/app/[locale]/page.tsx (the EPIC-0 default) is replaced by the redirect implementation",
+        "apps/web/app/page.tsx (the root non-locale page) is removed OR also redirects to /[locale]",
+        "`pnpm --filter web build` succeeds — all routes generated (/, /zh, /en, /zh/dashboard, /en/dashboard at minimum)",
+        "next dev: navigating to http://localhost:3000/ lands on /zh/dashboard with the shell visible (Sidebar on left, Topbar on top, Placeholder centered)"
+      ],
+      "passes": true
+    },
+    {
+      "id": "US-6.10",
+      "title": "Playwright + image-snapshot + axe-core install + 5 e2e ACs (visual diff, ⌘K, locale, theme, a11y)",
+      "description": "Stage D. Install Playwright @1.56 + @playwright/test + playwright-image-snapshot + @axe-core/playwright as devDeps in apps/web. Write tests/web/{visual.spec.ts, command-palette-e2e.spec.ts, locale-persistence.spec.ts, theme-persistence.spec.ts, a11y.spec.ts}. Configure playwright.config.ts with two projects: chromium-desktop + chromium-mobile (375×667). CI ready (use @playwright/test's auto-server-start where possible).",
+      "acceptanceCriteria": [
+        "apps/web/package.json devDeps include @playwright/test@^1.56, playwright-image-snapshot@^7, @axe-core/playwright@^4",
+        "apps/web/playwright.config.ts exists with: testDir='./tests/web', baseURL='http://localhost:3000', webServer={command:'pnpm --filter web dev', port:3000, timeout:60000}, projects: chromium (1280×800) + chromium-mobile (375×667)",
+        "tests/web/visual.spec.ts: navigates to /zh/dashboard, masks the `<main>` content area (Placeholder), takes a screenshot of the shell chrome (sidebar + topbar regions), compares vs a baseline at tests/web/snapshots/dashboard-zh.png with maxDiffPixelRatio=0.03 (3 sRGB units ≈ 3% pixel-diff threshold) — baseline is generated via `pnpm --filter web test:e2e --update-snapshots` on first run and committed",
+        "tests/web/command-palette-e2e.spec.ts: opens /zh/dashboard, presses Meta+K (use page.keyboard.press('Meta+k')), asserts dialog visible, asserts 3 commands visible, clicks 'Go to Dashboard', asserts URL stable, presses Escape, asserts dialog hidden",
+        "tests/web/locale-persistence.spec.ts: opens /zh/dashboard, clicks locale dropdown, selects English, asserts URL becomes /en/dashboard, reloads, asserts URL stays /en/dashboard (cookie persistence)",
+        "tests/web/theme-persistence.spec.ts: opens /zh/dashboard, asserts `<html data-theme='dark'>`, clicks theme toggle, asserts `<html data-theme='light'>`, reloads, asserts `<html data-theme='light'>` (localStorage persistence)",
+        "tests/web/a11y.spec.ts: opens /zh/dashboard, runs `await new AxeBuilder({page}).analyze()`, asserts violations of severity 'serious' OR 'critical' are zero. Reports the score (computed from axe-core's violations weighting; OR uses `await page.lighthouseAudit({onlyCategories: ['accessibility']})` if @lhci/cli is added — flexible)",
+        "apps/web/package.json scripts: `test:e2e` runs `playwright test`, `test:e2e:install` runs `playwright install chromium`",
+        "Makefile target `web-e2e` exists wrapping `pnpm --filter web test:e2e`",
+        "All 5 e2e specs pass on `pnpm --filter web test:e2e` (assuming apps/api is also reachable for the health-driven topbar — Playwright config can boot uvicorn as a second webServer or the test can mock /api/health at the network layer; choose the simpler path and document it in the spec file's header comment)",
+        ".github/workflows/ — if a CI workflow file exists, EPIC-6 adds steps for: pnpm install → make gen-api → pnpm --filter web test:e2e:install → pnpm --filter web test:e2e. If no CI workflow exists, document the manual run in apps/web/README.md (create if missing)",
+        "Backend regression: `cd /home/kano/Desktop/aishop-img-studio && uv run pytest -q` STILL reports 305 passed (no regression from EPIC-6 which is purely frontend)"
+      ],
+      "passes": true
+    }
+  ]
+}

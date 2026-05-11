@@ -1,0 +1,25 @@
+{
+  "active": false,
+  "current_phase": "deep-interview-complete",
+  "state": {
+    "interview_id": "epic-5-text-touchup-editor-2026-05-11",
+    "type": "brownfield",
+    "initial_idea": "EPIC-5 Text-touchup Editor",
+    "threshold": 0.20,
+    "rounds_completed": 8,
+    "final_ambiguity_pct": 3.0,
+    "status": "PASSED",
+    "decisions_locked": {
+      "R1_ui_scope": "Full design-brief screen 5 (CanvasStage + TextLayerOverlay + ToolRail + HistoryTimeline)",
+      "R2_history_model": "Command pattern + fabric JSON snapshot per op, bounded stack cap 50; image_edits Postgres row per inpaint op only; canvas-only ops in-memory",
+      "R3_ocr_engine": "PaddleOCR server-side, exposed at POST /api/images/{id}/ocr; FakeOCR in tests/editor/conftest.py; AC#2 ratio formula sum(IoU>=0.5)/sum(ground_truth) >= 0.90 on 10 zh fixtures",
+      "R4_inpaint_provider": "Add ImageEdit Protocol to services/providers/base.py (5th provider role); image_edit required at startup like compliance_screen; apimart adapter for GPT-Image-2 /v1/images/edits; FakeImageEdit composites via Pillow on mask_box deterministic bytes",
+      "R5_minio_strategy": "Sidecar pattern: kits/{id}/edited/{image_id}.png overwritten per inpaint; original at kits/{id}/{hero|detail}/{image_id}.png immutable; EPIC-7 falls back to original if sidecar absent; revert = DELETE sidecar + INSERT op_type=revert image_edits row",
+      "R6_ac1_scripted_ops": "Op1=edit_text canvas-only -> Op2=move_layer canvas-only -> Op3=inpaint AI; +1 undo +1 redo for AC#5 sanity; budget ~30s real-time vs 90s ceiling",
+      "R7_fabric_ssr_lifecycle": "Dynamic import ssr:false + useEffect dispose + mount-guard useRef for StrictMode double-mount; HMR triggers clean dispose+recreate (canvas state lost dev-only); imperative-only inside fabric event handlers, single setState commit on mouse:up",
+      "R8_toolrail_states": "6-button MVP (Select/Text/Move/Inpaint/Undo/Redo) with 4 states each (idle|active|disabled|loading); keyboard V/T/M/I/Ctrl+Z/Ctrl+Shift+Z; Inpaint loading = spinner + cancellable via AbortController + disabled siblings during SSE stream"
+    },
+    "remaining_gaps": [],
+    "spec_path": ".omc/specs/deep-interview-epic-5-text-touchup-editor.md"
+  }
+}

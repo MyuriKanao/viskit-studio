@@ -1,0 +1,113 @@
+# OCR tolerance fixtures — paired (expected_texts, canned_response) tuples.
+#
+# Each entry models a single on-image OCR call:
+#   expected_texts   — ground-truth text content per region (in reading order).
+#   canned_response  — what the FakeVisionLLM will emit, possibly with a
+#                      ±1 char perturbation to exercise the ±2 Levenshtein
+#                      tolerance assertion.
+#
+# image_ref is a path placeholder; v1 tests do not actually load the image —
+# the FakeVisionLLM canned output is the substitute for a real OCR call.
+
+entries:
+  - id: hero_h1_zh
+    image_ref: images/zh/dress_red_001.jpg
+    expected_texts:
+      - "新品上市"
+      - "限时优惠"
+      - "立即购买"
+    canned_response:
+      - "新品上市"
+      - "限时优惠"
+      - "立即购买"
+
+  - id: hero_h2_zh
+    image_ref: images/zh/shoes_white_003.jpg
+    expected_texts:
+      - "舒适透气"
+      - "百搭轻便"
+    canned_response:
+      - "舒适透气"
+      - "百搭轻便"
+
+  - id: detail_m3_zh
+    image_ref: images/zh/bag_black_004.jpg
+    expected_texts:
+      - "真皮工艺"
+      - "通勤大容量"
+      - "原价 399 现价 259"
+    # Single-char typo on entry 2 to exercise tolerance (Levenshtein = 1).
+    canned_response:
+      - "真皮工艺"
+      - "通勤大容量"
+      - "原价 399 现价 258"
+
+  - id: hero_h1_en
+    image_ref: images/en/dress_red_005.jpg
+    expected_texts:
+      - "New Arrival"
+      - "Limited Offer"
+      - "Shop Now"
+    canned_response:
+      - "New Arrival"
+      - "Limited Offer"
+      - "Shop Now"
+
+  - id: hero_h3_en
+    image_ref: images/en/shoes_white_006.jpg
+    expected_texts:
+      - "All-Day Comfort"
+      - "Free Shipping"
+    canned_response:
+      - "All-Day Comfort"
+      - "Free Shippin"  # Levenshtein = 1 (missing trailing g)
+
+  - id: detail_m5_zh
+    image_ref: images/zh/dress_white_002.jpg
+    expected_texts:
+      - "GOTS 认证"
+      - "工艺溯源"
+    canned_response:
+      - "GOTS 认证"
+      - "工艺溯源"
+
+  - id: detail_m7_zh
+    image_ref: images/zh/bag_brown_007.jpg
+    expected_texts:
+      - "如何护理"
+      - "退换政策"
+      - "联系客服"
+    canned_response:
+      - "如何护理"
+      - "退换政策"
+      - "联系客服"
+
+  - id: hero_h5_zh
+    image_ref: images/zh/shoes_pink_008.jpg
+    expected_texts:
+      - "今日下单"
+      - "顺丰包邮"
+    # 2-char tolerance test — Levenshtein = 2 (drop two trailing chars).
+    canned_response:
+      - "今日下单"
+      - "顺丰包"
+
+  - id: detail_m8_en
+    image_ref: images/en/jacket_blue_009.jpg
+    expected_texts:
+      - "Disclaimer"
+      - "Care instructions"
+      - "30-day return"
+    canned_response:
+      - "Disclaimer"
+      - "Care instructions"
+      - "30-day return"
+
+  - id: detail_m9_en
+    image_ref: images/en/pants_black_010.jpg
+    expected_texts:
+      - "Customer Support"
+      - "Email: support@example.com"
+    canned_response:
+      - "Customer Support"
+      - "Email: support@example.com"

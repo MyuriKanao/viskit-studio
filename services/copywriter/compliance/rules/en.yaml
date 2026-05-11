@@ -1,0 +1,48 @@
+# English compliance ruleset — minimal Amazon-TOS distillation
+# ADR-009 routing: en is advisory-only at scoring time; severities here are
+# all `warning` or `advisory` — NEVER hard_block at the data level.
+#
+# Schema:
+#   version:    integer
+#   locale:     "en"
+#   mode:       "warning-only"  (per ADR-009 — en path is advisory)
+#   tiers:      mapping of tier_name -> tier definition
+#     label:           human-readable tier name
+#     forbidden_terms: list of {rule_id, term, severity, suggestion?}
+
+version: 1
+locale: en
+mode: warning-only
+
+tiers:
+  tier_0_general:
+    label: "Tier-0: general Amazon TOS rules"
+    forbidden_terms:
+      - rule_id: EN-T0-001
+        term: "best in the world"
+        severity: warning
+        suggestion: "one of the leading"
+      - rule_id: EN-T0-002
+        term: "guaranteed cure"
+        severity: warning
+        suggestion: "may support"
+      - rule_id: EN-T0-003
+        term: "FDA approved"
+        severity: advisory
+        suggestion: "(cite registration number, or remove)"
+      - rule_id: EN-T0-004
+        term: "miracle"
+        severity: warning
+        suggestion: "remarkable"
+      - rule_id: EN-T0-005
+        term: "clinically proven"
+        severity: advisory
+        suggestion: "(cite the study, or remove)"
+      - rule_id: EN-T0-006
+        term: "100% effective"
+        severity: warning
+        suggestion: "highly effective for most users"
+      - rule_id: EN-T0-007
+        term: "treats"
+        severity: warning
+        suggestion: "supports"
