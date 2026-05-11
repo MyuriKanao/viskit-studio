@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"/usr/bin/grep -nE \\\"/api/images\\\" packages/schemas/openapi.yaml 2>/dev/null\",\"description\":\"Check editor paths in openapi.yaml\"}",
-  "error": "Exit code 1",
-  "timestamp": "2026-05-11T16:58:11.510Z",
-  "retry_count": 2
+  "tool_input_preview": "{\"command\":\"/usr/bin/pkill -f \\\"playwright\\\" 2>/dev/null || /usr/bin/true; /usr/bin/pkill -f \\\"chromium\\\" 2>/dev/null || /usr/bin/true; /usr/bin/pkill -f next-server 2>/dev/null || /usr/bin/true; /usr...",
+  "error": "Exit code 144",
+  "timestamp": "2026-05-11T18:42:39.652Z",
+  "retry_count": 1
 }

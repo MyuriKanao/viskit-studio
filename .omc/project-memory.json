@@ -37,7 +37,7 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "pnpm build 2>&1 | /usr/bin/tail -30",
+    "buildCommand": "pnpm typecheck 2>&1 | /usr/bin/tail -3 && echo \"---\" && pnpm build 2>&1 | /usr/bin/tail -5",
     "testCommand": "cd /home/kano/Desktop/aishop-img-studio && uv run pytest tests/editor/ tests/scripts/test_migration_0002_smoke.py tests/providers/test_image_edit_protocol.py -q 2>&1 | /usr/bin/tail -10",
     "lintCommand": "ruff check",
     "devCommand": null,

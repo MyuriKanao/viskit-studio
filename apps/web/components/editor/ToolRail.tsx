@@ -1,15 +1,6 @@
 'use client';
 
-import {
-  Loader2,
-  type LucideIcon,
-  MousePointer2,
-  Move,
-  Redo2,
-  Type,
-  Undo2,
-  Wand2,
-} from 'lucide-react';
+import { Loader2, MousePointer2, Move, Redo2, Type, Undo2, Wand2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useEffect } from 'react';
 
@@ -20,15 +11,11 @@ import { cn } from '@/lib/utils';
 
 export type ToolId = 'select' | 'text' | 'move' | 'inpaint' | 'undo' | 'redo';
 
-type Tool = 'select' | 'text' | 'move' | 'inpaint';
-
-type InpaintStatus = 'idle' | 'streaming' | 'success' | 'error' | 'aborted';
-
 export interface ToolRailProps {
-  activeTool: Tool | null;
-  onToolChange: (tool: Tool) => void;
+  activeTool: 'select' | 'text' | 'move' | 'inpaint' | null;
+  onToolChange: (tool: 'select' | 'text' | 'move' | 'inpaint') => void;
   onInpaintStart: () => void;
-  inpaintStatus: InpaintStatus;
+  inpaintStatus: 'idle' | 'streaming' | 'success' | 'error' | 'aborted';
   onInpaintAbort: () => void;
   hasMask: boolean;
   className?: string;
@@ -42,47 +29,6 @@ const STATE_CLASSES: Record<ButtonState, string> = {
   disabled: 'opacity-40 cursor-not-allowed pointer-events-none',
   loading: 'bg-accent-wash text-accent',
 };
-
-interface RailButtonProps {
-  id: ToolId;
-  icon: LucideIcon;
-  iconClassName?: string;
-  label: string;
-  shortcut: string;
-  state: ButtonState;
-  onClick: () => void;
-}
-
-function RailButton({
-  id,
-  icon: Icon,
-  iconClassName,
-  label,
-  shortcut,
-  state,
-  onClick,
-}: RailButtonProps) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          data-state={state}
-          data-testid={`tool-${id}`}
-          className={STATE_CLASSES[state]}
-          onClick={onClick}
-          aria-label={label}
-        >
-          <Icon className={cn('h-4 w-4', iconClassName)} />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="right">
-        {label} ({shortcut})
-      </TooltipContent>
-    </Tooltip>
-  );
-}
 
 export function ToolRail({
   activeTool,
@@ -98,6 +44,7 @@ export function ToolRail({
   const redoEmpty = useCommandStack((s) => s.redoStack.length === 0);
   const isStreaming = inpaintStatus === 'streaming';
 
+  // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const el = document.activeElement as HTMLElement | null;
@@ -105,25 +52,45 @@ export function ToolRail({
 
       if (e.ctrlKey && e.shiftKey && e.key === 'Z') {
         e.preventDefault();
-        if (!redoEmpty && !isStreaming) useCommandStack.getState().redo();
+        if (!redoEmpty && !isStreaming) {
+          useCommandStack.getState().redo();
+        }
         return;
       }
 
       if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
-        if (!undoEmpty && !isStreaming) useCommandStack.getState().undo();
+        if (!undoEmpty && !isStreaming) {
+          useCommandStack.getState().undo();
+        }
         return;
       }
 
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      const key = e.key.toLowerCase();
-      if (key === 'v' && !isStreaming) onToolChange('select');
-      else if (key === 't' && !isStreaming) onToolChange('text');
-      else if (key === 'm' && !isStreaming) onToolChange('move');
-      else if (key === 'i') {
-        if (isStreaming) onInpaintAbort();
-        else if (hasMask) onInpaintStart();
+      switch (e.key) {
+        case 'v':
+        case 'V':
+          if (!isStreaming) onToolChange('select');
+          break;
+        case 't':
+        case 'T':
+          if (!isStreaming) onToolChange('text');
+          break;
+        case 'm':
+        case 'M':
+          if (!isStreaming) onToolChange('move');
+          break;
+        case 'i':
+        case 'I':
+          if (!isStreaming) {
+            if (hasMask) onInpaintStart();
+          } else {
+            onInpaintAbort();
+          }
+          break;
+        default:
+          break;
       }
     }
 
@@ -131,21 +98,33 @@ export function ToolRail({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isStreaming, hasMask, undoEmpty, redoEmpty, onToolChange, onInpaintStart, onInpaintAbort]);
 
-  const toolState = (id: Tool): ButtonState => {
-    if (isStreaming && id !== 'inpaint') return 'disabled';
+  function getToolState(id: 'select' | 'text' | 'move'): ButtonState {
+    if (isStreaming) return 'disabled';
     return activeTool === id ? 'active' : 'idle';
-  };
+  }
 
-  const inpaintState: ButtonState = isStreaming
-    ? 'loading'
-    : !hasMask
-      ? 'disabled'
-      : activeTool === 'inpaint'
-        ? 'active'
-        : 'idle';
+  function getInpaintState(): ButtonState {
+    if (isStreaming) return 'loading';
+    if (!hasMask) return 'disabled';
+    return activeTool === 'inpaint' ? 'active' : 'idle';
+  }
 
-  const stackButtonState = (empty: boolean): ButtonState =>
-    isStreaming || empty ? 'disabled' : 'idle';
+  function getUndoState(): ButtonState {
+    if (isStreaming) return 'disabled';
+    return undoEmpty ? 'disabled' : 'idle';
+  }
+
+  function getRedoState(): ButtonState {
+    if (isStreaming) return 'disabled';
+    return redoEmpty ? 'disabled' : 'idle';
+  }
+
+  const selectState = getToolState('select');
+  const textState = getToolState('text');
+  const moveState = getToolState('move');
+  const inpaintState = getInpaintState();
+  const undoState = getUndoState();
+  const redoState = getRedoState();
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -156,55 +135,117 @@ export function ToolRail({
         )}
         data-testid="tool-rail"
       >
-        <RailButton
-          id="select"
-          icon={MousePointer2}
-          label={t('select')}
-          shortcut="V"
-          state={toolState('select')}
-          onClick={() => onToolChange('select')}
-        />
-        <RailButton
-          id="text"
-          icon={Type}
-          label={t('text')}
-          shortcut="T"
-          state={toolState('text')}
-          onClick={() => onToolChange('text')}
-        />
-        <RailButton
-          id="move"
-          icon={Move}
-          label={t('move')}
-          shortcut="M"
-          state={toolState('move')}
-          onClick={() => onToolChange('move')}
-        />
-        <RailButton
-          id="inpaint"
-          icon={isStreaming ? Loader2 : Wand2}
-          iconClassName={isStreaming ? 'animate-spin' : undefined}
-          label={t('inpaint')}
-          shortcut="I"
-          state={inpaintState}
-          onClick={isStreaming ? onInpaintAbort : onInpaintStart}
-        />
-        <RailButton
-          id="undo"
-          icon={Undo2}
-          label={t('undo')}
-          shortcut="Ctrl+Z"
-          state={stackButtonState(undoEmpty)}
-          onClick={() => useCommandStack.getState().undo()}
-        />
-        <RailButton
-          id="redo"
-          icon={Redo2}
-          label={t('redo')}
-          shortcut="Ctrl+Shift+Z"
-          state={stackButtonState(redoEmpty)}
-          onClick={() => useCommandStack.getState().redo()}
-        />
+        {/* Select */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              data-state={selectState}
+              data-testid="tool-select"
+              className={cn(STATE_CLASSES[selectState])}
+              onClick={() => onToolChange('select')}
+              aria-label={t('select')}
+            >
+              <MousePointer2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t('select')} (V)</TooltipContent>
+        </Tooltip>
+
+        {/* Text */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              data-state={textState}
+              data-testid="tool-text"
+              className={cn(STATE_CLASSES[textState])}
+              onClick={() => onToolChange('text')}
+              aria-label={t('text')}
+            >
+              <Type className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t('text')} (T)</TooltipContent>
+        </Tooltip>
+
+        {/* Move */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              data-state={moveState}
+              data-testid="tool-move"
+              className={cn(STATE_CLASSES[moveState])}
+              onClick={() => onToolChange('move')}
+              aria-label={t('move')}
+            >
+              <Move className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t('move')} (M)</TooltipContent>
+        </Tooltip>
+
+        {/* Inpaint */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              data-state={inpaintState}
+              data-testid="tool-inpaint"
+              className={cn(STATE_CLASSES[inpaintState])}
+              onClick={isStreaming ? onInpaintAbort : onInpaintStart}
+              aria-label={t('inpaint')}
+            >
+              {isStreaming ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="h-4 w-4" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t('inpaint')} (I)</TooltipContent>
+        </Tooltip>
+
+        {/* Undo */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              data-state={undoState}
+              data-testid="tool-undo"
+              className={cn(STATE_CLASSES[undoState])}
+              onClick={() => useCommandStack.getState().undo()}
+              aria-label={t('undo')}
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t('undo')} (Ctrl+Z)</TooltipContent>
+        </Tooltip>
+
+        {/* Redo */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              data-state={redoState}
+              data-testid="tool-redo"
+              className={cn(STATE_CLASSES[redoState])}
+              onClick={() => useCommandStack.getState().redo()}
+              aria-label={t('redo')}
+            >
+              <Redo2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{t('redo')} (Ctrl+Shift+Z)</TooltipContent>
+        </Tooltip>
       </div>
     </TooltipProvider>
   );

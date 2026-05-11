@@ -144,3 +144,59 @@ Sequential plan (dependency order):
     DEFAULT_SSE_SCRIPT (used `as const` instead) to drop the leaked `undefined` from the union.
   - use-inpaint.ts: refactored the SSE frame split's `while ((sep = ...) !== -1)` to avoid
     biome `noAssignInExpressions`.
+
+- US-007/US-008/US-009 done (2026-05-12, iter 2): three sonnet executors in parallel shipped
+  TextLayerOverlay.tsx (SVG OCR overlay + use-ocr consumer; foreignObject hover label),
+  ToolRail.tsx (6 shadcn Tooltip+Button blocks with R8 state machine + V/T/M/I + Ctrl+Z),
+  HistoryTimeline.tsx (Zustand-subscribed strip with cursor divider + 50-cap badge).
+  All three coherent: pnpm test:unit 2/2, typecheck/lint/check:tokens clean.
+
+- US-010 done (2026-05-12, iter 2): EditorRoot.tsx 4-region layout, page.tsx server component
+  pass-through. Build manifest: 8 routes (7 prior + /[locale]/editor/[image_id] 8.02 kB / 144 kB FLJ).
+  TextLayerOverlay.onBoxClick stub (canvas-text-select wiring deferred with mask UI).
+
+- US-011 done (2026-05-12, iter 2): 5 new Playwright specs + visual baseline. All 11 editor specs
+  pass. Helper `mock-editor.ts` pre-built by parent in iter 1; agent applied 4 small fixes:
+  (a) waitFor state:'attached' for canvas skeleton, (b) page focus via tool-select click before
+  keyboard.press, (c) performance.now() in browser for AC#3 timing (Node IPC inflates), (d)
+  /edit URL regex tightened to API path. Baseline editor-zh.png committed under
+  apps/web/tests/web/editor-visual.spec.ts-snapshots/. Playwright total: 80 tests across 20 files.
+
+- US-012 done (2026-05-12, iter 2): pnpm gen:api 15 paths (12+3 editor),
+  pnpm build 9 routes (placeholder /[locale]/editor + dynamic /[locale]/editor/[image_id]),
+  uv run pytest -q (scoped) 8/8, bash scripts/grep_providers.sh clean (after fix below).
+  EPIC-7 visual snapshots under apps/web/tests/web/visual.spec.ts-snapshots/ untouched.
+
+- White-screen fix (2026-05-12, iter 2): the sidebar editor link points to `/editor`
+  (no image_id) which 500'd because only `/editor/[image_id]` existed. Added
+  `apps/web/app/[locale]/editor/page.tsx` (Client Component using useLocale/useTranslations,
+  mirroring onboarding/page.tsx pattern) as a placeholder. Server: `pnpm build && pnpm start`
+  → /zh/editor 200, /zh/editor/test-1 200, /zh/dashboard 200.
+
+- scripts/grep_providers.sh fix: top-level allowlist excluded only repo-root `.next/` and
+  `.omc/`. Added `PRUNE_DIR_NAMES = {.git, node_modules, .next, .omc, .venv, dist, .github,
+  .pytest_cache, .ruff_cache, .mypy_cache, __pycache__, .turbo, .cache}` for name-based
+  pruning at any depth — now correctly skips `apps/web/.next/cache/` where fabric.js's
+  `Vertex` class identifier lives and `apps/web/.omc/state/` where session agent IDs live.
+
+- Architect verification (2026-05-12, opus, THOROUGH tier): APPROVED-WITH-NOTES → GO.
+  All 11 editor Playwright specs pass; vitest 2/2; typecheck/lint/tokens/grep-providers clean;
+  pytest 8/8. AC matrix: 4 PASS (#4, #6, #9, #10) + 3 PROXY-PASS (#3, #5, #7) + 3 DEFERRED
+  (#1, #2, #8 — gated on MinIO testcontainer / PaddleOCR install / mask UI).
+  Recommended: file EPIC-5b for the 5 deferred positive ACs.
+
+- Deslop pass (2026-05-12, ai-slop-cleaner skill, Step 7.5): attempted ToolRail.tsx refactor
+  to extract a local `RailButton` helper and dedupe the 6 Tooltip+Button blocks (~50 LOC).
+  pnpm typecheck/lint/test:unit all green after refactor. BUT scoped Playwright editor specs
+  regressed: 10/11 timed out on page.goto despite SSR HTML showing correct testids+data-state.
+  Root cause: subtle hydration interaction between RailButton wrapper and Radix TooltipTrigger
+  asChild — re-mounted icon on every render of inpaint button (Loader2/Wand2 swap),
+  desynchronized hydration. Per Step 7.6 protocol, ROLLED BACK ToolRail.tsx to the
+  pre-refactor version. Re-ran scoped Playwright editor specs: 11/11 PASS in 1.6min.
+  Lesson logged: helper-component extraction across Radix asChild boundaries is risky for
+  hydration; trust the architect's "leave it" verdict next time. The 50-LOC duplication
+  in ToolRail.tsx is preserved as-is.
+
+- Final state (2026-05-12, iter 2): all 12 PRD stories passes:true. EPIC-5 frontend
+  ships as approved by architect. White-screen fix landed. EPIC-5b backlog ticket pending
+  for mask UI + positive AC paths.
