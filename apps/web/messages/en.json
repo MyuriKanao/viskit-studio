@@ -253,6 +253,14 @@
       "idle_hint": "Click Generate to run the full pipeline"
     }
   },
+  "queue": {
+    "page_title": "Queue",
+    "summary_pattern": "{count} jobs in progress",
+    "empty_title": "Nothing in flight",
+    "empty_hint": "Generated kits will appear here while in progress.",
+    "loading": "Loading…",
+    "load_error": "Failed to load"
+  },
   "settings": {
     "page_title": "Workspace Settings",
     "form_title": "Workspace preferences",

@@ -68,8 +68,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'sidebar.queue',
     href: '/queue',
     icon: ListTodo,
-    enabled: false,
-    comingInEpic: 8,
+    enabled: true,
   },
   {
     id: 'editor',

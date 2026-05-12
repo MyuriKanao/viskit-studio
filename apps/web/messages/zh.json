@@ -253,6 +253,14 @@
       "idle_hint": "点击「开始生成」启动整套流程"
     }
   },
+  "queue": {
+    "page_title": "生成队列",
+    "summary_pattern": "当前 {count} 个任务进行中",
+    "empty_title": "队列为空",
+    "empty_hint": "正在生成的套包会在此显示。",
+    "loading": "加载中…",
+    "load_error": "加载失败"
+  },
   "settings": {
     "page_title": "工作台设置",
     "form_title": "工作台偏好",
