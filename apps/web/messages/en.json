@@ -252,5 +252,25 @@
       "generate_error": "Generation failed: {message}",
       "idle_hint": "Click Generate to run the full pipeline"
     }
+  },
+  "settings": {
+    "page_title": "Workspace Settings",
+    "form_title": "Workspace preferences",
+    "brand_color_label": "Brand color",
+    "default_locale_label": "Default locale",
+    "monthly_cap_label": "Monthly cap (USD)",
+    "monthly_cap_hint": "Set to 0 to disable the cap",
+    "export_preset_label": "Export preset",
+    "locale_zh": "Chinese",
+    "locale_en": "English",
+    "preset_taobao_v2": "Taobao v2",
+    "preset_tmall": "Tmall",
+    "preset_generic_v1": "Generic v1",
+    "save_button": "Save settings",
+    "save_success": "Settings saved",
+    "save_error": "Save failed — please retry",
+    "providers_card_title": "Providers",
+    "endpoints_count_label": "Configured endpoints",
+    "manage_providers": "Manage providers"
   }
 }

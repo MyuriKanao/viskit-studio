@@ -90,7 +90,6 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'sidebar.settings',
     href: '/settings',
     icon: Settings,
-    enabled: false,
-    comingInEpic: 8,
+    enabled: true,
   },
 ];

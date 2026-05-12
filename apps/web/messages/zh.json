@@ -252,5 +252,25 @@
       "generate_error": "生成失败：{message}",
       "idle_hint": "点击「开始生成」启动整套流程"
     }
+  },
+  "settings": {
+    "page_title": "工作台设置",
+    "form_title": "工作台偏好",
+    "brand_color_label": "品牌色",
+    "default_locale_label": "默认语言",
+    "monthly_cap_label": "月度上限 (USD)",
+    "monthly_cap_hint": "设为 0 表示不设上限",
+    "export_preset_label": "导出预设",
+    "locale_zh": "中文",
+    "locale_en": "English",
+    "preset_taobao_v2": "淘宝 v2",
+    "preset_tmall": "天猫",
+    "preset_generic_v1": "通用 v1",
+    "save_button": "保存设置",
+    "save_success": "设置已保存",
+    "save_error": "保存失败，请重试",
+    "providers_card_title": "服务商",
+    "endpoints_count_label": "已配置端点",
+    "manage_providers": "管理服务商"
   }
 }
