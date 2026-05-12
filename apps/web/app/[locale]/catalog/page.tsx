@@ -15,8 +15,7 @@ import { ViewToggle } from '@/components/catalog/ViewToggle';
 import type { CatalogView } from '@/components/catalog/ViewToggle';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { useKitsCatalog } from '@/hooks/use-kits-catalog';
 import type {
   CatalogFilters as CatalogFilterState,
@@ -25,6 +24,7 @@ import type {
 } from '@/hooks/use-kits-catalog';
 import type { KitListItem } from '@/hooks/use-recent-kits';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 const PAGE_SIZE = 24;
 
@@ -144,25 +144,14 @@ export default function CatalogPage() {
         {/* Title + CTA */}
         <div className="flex items-center justify-between">
           <h1 className="font-display text-xl text-ink-primary">{t('page_title')}</h1>
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {/* biome-ignore lint/a11y/noNoninteractiveTabindex: Radix tooltip needs a focusable wrapper to surface tooltips for the disabled button — temporary; this branch is removed in Phase 2.2 when the CTA links to /new-kit */}
-                <span tabIndex={0}>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    disabled
-                    aria-disabled="true"
-                    aria-label={t('new_kit_cta')}
-                  >
-                    {t('new_kit_cta')}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="left">{t('coming_in_epic')}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Link
+            href="/new-kit"
+            aria-label={t('new_kit_cta')}
+            data-testid="catalog-new-kit-cta"
+            className={buttonVariants({ variant: 'default', size: 'sm' })}
+          >
+            {t('new_kit_cta')}
+          </Link>
         </div>
 
         {/* Filter bar */}
