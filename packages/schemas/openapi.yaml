@@ -45,6 +45,28 @@ components:
         - three_piece
       title: DetailSectionIn
       type: object
+    DetailSectionOut:
+      properties:
+        id:
+          enum:
+            - M1
+            - M2
+            - M3
+            - M4
+            - M5
+            - M6
+            - M7
+            - M8
+            - M9
+          title: Id
+          type: string
+        three_piece:
+          $ref: '#/components/schemas/ThreePieceOut'
+      required:
+        - id
+        - three_piece
+      title: DetailSectionOut
+      type: object
     EditAccepted:
       properties:
         job_id:
@@ -167,8 +189,31 @@ components:
         - three_piece
       title: HeroSectionIn
       type: object
+    HeroSectionOut:
+      properties:
+        id:
+          enum:
+            - H1
+            - H2
+            - H3
+            - H4
+            - H5
+          title: Id
+          type: string
+        three_piece:
+          $ref: '#/components/schemas/ThreePieceOut'
+      required:
+        - id
+        - three_piece
+      title: HeroSectionOut
+      type: object
     KitListItem:
       properties:
+        category:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Category
         id:
           title: Id
           type: integer
@@ -203,6 +248,11 @@ components:
               - type: 'null'
           title: Thumbs
           type: array
+        updated_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Updated At
       required:
         - id
         - sku
@@ -560,6 +610,43 @@ components:
         - detail_sections
       title: SpecIn
       type: object
+    SpecOut:
+      properties:
+        detail_sections:
+          items:
+            $ref: '#/components/schemas/DetailSectionOut'
+          maxItems: 9
+          minItems: 9
+          title: Detail Sections
+          type: array
+        hero_sections:
+          items:
+            $ref: '#/components/schemas/HeroSectionOut'
+          maxItems: 5
+          minItems: 5
+          title: Hero Sections
+          type: array
+        locale:
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+        selling_points:
+          items:
+            $ref: '#/components/schemas/SellingPointIn'
+          title: Selling Points
+          type: array
+        sku_meta:
+          $ref: '#/components/schemas/SkuMetaIn'
+      required:
+        - locale
+        - sku_meta
+        - selling_points
+        - hero_sections
+        - detail_sections
+      title: SpecOut
+      type: object
     SpecRequest:
       properties:
         locale:
@@ -586,13 +673,72 @@ components:
       properties:
         compliance:
           $ref: '#/components/schemas/ComplianceOut'
+        spec:
+          $ref: '#/components/schemas/SpecOut'
         spec_markdown:
           title: Spec Markdown
           type: string
       required:
         - spec_markdown
+        - spec
         - compliance
       title: SpecResponse
+      type: object
+    StylePromptHitIn:
+      description: |-
+        A single retrieval hit accepted by ``POST /api/retrieval/style-prompt``.
+
+        Mirrors :class:`SearchHitOut` from the ``/search`` response so the wizard
+        can pass selected hits straight through. ``image_path`` is optional —
+        the synthesiser only uses ``image_url`` + ``score`` — but we accept it
+        when present so round-tripping a search result loses no fields.
+      properties:
+        image_path:
+          default: ''
+          title: Image Path
+          type: string
+        image_url:
+          title: Image Url
+          type: string
+        metadata:
+          additionalProperties: true
+          title: Metadata
+          type: object
+        score:
+          title: Score
+          type: number
+      required:
+        - image_url
+        - score
+      title: StylePromptHitIn
+      type: object
+    StylePromptRequest:
+      properties:
+        hits:
+          items:
+            $ref: '#/components/schemas/StylePromptHitIn'
+          minItems: 1
+          title: Hits
+          type: array
+        locale:
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+      required:
+        - hits
+        - locale
+      title: StylePromptRequest
+      type: object
+    StylePromptResponse:
+      properties:
+        style_prompt:
+          title: Style Prompt
+          type: string
+      required:
+        - style_prompt
+      title: StylePromptResponse
       type: object
     TextBoxOut:
       properties:
@@ -639,6 +785,29 @@ components:
         - copy
         - design_note
       title: ThreePieceIn
+      type: object
+    ThreePieceOut:
+      description: |-
+        Output mirror of ThreePieceIn in kits.py.
+
+        Uses validation_alias + serialization_alias on ``copy_text`` so the public
+        JSON key is ``copy`` (matching the SpecIn contract) while the Python
+        field name avoids shadowing ``BaseModel.copy()``.
+      properties:
+        copy:
+          title: Copy
+          type: string
+        design_note:
+          title: Design Note
+          type: string
+        visual:
+          title: Visual
+          type: string
+      required:
+        - visual
+        - copy
+        - design_note
+      title: ThreePieceOut
       type: object
     ValidationError:
       properties:
@@ -850,15 +1019,16 @@ paths:
   /api/kits:
     get:
       description: |-
-        Return the latest ``limit`` kits joined with their product catalog row.
+        Return kits joined with their product catalog row, paginated & filtered.
 
         ``thumbs`` is the concatenation of up-to-5 hero png_paths (slot 1..5) and
         up-to-9 detail png_paths (M1..M9) — 14 slots total, NULL-padded for any
         missing rows.  Callers render placeholder cells for NULL entries.
 
-        ``recent`` is currently advisory; the route always sorts by ``created_at
-        DESC``.  The flag exists so the frontend can call ``/api/kits?recent=true``
-        without a 404 from a path mismatch.
+        ``recent`` is advisory; sort defaults to ``created_at DESC`` to preserve
+        the EPIC-7 Dashboard call shape (``?recent=true&limit=6``).  Catalog
+        (EPIC-8) passes ``offset``, ``status``, ``locale``, ``min_score``,
+        ``category``, ``sort``, ``order`` for filtered/paginated views.
       operationId: list_kits_api_kits_get
       parameters:
         - in: query
@@ -873,10 +1043,76 @@ paths:
           required: false
           schema:
             default: 6
-            maximum: 50
+            maximum: 100
             minimum: 1
             title: Limit
             type: integer
+        - in: query
+          name: offset
+          required: false
+          schema:
+            default: 0
+            minimum: 0
+            title: Offset
+            type: integer
+        - in: query
+          name: status
+          required: false
+          schema:
+            anyOf:
+              - maxLength: 32
+                type: string
+              - type: 'null'
+            title: Status
+        - in: query
+          name: locale
+          required: false
+          schema:
+            anyOf:
+              - maxLength: 8
+                type: string
+              - type: 'null'
+            title: Locale
+        - in: query
+          name: min_score
+          required: false
+          schema:
+            anyOf:
+              - maximum: 100
+                minimum: 0
+                type: integer
+              - type: 'null'
+            title: Min Score
+        - in: query
+          name: category
+          required: false
+          schema:
+            anyOf:
+              - maxLength: 64
+                type: string
+              - type: 'null'
+            title: Category
+        - in: query
+          name: sort
+          required: false
+          schema:
+            default: created_at
+            enum:
+              - created_at
+              - updated_at
+              - score
+            title: Sort
+            type: string
+        - in: query
+          name: order
+          required: false
+          schema:
+            default: desc
+            enum:
+              - asc
+              - desc
+            title: Order
+            type: string
       responses:
         '200':
           content:
@@ -1124,6 +1360,42 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Search
+      tags:
+        - retrieval
+  /api/retrieval/style-prompt:
+    post:
+      description: |-
+        Synthesise a ≤100-word ``style_prompt`` from selected retrieval hits.
+
+        Calls :func:`services.imagegen.style_synthesizer.synthesize_style` via the
+        ``vision`` provider role.  The result is non-empty (the synthesiser raises
+        on empty adapter responses) and capped at 100 words.
+
+        Errors:
+            - 503 when ``app.state.registry`` is not booted.
+            - 502 when the vision adapter returns an empty prompt
+              (:class:`StyleSynthesisError`).
+      operationId: style_prompt_api_retrieval_style_prompt_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StylePromptRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StylePromptResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Style Prompt
       tags:
         - retrieval
   /health:

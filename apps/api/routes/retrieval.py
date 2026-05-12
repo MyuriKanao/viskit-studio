@@ -1,14 +1,21 @@
-"""POST /api/retrieval/search — embed query image + hybrid retrieve."""
+"""POST /api/retrieval/search — embed query image + hybrid retrieve.
+
+Also exposes POST /api/retrieval/style-prompt: a thin HTTP wrapper around
+:func:`services.imagegen.style_synthesizer.synthesize_style` that the
+New Kit Wizard (EPIC-8) calls between retrieval (Step 3) and generation
+(Step 4) to produce a non-empty ``style_prompt`` from the selected hits.
+"""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+from services.imagegen.style_synthesizer import StyleSynthesisError, synthesize_style
 from services.retrieval.filters import FilterSpec
-from services.retrieval.hybrid_search import hybrid_search
+from services.retrieval.hybrid_search import SearchHit, hybrid_search
 
 router = APIRouter(prefix="/api/retrieval", tags=["retrieval"])
 
@@ -109,3 +116,67 @@ async def search(req: Request, payload: SearchRequest) -> SearchResponse:
             for h in hits
         ]
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/retrieval/style-prompt
+# ---------------------------------------------------------------------------
+
+
+class StylePromptHitIn(BaseModel):
+    """A single retrieval hit accepted by ``POST /api/retrieval/style-prompt``.
+
+    Mirrors :class:`SearchHitOut` from the ``/search`` response so the wizard
+    can pass selected hits straight through. ``image_path`` is optional —
+    the synthesiser only uses ``image_url`` + ``score`` — but we accept it
+    when present so round-tripping a search result loses no fields.
+    """
+
+    image_url: str
+    score: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    image_path: str = ""
+
+
+class StylePromptRequest(BaseModel):
+    hits: list[StylePromptHitIn] = Field(min_length=1)
+    locale: Literal["zh", "en"]
+
+
+class StylePromptResponse(BaseModel):
+    style_prompt: str
+
+
+@router.post("/style-prompt", response_model=StylePromptResponse)
+async def style_prompt(req: Request, payload: StylePromptRequest) -> StylePromptResponse:
+    """Synthesise a ≤100-word ``style_prompt`` from selected retrieval hits.
+
+    Calls :func:`services.imagegen.style_synthesizer.synthesize_style` via the
+    ``vision`` provider role.  The result is non-empty (the synthesiser raises
+    on empty adapter responses) and capped at 100 words.
+
+    Errors:
+        - 503 when ``app.state.registry`` is not booted.
+        - 502 when the vision adapter returns an empty prompt
+          (:class:`StyleSynthesisError`).
+    """
+    registry = getattr(req.app.state, "registry", None)
+    if registry is None:
+        raise HTTPException(status_code=503, detail="registry not booted")
+
+    hits = [
+        SearchHit(
+            image_path=h.image_path,
+            image_url=h.image_url,
+            score=h.score,
+            metadata=dict(h.metadata),
+        )
+        for h in payload.hits
+    ]
+    try:
+        prompt = synthesize_style(hits, registry=registry, locale=payload.locale)
+    except StyleSynthesisError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"style synthesis failed: {exc}"
+        ) from exc
+    return StylePromptResponse(style_prompt=prompt)

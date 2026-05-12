@@ -145,6 +145,61 @@ def test_no_registry_returns_503() -> None:
         assert response.status_code == 503
 
 
+def test_spec_field_has_5_hero_9_detail_with_copy_key(client: TestClient) -> None:
+    """The structured ``spec`` field carries 5 H-sections + 9 M-sections and uses
+    the public JSON key ``copy`` (not ``copy_text``) so the wizard can pass it
+    straight into ``POST /api/kits/{kit_id}/generate``.
+    """
+    response = client.post("/api/kits/abc-roundtrip/spec", json=_clean_zh_payload())
+    assert response.status_code == 200, response.text
+    body = response.json()
+    spec = body["spec"]
+    assert spec["locale"] == "zh"
+    assert spec["sku_meta"]["sku"] == "NEW001"
+    assert len(spec["selling_points"]) >= 1
+    assert len(spec["hero_sections"]) == 5
+    assert len(spec["detail_sections"]) == 9
+    hero_ids = [h["id"] for h in spec["hero_sections"]]
+    detail_ids = [m["id"] for m in spec["detail_sections"]]
+    assert hero_ids == ["H1", "H2", "H3", "H4", "H5"]
+    assert detail_ids == [f"M{i}" for i in range(1, 10)]
+    # Every three_piece must use "copy" as the JSON key, never "copy_text".
+    for h in spec["hero_sections"]:
+        assert "copy" in h["three_piece"]
+        assert "copy_text" not in h["three_piece"]
+        assert {"visual", "copy", "design_note"} <= set(h["three_piece"].keys())
+    for m in spec["detail_sections"]:
+        assert "copy" in m["three_piece"]
+        assert "copy_text" not in m["three_piece"]
+
+
+def test_spec_field_validates_as_generate_request_specin(client: TestClient) -> None:
+    """The /spec response's structured ``spec`` field plus a brand_color +
+    style_prompt is a valid ``GenerateRequest`` body for /generate.  This
+    locks the wizard's Step 3 → Step 4 hand-off shape contract.
+    """
+    # Local import to avoid coupling the test module to the route's import order.
+    from apps.api.routes.kits import GenerateRequest
+
+    response = client.post("/api/kits/abc-handoff/spec", json=_clean_zh_payload())
+    assert response.status_code == 200, response.text
+    body = response.json()
+    generate_body = {
+        "spec": body["spec"],
+        "brand_color_hex": "#1E40AF",
+        "style_prompt": "warm minimalist studio, soft daylight",
+        "locale": "zh",
+    }
+    # Will raise ValidationError if the shape doesn't match SpecIn.
+    parsed = GenerateRequest.model_validate(generate_body)
+    assert parsed.spec.locale == "zh"
+    assert len(parsed.spec.hero_sections) == 5
+    assert len(parsed.spec.detail_sections) == 9
+    # Each ThreePieceIn must have correctly read the ``copy`` alias.
+    first_copy = parsed.spec.hero_sections[0].three_piece.copy_text
+    assert first_copy != ""
+
+
 def test_sop_failure_returns_502(client: TestClient) -> None:
     # Inject a FakeChatLLM that emits a too-short hero list.
     broken_llm = FakeChatLLM(canned_responses=['{"hero_sections":[],"detail_sections":[]}'])

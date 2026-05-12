@@ -64,15 +64,16 @@ export interface paths {
         };
         /**
          * List Kits
-         * @description Return the latest ``limit`` kits joined with their product catalog row.
+         * @description Return kits joined with their product catalog row, paginated & filtered.
          *
          *     ``thumbs`` is the concatenation of up-to-5 hero png_paths (slot 1..5) and
          *     up-to-9 detail png_paths (M1..M9) — 14 slots total, NULL-padded for any
          *     missing rows.  Callers render placeholder cells for NULL entries.
          *
-         *     ``recent`` is currently advisory; the route always sorts by ``created_at
-         *     DESC``.  The flag exists so the frontend can call ``/api/kits?recent=true``
-         *     without a 404 from a path mismatch.
+         *     ``recent`` is advisory; sort defaults to ``created_at DESC`` to preserve
+         *     the EPIC-7 Dashboard call shape (``?recent=true&limit=6``).  Catalog
+         *     (EPIC-8) passes ``offset``, ``status``, ``locale``, ``min_score``,
+         *     ``category``, ``sort``, ``order`` for filtered/paginated views.
          */
         get: operations["list_kits_api_kits_get"];
         put?: never;
@@ -294,6 +295,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/retrieval/style-prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Style Prompt
+         * @description Synthesise a ≤100-word ``style_prompt`` from selected retrieval hits.
+         *
+         *     Calls :func:`services.imagegen.style_synthesizer.synthesize_style` via the
+         *     ``vision`` provider role.  The result is non-empty (the synthesiser raises
+         *     on empty adapter responses) and capped at 100 words.
+         *
+         *     Errors:
+         *         - 503 when ``app.state.registry`` is not booted.
+         *         - 502 when the vision adapter returns an empty prompt
+         *           (:class:`StyleSynthesisError`).
+         */
+        post: operations["style_prompt_api_retrieval_style_prompt_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -338,6 +368,15 @@ export interface components {
              */
             id: "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8" | "M9";
             three_piece: components["schemas"]["ThreePieceIn"];
+        };
+        /** DetailSectionOut */
+        DetailSectionOut: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8" | "M9";
+            three_piece: components["schemas"]["ThreePieceOut"];
         };
         /** EditAccepted */
         EditAccepted: {
@@ -407,8 +446,19 @@ export interface components {
             id: "H1" | "H2" | "H3" | "H4" | "H5";
             three_piece: components["schemas"]["ThreePieceIn"];
         };
+        /** HeroSectionOut */
+        HeroSectionOut: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "H1" | "H2" | "H3" | "H4" | "H5";
+            three_piece: components["schemas"]["ThreePieceOut"];
+        };
         /** KitListItem */
         KitListItem: {
+            /** Category */
+            category?: string | null;
             /** Id */
             id: number;
             /** Locale */
@@ -425,6 +475,8 @@ export interface components {
             status: string;
             /** Thumbs */
             thumbs: (string | null)[];
+            /** Updated At */
+            updated_at?: string | null;
         };
         /** KitListResponse */
         KitListResponse: {
@@ -586,6 +638,21 @@ export interface components {
             selling_points: components["schemas"]["SellingPointIn"][];
             sku_meta: components["schemas"]["SkuMetaIn"];
         };
+        /** SpecOut */
+        SpecOut: {
+            /** Detail Sections */
+            detail_sections: components["schemas"]["DetailSectionOut"][];
+            /** Hero Sections */
+            hero_sections: components["schemas"]["HeroSectionOut"][];
+            /**
+             * Locale
+             * @enum {string}
+             */
+            locale: "zh" | "en";
+            /** Selling Points */
+            selling_points: components["schemas"]["SellingPointIn"][];
+            sku_meta: components["schemas"]["SkuMetaIn"];
+        };
         /** SpecRequest */
         SpecRequest: {
             /**
@@ -600,8 +667,48 @@ export interface components {
         /** SpecResponse */
         SpecResponse: {
             compliance: components["schemas"]["ComplianceOut"];
+            spec: components["schemas"]["SpecOut"];
             /** Spec Markdown */
             spec_markdown: string;
+        };
+        /**
+         * StylePromptHitIn
+         * @description A single retrieval hit accepted by ``POST /api/retrieval/style-prompt``.
+         *
+         *     Mirrors :class:`SearchHitOut` from the ``/search`` response so the wizard
+         *     can pass selected hits straight through. ``image_path`` is optional —
+         *     the synthesiser only uses ``image_url`` + ``score`` — but we accept it
+         *     when present so round-tripping a search result loses no fields.
+         */
+        StylePromptHitIn: {
+            /**
+             * Image Path
+             * @default
+             */
+            image_path: string;
+            /** Image Url */
+            image_url: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Score */
+            score: number;
+        };
+        /** StylePromptRequest */
+        StylePromptRequest: {
+            /** Hits */
+            hits: components["schemas"]["StylePromptHitIn"][];
+            /**
+             * Locale
+             * @enum {string}
+             */
+            locale: "zh" | "en";
+        };
+        /** StylePromptResponse */
+        StylePromptResponse: {
+            /** Style Prompt */
+            style_prompt: string;
         };
         /** TextBoxOut */
         TextBoxOut: {
@@ -620,6 +727,22 @@ export interface components {
         };
         /** ThreePieceIn */
         ThreePieceIn: {
+            /** Copy */
+            copy: string;
+            /** Design Note */
+            design_note: string;
+            /** Visual */
+            visual: string;
+        };
+        /**
+         * ThreePieceOut
+         * @description Output mirror of ThreePieceIn in kits.py.
+         *
+         *     Uses validation_alias + serialization_alias on ``copy_text`` so the public
+         *     JSON key is ``copy`` (matching the SpecIn contract) while the Python
+         *     field name avoids shadowing ``BaseModel.copy()``.
+         */
+        ThreePieceOut: {
             /** Copy */
             copy: string;
             /** Design Note */
@@ -794,6 +917,13 @@ export interface operations {
             query?: {
                 recent?: boolean;
                 limit?: number;
+                offset?: number;
+                status?: string | null;
+                locale?: string | null;
+                min_score?: number | null;
+                category?: string | null;
+                sort?: "created_at" | "updated_at" | "score";
+                order?: "asc" | "desc";
             };
             header?: never;
             path?: never;
@@ -1075,6 +1205,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    style_prompt_api_retrieval_style_prompt_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StylePromptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StylePromptResponse"];
                 };
             };
             /** @description Validation Error */

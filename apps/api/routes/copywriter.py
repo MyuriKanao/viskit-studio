@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from services.copywriter.compliance.scorer import score_spec
 from services.copywriter.sop import (
@@ -71,8 +71,49 @@ class ComplianceOut(BaseModel):
     locale: str
 
 
+# ---------------------------------------------------------------------------
+# Structured SpecOut — wire-shape-identical to apps.api.routes.kits.SpecIn so
+# the New Kit Wizard (EPIC-8) can round-trip the /spec response straight into
+# /generate without re-deriving the structured spec on the client.
+# ---------------------------------------------------------------------------
+
+
+class ThreePieceOut(BaseModel):
+    """Output mirror of ThreePieceIn in kits.py.
+
+    Uses validation_alias + serialization_alias on ``copy_text`` so the public
+    JSON key is ``copy`` (matching the SpecIn contract) while the Python
+    field name avoids shadowing ``BaseModel.copy()``.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    visual: str
+    copy_text: str = Field(validation_alias="copy", serialization_alias="copy")
+    design_note: str
+
+
+class HeroSectionOut(BaseModel):
+    id: Literal["H1", "H2", "H3", "H4", "H5"]
+    three_piece: ThreePieceOut
+
+
+class DetailSectionOut(BaseModel):
+    id: Literal["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9"]
+    three_piece: ThreePieceOut
+
+
+class SpecOut(BaseModel):
+    locale: Literal["zh", "en"]
+    sku_meta: SkuMetaIn
+    selling_points: list[SellingPointIn]
+    hero_sections: list[HeroSectionOut] = Field(min_length=5, max_length=5)
+    detail_sections: list[DetailSectionOut] = Field(min_length=9, max_length=9)
+
+
 class SpecResponse(BaseModel):
     spec_markdown: str
+    spec: SpecOut
     compliance: ComplianceOut
 
 
@@ -134,8 +175,47 @@ async def create_spec(kit_id: str, req: Request, payload: SpecRequest) -> SpecRe
 
     scorecard = score_spec(sections, locale=payload.locale)
 
+    spec_out = SpecOut(
+        locale=spec.locale,
+        sku_meta=SkuMetaIn(
+            sku=spec.sku_meta.sku,
+            name=spec.sku_meta.name,
+            brand=spec.sku_meta.brand,
+            category=spec.sku_meta.category,
+            product_type=spec.sku_meta.product_type,
+            price=spec.sku_meta.price,
+        ),
+        selling_points=[
+            SellingPointIn(title=sp.title, priority=sp.priority, evidence=sp.evidence)
+            for sp in spec.selling_points
+        ],
+        hero_sections=[
+            HeroSectionOut(
+                id=h.id,
+                three_piece=ThreePieceOut(
+                    visual=h.three_piece.visual,
+                    copy_text=h.three_piece.copy,
+                    design_note=h.three_piece.design_note,
+                ),
+            )
+            for h in spec.hero_sections
+        ],
+        detail_sections=[
+            DetailSectionOut(
+                id=m.id,
+                three_piece=ThreePieceOut(
+                    visual=m.three_piece.visual,
+                    copy_text=m.three_piece.copy,
+                    design_note=m.three_piece.design_note,
+                ),
+            )
+            for m in spec.detail_sections
+        ],
+    )
+
     return SpecResponse(
         spec_markdown=spec_markdown,
+        spec=spec_out,
         compliance=ComplianceOut(
             score=scorecard.score,
             violations=[
