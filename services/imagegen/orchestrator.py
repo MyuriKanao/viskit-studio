@@ -131,6 +131,12 @@ class JobOutcome:
 class OrchestratorResult:
     kit_id: str
     png_paths: tuple[Path, ...]
+    # Id-keyed mapping (H1..H5, M1..M9 → Path or None for failed slots).
+    # ``png_paths`` is the packed, non-NULL projection of this map (no gap-fill);
+    # consumers that persist into slot-bound tables MUST iterate this dict
+    # instead of slicing png_paths, so that a failed mid-batch image doesn't
+    # shift downstream slot bindings (see EPIC-8 Phase 2.1 code review).
+    image_paths_by_id: dict[str, Path | None]
     compliance_path: Path
     cost_path: Path
     color_lock_summary: dict[str, int]
@@ -730,9 +736,15 @@ async def orchestrate_kit(
                 },
             )
             event_bus.close(inputs.kit_id)
+        abort_image_map: dict[str, Path | None] = {}
+        for hero in inputs.spec.hero_sections:
+            abort_image_map[hero.id] = None
+        for detail in inputs.spec.detail_sections:
+            abort_image_map[detail.id] = None
         return OrchestratorResult(
             kit_id=inputs.kit_id,
             png_paths=(),
+            image_paths_by_id=abort_image_map,
             compliance_path=compliance_path,
             cost_path=cost_path,
             color_lock_summary={"ok": 0, "out_of_tolerance": 0, "error": 0, "failed": 0},
@@ -859,6 +871,9 @@ async def orchestrate_kit(
     return OrchestratorResult(
         kit_id=inputs.kit_id,
         png_paths=tuple(png_paths_list),
+        image_paths_by_id={
+            img_id: outcomes_by_id[img_id].png_path for img_id in ordered_ids
+        },
         compliance_path=compliance_path,
         cost_path=cost_path,
         color_lock_summary=summary,

@@ -142,6 +142,9 @@ components:
         cost_path:
           title: Cost Path
           type: string
+        db_kit_id:
+          title: Db Kit Id
+          type: integer
         kit_id:
           title: Kit Id
           type: string
@@ -155,6 +158,7 @@ components:
           type: array
       required:
         - kit_id
+        - db_kit_id
         - png_paths
         - compliance_path
         - cost_path

@@ -104,6 +104,7 @@ class GenerateRequest(BaseModel):
 
 class GenerateResponse(BaseModel):
     kit_id: str
+    db_kit_id: int
     png_paths: list[str]
     compliance_path: str
     cost_path: str
@@ -166,9 +167,150 @@ def _to_dataclass_spec(spec_in: SpecIn) -> Spec:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_default_workbench_id(session: Session) -> int:
+    """Return the lowest-id workbench (single-tenant per project memory).
+
+    Phase 2.1 decision: rather than threading a workbench through the wizard
+    payload, /generate picks ``MIN(id)`` because the project is single-tenant.
+    Bootstrap is owned by ``scripts/seed_user.py`` (or seed_dashboard_fixtures).
+    If no workbench exists yet, fail loudly with HTTP 503 so the operator
+    knows to provision one rather than getting a misleading FK violation.
+    """
+    row = session.execute(text("SELECT MIN(id) FROM workbenches")).scalar()
+    if row is None:
+        raise HTTPException(
+            status_code=503,
+            detail="no workbench provisioned — run scripts/seed_user.py",
+        )
+    return int(row)
+
+
+def _persist_kit(
+    session: Session,
+    *,
+    payload: GenerateRequest,
+    style_prompt: str,
+    result: Any,
+) -> int:
+    """Persist the kit's catalog row, marketing_kits row, and 5+9 image rows.
+
+    Returns the new ``marketing_kits.id``.  ``product_catalogs`` is upserted by
+    sku (UNIQUE).  ``marketing_kits`` is always a fresh row — re-generating the
+    same SKU with a different style/colour is a legitimate 2nd kit.  Hero/detail
+    rows are inserted fresh for the new marketing_kits row.  When
+    ``result.needs_review`` is True, the kit is still persisted (status flips to
+    ``needs_review``) and partial png_paths are written to whatever slots they
+    have — the dashboard JOIN is NULL-tolerant (kits.py:362,378).
+    """
+    workbench_id = _resolve_default_workbench_id(session)
+
+    sku_meta = payload.spec.sku_meta
+    session.execute(
+        text(
+            "INSERT INTO product_catalogs"
+            " (workbench_id, sku, name, category, price, brand, locale)"
+            " VALUES (:workbench_id, :sku, :name, :category, :price, :brand, :locale)"
+            " ON CONFLICT (sku) DO NOTHING"
+        ),
+        {
+            "workbench_id": workbench_id,
+            "sku": sku_meta.sku,
+            "name": sku_meta.name,
+            "category": sku_meta.category,
+            "price": sku_meta.price,
+            "brand": sku_meta.brand,
+            "locale": payload.locale,
+        },
+    )
+    pc_id_row = session.execute(
+        text("SELECT id FROM product_catalogs WHERE sku = :sku"),
+        {"sku": sku_meta.sku},
+    ).scalar()
+    if pc_id_row is None:
+        # Unreachable in practice: the INSERT above guarantees a row, but mypy
+        # needs the narrowing and a real DB hiccup would surface here.
+        raise HTTPException(
+            status_code=500,
+            detail=f"product_catalogs row for sku={sku_meta.sku!r} not found after upsert",
+        )
+    product_catalog_id = int(pc_id_row)
+
+    status = "needs_review" if result.needs_review else "ready"
+    kit_id_row = session.execute(
+        text(
+            "INSERT INTO marketing_kits"
+            " (product_catalog_id, status, score, locale,"
+            "  brand_color_hex, style_prompt)"
+            " VALUES (:pc_id, :status, NULL, :locale,"
+            "         :brand_color_hex, :style_prompt)"
+            " RETURNING id"
+        ),
+        {
+            "pc_id": product_catalog_id,
+            "status": status,
+            "locale": payload.locale,
+            "brand_color_hex": payload.brand_color_hex,
+            "style_prompt": style_prompt,
+        },
+    ).scalar()
+    if kit_id_row is None:
+        raise HTTPException(
+            status_code=500, detail="marketing_kits INSERT returned no id"
+        )
+    db_kit_id = int(kit_id_row)
+
+    # Fan png_paths into 5 hero + 9 detail rows, keyed by image_id (NOT by
+    # tuple index).  ``result.png_paths`` is the packed list of successful
+    # paths; per-image failures are gap-skipped, so slicing [:5] would shift
+    # detail PNGs into hero slots.  ``result.image_paths_by_id`` gives the
+    # canonical H1..H5/M1..M9 → Path|None mapping and is the only safe input
+    # for slot-bound INSERTs.  NULL png_path values are allowed by the schema
+    # (the kits-list JOIN at kits.py:362,378 is NULL-tolerant).
+    img_by_id = result.image_paths_by_id
+    for slot_index in range(1, 6):
+        png_path = img_by_id.get(f"H{slot_index}")
+        session.execute(
+            text(
+                "INSERT INTO hero_images"
+                " (marketing_kit_id, slot_index, png_path, brand_color_hex)"
+                " VALUES (:kit_id, :slot_index, :png_path, :brand_color_hex)"
+            ),
+            {
+                "kit_id": db_kit_id,
+                "slot_index": slot_index,
+                "png_path": str(png_path) if png_path is not None else None,
+                "brand_color_hex": payload.brand_color_hex,
+            },
+        )
+    for idx in range(1, 10):
+        module_id = f"M{idx}"
+        png_path = img_by_id.get(module_id)
+        session.execute(
+            text(
+                "INSERT INTO detail_images"
+                " (marketing_kit_id, module_id, png_path, brand_color_hex)"
+                " VALUES (:kit_id, :module_id, :png_path, :brand_color_hex)"
+            ),
+            {
+                "kit_id": db_kit_id,
+                "module_id": module_id,
+                "png_path": str(png_path) if png_path is not None else None,
+                "brand_color_hex": payload.brand_color_hex,
+            },
+        )
+    # Commit is owned by the ``get_session`` FastAPI dependency
+    # (apps/api/lib/db.py:30-34): committing here would shadow the
+    # dependency's rollback path if a downstream caller adds post-persist
+    # work that raises.
+    return db_kit_id
+
+
 @router.post("/{kit_id}/generate", response_model=GenerateResponse)
 async def post_generate(
-    kit_id: str, req: Request, payload: GenerateRequest
+    kit_id: str,
+    req: Request,
+    payload: GenerateRequest,
+    session: Annotated[Session, Depends(get_session)],
 ) -> GenerateResponse:
     """Generate the 14-image kit for *kit_id*."""
     registry = getattr(req.app.state, "registry", None)
@@ -208,8 +350,14 @@ async def post_generate(
     result = await orchestrate_kit(
         inputs, registry=registry, event_bus=event_bus
     )
+
+    db_kit_id = _persist_kit(
+        session, payload=payload, style_prompt=style_prompt, result=result
+    )
+
     return GenerateResponse(
         kit_id=result.kit_id,
+        db_kit_id=db_kit_id,
         png_paths=[str(p) for p in result.png_paths],
         compliance_path=str(result.compliance_path),
         cost_path=str(result.cost_path),

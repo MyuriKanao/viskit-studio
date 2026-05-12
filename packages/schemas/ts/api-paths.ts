@@ -425,6 +425,8 @@ export interface components {
             compliance_path: string;
             /** Cost Path */
             cost_path: string;
+            /** Db Kit Id */
+            db_kit_id: number;
             /** Kit Id */
             kit_id: string;
             /** Needs Review */

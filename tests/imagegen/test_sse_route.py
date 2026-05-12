@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from apps.api.lib.db import get_session
 from apps.api.main import app
 from services.imagegen.orchestrator import KitEventBus, orchestrate_kit
 from tests.imagegen.conftest import (
@@ -17,6 +18,7 @@ from tests.imagegen.conftest import (
     make_imagegen_registry,
     make_kit_inputs,
 )
+from tests.imagegen.test_generate_route import _FakeSession
 
 
 def _run(coro):  # type: ignore[no-untyped-def]
@@ -39,10 +41,20 @@ def client_with_bus(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[TestClient]:
     monkeypatch.setenv("IMAGEGEN_OUTPUT_DIR", str(tmp_path))
-    with TestClient(app) as c:
-        c.app.state.registry = make_imagegen_registry()
-        c.app.state.kit_event_bus = KitEventBus()
-        yield c
+
+    # Phase 2.1 persist wiring added Depends(get_session) to /generate;
+    # the SSE-coexist test posts to /generate so we need a session override.
+    def _override() -> Iterator[_FakeSession]:
+        yield _FakeSession()
+
+    app.dependency_overrides[get_session] = _override
+    try:
+        with TestClient(app) as c:
+            c.app.state.registry = make_imagegen_registry()
+            c.app.state.kit_event_bus = KitEventBus()
+            yield c
+    finally:
+        app.dependency_overrides.pop(get_session, None)
 
 
 def _read_sse_events(text: str) -> list[dict[str, object]]:
