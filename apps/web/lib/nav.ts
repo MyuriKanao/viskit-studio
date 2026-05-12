@@ -45,8 +45,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'sidebar.newKit',
     href: '/new-kit',
     icon: Sparkles,
-    enabled: false,
-    comingInEpic: 8,
+    enabled: true,
   },
   {
     id: 'vault',
