@@ -13,12 +13,16 @@ import { SortMenu } from '@/components/catalog/SortMenu';
 import type { SortMenuLabels } from '@/components/catalog/SortMenu';
 import { ViewToggle } from '@/components/catalog/ViewToggle';
 import type { CatalogView } from '@/components/catalog/ViewToggle';
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useKitsCatalog } from '@/hooks/use-kits-catalog';
-import type { CatalogFilters as CatalogFilterState, CatalogSortKey, CatalogSortOrder } from '@/hooks/use-kits-catalog';
+import type {
+  CatalogFilters as CatalogFilterState,
+  CatalogSortKey,
+  CatalogSortOrder,
+} from '@/hooks/use-kits-catalog';
 import type { KitListItem } from '@/hooks/use-recent-kits';
 import { cn } from '@/lib/utils';
 
@@ -45,7 +49,12 @@ export default function CatalogPage() {
   const [page, setPage] = React.useState(0);
   const offset = page * PAGE_SIZE;
 
-  const query: CatalogFilterState & { limit: number; offset: number; sort: CatalogSortKey; order: CatalogSortOrder } = {
+  const query: CatalogFilterState & {
+    limit: number;
+    offset: number;
+    sort: CatalogSortKey;
+    order: CatalogSortOrder;
+  } = {
     status,
     locale: localeFilter,
     minScore,
@@ -56,7 +65,8 @@ export default function CatalogPage() {
     order,
   };
 
-  // Reset page when filters change
+  // Reset page when filters change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate filter-change trigger; setPage is stable
   React.useEffect(() => {
     setPage(0);
   }, [status, localeFilter, minScore, sort, order]);
@@ -137,6 +147,7 @@ export default function CatalogPage() {
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
+                {/* biome-ignore lint/a11y/noNoninteractiveTabindex: Radix tooltip needs a focusable wrapper to surface tooltips for the disabled button — temporary; this branch is removed in Phase 2.2 when the CTA links to /new-kit */}
                 <span tabIndex={0}>
                   <Button
                     variant="default"
@@ -149,9 +160,7 @@ export default function CatalogPage() {
                   </Button>
                 </span>
               </TooltipTrigger>
-              <TooltipContent side="left">
-                {t('coming_in_epic')}
-              </TooltipContent>
+              <TooltipContent side="left">{t('coming_in_epic')}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
@@ -181,7 +190,10 @@ export default function CatalogPage() {
             <SortMenu
               sort={sort}
               order={order}
-              onChange={({ sort: s, order: o }) => { setSort(s); setOrder(o); }}
+              onChange={({ sort: s, order: o }) => {
+                setSort(s);
+                setOrder(o);
+              }}
               labels={sortLabels}
             />
             <ViewToggle
@@ -213,7 +225,12 @@ export default function CatalogPage() {
             {t('load_error')}
           </p>
         ) : view === 'grid' ? (
-          <CatalogGrid kits={kits} locale={locale} labels={{ empty: t('grid_empty') }} onKitClick={onKitClick} />
+          <CatalogGrid
+            kits={kits}
+            locale={locale}
+            labels={{ empty: t('grid_empty') }}
+            onKitClick={onKitClick}
+          />
         ) : (
           <CatalogTable kits={kits} labels={tableLabels} onRowClick={onRowClick} />
         )}

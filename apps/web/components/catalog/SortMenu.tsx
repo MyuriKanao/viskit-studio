@@ -61,9 +61,7 @@ export function SortMenu({ sort, order, onChange, labels }: SortMenuProps) {
             onSelect={() => onChange({ sort: key, order })}
           >
             <span className="flex-1">{labels[KEY_LABEL[key]]}</span>
-            {sort === key ? (
-              <Check aria-hidden="true" className="h-3.5 w-3.5 text-accent" />
-            ) : null}
+            {sort === key ? <Check aria-hidden="true" className="h-3.5 w-3.5 text-accent" /> : null}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
@@ -74,9 +72,7 @@ export function SortMenu({ sort, order, onChange, labels }: SortMenuProps) {
             data-testid={`sort-order-${dir}`}
             onSelect={() => onChange({ sort, order: dir })}
           >
-            <span className="flex-1">
-              {dir === 'asc' ? labels.optionAsc : labels.optionDesc}
-            </span>
+            <span className="flex-1">{dir === 'asc' ? labels.optionAsc : labels.optionDesc}</span>
             {order === dir ? (
               <Check aria-hidden="true" className="h-3.5 w-3.5 text-accent" />
             ) : null}

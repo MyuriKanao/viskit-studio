@@ -31,6 +31,7 @@ export function ViewToggle({ value, onChange, gridLabel, tableLabel }: ViewToggl
           <button
             key={id}
             type="button"
+            // biome-ignore lint/a11y/useSemanticElements: styled toggle group — visual buttons with radio semantics, not a real <input type="radio">
             role="radio"
             aria-checked={active}
             aria-label={label}

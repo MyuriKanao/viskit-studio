@@ -15,10 +15,7 @@ export interface CatalogGridProps {
 export function CatalogGrid({ kits, locale, labels, onKitClick }: CatalogGridProps) {
   if (kits.length === 0) {
     return (
-      <p
-        className="py-s-12 text-center text-sm text-ink-muted"
-        data-testid="catalog-grid-empty"
-      >
+      <p className="py-s-12 text-center text-sm text-ink-muted" data-testid="catalog-grid-empty">
         {labels.empty}
       </p>
     );
@@ -30,12 +27,7 @@ export function CatalogGrid({ kits, locale, labels, onKitClick }: CatalogGridPro
       data-testid="catalog-grid"
     >
       {kits.map((kit) => (
-        <KitCard
-          key={kit.id}
-          kit={kit}
-          locale={locale}
-          onClick={() => onKitClick?.(kit)}
-        />
+        <KitCard key={kit.id} kit={kit} locale={locale} onClick={() => onKitClick?.(kit)} />
       ))}
     </div>
   );

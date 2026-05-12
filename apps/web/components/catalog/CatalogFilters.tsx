@@ -70,9 +70,7 @@ export function CatalogFilters({
               key={opt.value}
               label={opt.label}
               active={status === opt.value}
-              onClick={() =>
-                onStatusChange(status === opt.value ? null : opt.value)
-              }
+              onClick={() => onStatusChange(status === opt.value ? null : opt.value)}
             />
           ))}
         </div>
@@ -92,9 +90,7 @@ export function CatalogFilters({
               key={opt.value}
               label={opt.label}
               active={locale === opt.value}
-              onClick={() =>
-                onLocaleChange(locale === opt.value ? null : opt.value)
-              }
+              onClick={() => onLocaleChange(locale === opt.value ? null : opt.value)}
             />
           ))}
         </div>

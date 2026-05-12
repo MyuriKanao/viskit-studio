@@ -49,7 +49,7 @@ export function CatalogTable({ kits, labels, onRowClick }: CatalogTableProps) {
 
   return (
     <div className="overflow-x-auto" data-testid="catalog-table">
-      <table className="w-full border-collapse text-sm" role="table">
+      <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-border-subtle text-left text-xs font-medium uppercase tracking-wide text-ink-faint">
             <th className="w-10 px-s-3 py-s-2" scope="col" aria-label="thumbnail" />
@@ -76,10 +76,7 @@ export function CatalogTable({ kits, labels, onRowClick }: CatalogTableProps) {
         <tbody>
           {isEmpty ? (
             <tr>
-              <td
-                colSpan={7}
-                className="px-s-3 py-s-12 text-center text-sm text-ink-muted"
-              >
+              <td colSpan={7} className="px-s-3 py-s-12 text-center text-sm text-ink-muted">
                 {labels.empty}
               </td>
             </tr>
@@ -92,9 +89,16 @@ export function CatalogTable({ kits, labels, onRowClick }: CatalogTableProps) {
                 <tr
                   key={kit.id}
                   data-testid={`kit-row-${kit.id}`}
+                  tabIndex={0}
                   onClick={() => onRowClick?.(kit)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onRowClick?.(kit);
+                    }
+                  }}
                   className={cn(
-                    'cursor-pointer border-b border-border-hair transition-colors duration-fast hover:bg-surface-02',
+                    'cursor-pointer border-b border-border-hair transition-colors duration-fast hover:bg-surface-02 focus:bg-surface-02 focus:outline-none',
                     'group'
                   )}
                 >
@@ -130,9 +134,7 @@ export function CatalogTable({ kits, labels, onRowClick }: CatalogTableProps) {
                   </td>
                   <td className="px-s-3 py-s-2">
                     {kit.score !== null ? (
-                      <span className="font-mono text-xs text-ink-primary">
-                        {kit.score}
-                      </span>
+                      <span className="font-mono text-xs text-ink-primary">{kit.score}</span>
                     ) : (
                       <span
                         aria-label="Computing"
@@ -141,9 +143,7 @@ export function CatalogTable({ kits, labels, onRowClick }: CatalogTableProps) {
                     )}
                   </td>
                   <td className="hidden px-s-3 py-s-2 text-xs text-ink-muted lg:table-cell">
-                    {kit.updated_at
-                      ? new Date(kit.updated_at).toLocaleDateString()
-                      : '—'}
+                    {kit.updated_at ? new Date(kit.updated_at).toLocaleDateString() : '—'}
                   </td>
                 </tr>
               );
