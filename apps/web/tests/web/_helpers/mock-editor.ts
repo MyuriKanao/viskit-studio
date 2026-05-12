@@ -76,12 +76,12 @@ export async function mockEditorBackend(
 
   await page.route('**/api/images/*/edit/events*', async (route: Route) => {
     if (sseScript === 'hang') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/event-stream',
-        headers: { 'cache-control': 'no-cache' },
-        body: ssePayload('progress', { stage: 'started', job_id: jobId }),
-      });
+      // Never fulfill — emulates a hung SSE stream. The browser fetch on the
+      // hook side stays pending until the test aborts via AbortController.
+      // `route.fulfill` would CLOSE the response which the inpaint hook then
+      // treats as a clean stream-end → status flips to 'success' (see
+      // apps/web/hooks/use-inpaint.ts:132) — defeating the cancel test.
+      await new Promise<void>(() => {});
       return;
     }
     const body = sseScript

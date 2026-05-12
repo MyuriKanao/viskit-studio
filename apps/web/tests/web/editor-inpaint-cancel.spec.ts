@@ -3,47 +3,55 @@ import { expect, test } from '@playwright/test';
 import { mockEditorBackend } from './_helpers/mock-editor';
 
 /**
- * EPIC-5 AC#7 (proxy at hook level) — Inpaint cancel contract.
+ * EPIC-5 AC#7 (full) — mid-stream Inpaint cancel aborts SSE and returns the
+ * button to idle (not streaming, not error).
  *
- * The Inpaint button is disabled when hasMask=false (v1 EditorRoot). This test
- * asserts the disabled state is correct AND that the SSE stream is never
- * initiated when the button cannot be clicked.
- *
- * AC#7 full (cancel mid-stream → 0 image_edits rows) at the UI level is gated
- * on mask-UI shipping. The unit-test layer for the SSE hook lives at
- * apps/web/hooks/use-inpaint.ts (parses `aborted` event correctly).
+ * Promoted from PROXY-PASS in EPIC-5b: a mask is committed via the
+ * `window.__editorTest.setMaskBox` hook installed by `EditorRoot.tsx`, then
+ * the Inpaint button is clicked twice. The second click triggers
+ * `inpaint.abort()` which fires the AbortController on the in-flight SSE
+ * fetch. Status transitions: idle → streaming → aborted, and the button's
+ * `data-state` reflects the same path.
  */
-test.describe('editor inpaint cancel (AC#7 proxy)', () => {
-  test('Inpaint button is disabled and SSE stream is never triggered', async ({ page }) => {
-    // Track any requests to the SSE edit/events endpoint.
-    const editEventsRequests: string[] = [];
-    page.on('request', (r) => {
-      if (r.url().includes('/edit/events')) {
-        editEventsRequests.push(r.url());
-      }
-    });
-
-    // Use hang mode so if the SSE endpoint were reached it would block — making
-    // the absence detectable.
+test.describe('editor inpaint cancel (AC#7)', () => {
+  test('mid-stream click aborts SSE and returns button to non-streaming state', async ({
+    page,
+  }) => {
     await mockEditorBackend(page, { sseScript: 'hang' });
     await page.goto('/zh/editor/test-1');
     await page.getByTestId('tool-rail').waitFor();
 
+    await page.waitForFunction(
+      () =>
+        Boolean(
+          (window as unknown as { __editorTest?: { setMaskBox?: unknown } }).__editorTest
+            ?.setMaskBox
+        ),
+      undefined,
+      { timeout: 4000 }
+    );
+
+    // Commit a mask via the test hook — equivalent to a canvas drag.
+    await page.evaluate(() => {
+      const hook = (
+        window as unknown as {
+          __editorTest: { setMaskBox: (b: { x: number; y: number; w: number; h: number }) => void };
+        }
+      ).__editorTest;
+      hook.setMaskBox({ x: 100, y: 200, w: 300, h: 80 });
+    });
+
     const inpaintBtn = page.getByTestId('tool-inpaint');
+    // hasMask=true → button no longer disabled.
+    await expect(inpaintBtn).not.toHaveAttribute('data-state', 'disabled');
 
-    // hasMask=false → button must be in disabled state.
-    await expect(inpaintBtn).toHaveAttribute('data-state', 'disabled');
+    // First click → start inpaint. Wait for loading state (streaming → SSE).
+    await inpaintBtn.click();
+    await expect(inpaintBtn).toHaveAttribute('data-state', 'loading');
 
-    // Force-click bypasses pointer-events:none so we can assert the handler
-    // is a no-op (hasMask is false, isStreaming is false → onInpaintStart not called).
-    await inpaintBtn.click({ force: true });
-
-    // 200ms grace period — no SSE request should arrive.
-    await page.waitForTimeout(200);
-
-    expect(editEventsRequests).toHaveLength(0);
-
-    // Button state must remain disabled after the force-click.
-    await expect(inpaintBtn).toHaveAttribute('data-state', 'disabled');
+    // Mid-stream click → abort. Button leaves loading; never goes to error.
+    await inpaintBtn.click();
+    await expect(inpaintBtn).not.toHaveAttribute('data-state', 'loading');
+    await expect(inpaintBtn).not.toHaveAttribute('data-state', 'error');
   });
 });

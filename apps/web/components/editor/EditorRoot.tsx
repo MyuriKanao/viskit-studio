@@ -2,15 +2,21 @@
 
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import * as React from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import type { CanvasStageProps } from '@/components/editor/CanvasStage';
 import { HistoryTimeline } from '@/components/editor/HistoryTimeline';
 import { TextLayerOverlay } from '@/components/editor/TextLayerOverlay';
 import { ToolRail } from '@/components/editor/ToolRail';
 import { useInpaint } from '@/hooks/use-inpaint';
+import { useCommandStack } from '@/lib/editor/command-stack';
+import type { CanvasStageHandle, MaskBox } from '@/lib/editor/types';
 
 // CanvasStage uses fabric.js which touches `document` at module init —
-// must be dynamically imported with ssr: false.
+// must be dynamically imported with ssr: false. The dynamic() typing in
+// Next 14 doesn't natively expose ref-forwarding even though the runtime
+// supports it (v13+), so we cast to a ForwardRef component shape.
 const CanvasStage = dynamic(
   () => import('@/components/editor/CanvasStage').then((m) => m.CanvasStage),
   {
@@ -22,7 +28,9 @@ const CanvasStage = dynamic(
       />
     ),
   }
-);
+) as unknown as React.ForwardRefExoticComponent<
+  CanvasStageProps & React.RefAttributes<CanvasStageHandle>
+>;
 
 const CANVAS_WIDTH = 1024;
 const CANVAS_HEIGHT = 1536;
@@ -38,12 +46,60 @@ export function EditorRoot({ imageId }: EditorRootProps) {
   const [activeTool, setActiveTool] = useState<'select' | 'text' | 'move' | 'inpaint' | null>(
     'select'
   );
-  // hasMask stays false in v1 — mask UI ships in a follow-on story.
-  // TODO(EPIC-5 follow-up): mask UI ships in a follow-on story
-  const [hasMask] = useState(false);
+  const [maskBox, setMaskBox] = useState<MaskBox | null>(null);
+  const hasMask = maskBox !== null;
+  const canvasRef = useRef<CanvasStageHandle | null>(null);
   const inpaint = useInpaint();
 
   const imageUrl = `${BASE_URL}/api/images/${encodeURIComponent(imageId)}/bytes`;
+
+  const handleInpaintStart = useCallback(() => {
+    if (!maskBox) return;
+    void inpaint.start(imageId, { mask_box: maskBox, new_text: '' });
+  }, [imageId, inpaint, maskBox]);
+
+  const handleBoxClick = useCallback((index: number) => {
+    canvasRef.current?.selectByOcrIndex(index);
+  }, []);
+
+  // Surface setMaskBox + setActiveTool on the test hook so EPIC-5b AC#7 can
+  // commit a mask without simulating a fabric drag. Single-tenant internal
+  // tool — see CanvasStage.tsx for the same justification. No cleanup: the
+  // assignment is idempotent and a cleanup-then-remount race with the dynamic
+  // CanvasStage child can leave the hook nulled-out exactly when tests poll.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const w = window as Window & { __editorTest?: Record<string, unknown> };
+    if (!w.__editorTest) w.__editorTest = {};
+    w.__editorTest.setMaskBox = setMaskBox;
+    w.__editorTest.setActiveTool = setActiveTool;
+  }, []);
+
+  // On inpaint success: snapshot the canvas to history and clear the mask
+  // affordance so the operator can draw a new region. The Inpaint button
+  // disables again until the next mask is committed (hasMask flips false).
+  useEffect(() => {
+    if (inpaint.status !== 'success') return;
+    const fab =
+      typeof window !== 'undefined'
+        ? (
+            window as Window & {
+              __editorTest?: { canvas?: { toObject?: (k: string[]) => unknown } };
+            }
+          ).__editorTest?.canvas
+        : undefined;
+    const snapshot = fab?.toObject?.(['customProps']) ?? {};
+    useCommandStack.getState().push({
+      id: `${imageId}-${Date.now()}`,
+      op_type: 'inpaint',
+      payload: maskBox,
+      snapshot_json: JSON.stringify(snapshot),
+      ts: Date.now(),
+    });
+    canvasRef.current?.clearMaskRect();
+    setMaskBox(null);
+    inpaint.reset();
+  }, [inpaint, imageId, maskBox]);
 
   return (
     <div className="flex h-screen flex-col bg-surface-01 text-ink-primary">
@@ -58,9 +114,7 @@ export function EditorRoot({ imageId }: EditorRootProps) {
         <ToolRail
           activeTool={activeTool}
           onToolChange={setActiveTool}
-          onInpaintStart={() => {
-            // TODO(EPIC-5 follow-up): mask UI ships in a follow-on story; no-op until then
-          }}
+          onInpaintStart={handleInpaintStart}
           onInpaintAbort={inpaint.abort}
           inpaintStatus={inpaint.status}
           hasMask={hasMask}
@@ -71,20 +125,20 @@ export function EditorRoot({ imageId }: EditorRootProps) {
         <div className="flex flex-1 items-center justify-center overflow-auto p-s-5">
           <div className="relative" style={{ width: CANVAS_WIDTH, height: CANVAS_HEIGHT }}>
             <CanvasStage
+              ref={canvasRef}
               imageId={imageId}
               imageUrl={imageUrl}
               width={CANVAS_WIDTH}
               height={CANVAS_HEIGHT}
+              activeTool={activeTool}
+              onMaskChange={setMaskBox}
             />
             {/* TextLayerOverlay stacked absolute over canvas */}
             <TextLayerOverlay
               imageId={imageId}
               canvasWidth={CANVAS_WIDTH}
               canvasHeight={CANVAS_HEIGHT}
-              onBoxClick={(_index, _box) => {
-                // TODO(EPIC-5 follow-up): selection wiring requires a CanvasStage imperative
-                // ref which was deferred in US-007 (AC#6 — no forwardRef).
-              }}
+              onBoxClick={handleBoxClick}
               className="absolute inset-0"
             />
           </div>
