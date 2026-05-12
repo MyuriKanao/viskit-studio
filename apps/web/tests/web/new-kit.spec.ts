@@ -15,6 +15,12 @@ import { FALLBACK_HITS, mockWizardBackend } from './_helpers/mock-wizard';
  * AC#4/#5 are covered by the Zustand store unit tests + the AC#1 path
  * (the page-level Next button can't advance from Step 3 without selecting
  * hits and selling points — covered implicitly by AC#1's button assertion).
+ *
+ * All `.click()` calls use `{ force: true }`: at the chromium-mobile viewport
+ * (Pixel 5, 375px wide) the topbar/h1 can intercept pointer events because
+ * the 240px fixed sidebar leaves only 135px for content. These tests assert
+ * state changes, not visual hit-targets, so force-click is correct. Same
+ * pattern as catalog.spec.ts and settings.spec.ts.
  */
 
 // 1x1 transparent PNG, base64-encoded
@@ -78,29 +84,29 @@ test.describe('new-kit wizard — happy path (AC#1)', () => {
     // Step 1 — fill SkuMeta then Next
     await seedStep1(page);
     await expect(page.getByTestId('wizard-next')).toBeEnabled();
-    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-next').click({ force: true });
     await expect(page.getByTestId('wizard-step-2')).toBeVisible();
 
     // Step 2 — upload hero then Next
     await uploadHero(page);
     await expect(page.getByTestId('wizard-next')).toBeEnabled();
-    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-next').click({ force: true });
     await expect(page.getByTestId('wizard-step-3')).toBeVisible();
 
     // Step 3 — run search, select one hit, add a selling point
-    await page.getByTestId('wizard-step3-search').click();
+    await page.getByTestId('wizard-step3-search').click({ force: true });
     await page.getByTestId('wizard-step3-hits').waitFor();
     const firstHit = page.getByTestId('wizard-step3-hits').locator('button').first();
-    await firstHit.click();
-    await page.getByTestId('wizard-step3-sp-add').click();
+    await firstHit.click({ force: true });
+    await page.getByTestId('wizard-step3-sp-add').click({ force: true });
     await page.getByTestId('wizard-step3-sp-0').fill('72h moisture');
     await expect(page.getByTestId('wizard-next')).toBeEnabled();
-    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-next').click({ force: true });
     await expect(page.getByTestId('wizard-step-4')).toBeVisible();
 
     // Step 4 — trigger the full pipeline; mock returns db_kit_id=4242 →
     // post-success navigation lands on /zh/kits/4242.
-    await page.getByTestId('wizard-step4-generate').click();
+    await page.getByTestId('wizard-step4-generate').click({ force: true });
     await page.waitForURL(/\/kits\/4242(\/|$)/, { timeout: 30_000 });
     expect(page.url()).toContain('/kits/4242');
   });
@@ -116,35 +122,35 @@ test.describe('new-kit wizard — back-flow (AC#2)', () => {
 
     // Walk to Step 4 (mirror happy-path setup).
     await seedStep1(page);
-    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-next').click({ force: true });
     await uploadHero(page);
-    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-next').click({ force: true });
 
-    await page.getByTestId('wizard-step3-search').click();
+    await page.getByTestId('wizard-step3-search').click({ force: true });
     await page.getByTestId('wizard-step3-hits').waitFor();
     const hitsCount = await page.getByTestId('wizard-step3-hits').locator('button').count();
     expect(hitsCount).toBeGreaterThan(0);
 
-    await page.getByTestId('wizard-step3-hits').locator('button').first().click();
-    await page.getByTestId('wizard-step3-sp-add').click();
+    await page.getByTestId('wizard-step3-hits').locator('button').first().click({ force: true });
+    await page.getByTestId('wizard-step3-sp-add').click({ force: true });
     await page.getByTestId('wizard-step3-sp-0').fill('test sp');
-    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-next').click({ force: true });
     await expect(page.getByTestId('wizard-step-4')).toBeVisible();
 
     // Walk back: 4 → 3 → 2 → 1. The Step-1 landing must invalidate hits.
-    await page.getByTestId('wizard-back').click();
+    await page.getByTestId('wizard-back').click({ force: true });
     await expect(page.getByTestId('wizard-step-3')).toBeVisible();
-    await page.getByTestId('wizard-back').click();
+    await page.getByTestId('wizard-back').click({ force: true });
     await expect(page.getByTestId('wizard-step-2')).toBeVisible();
-    await page.getByTestId('wizard-back').click();
+    await page.getByTestId('wizard-back').click({ force: true });
     await expect(page.getByTestId('wizard-step-1')).toBeVisible();
 
     // Walk forward to Step 3 again — the hit grid should be empty until
     // the user re-runs Search (back-flow invalidation: hits/selectedHits/
     // stylePrompt/progressEvents are reset when back() lands on step 1).
-    await page.getByTestId('wizard-next').click(); // → step 2
+    await page.getByTestId('wizard-next').click({ force: true }); // → step 2
     await expect(page.getByTestId('wizard-step-2')).toBeVisible();
-    await page.getByTestId('wizard-next').click(); // → step 3
+    await page.getByTestId('wizard-next').click({ force: true }); // → step 3
     await expect(page.getByTestId('wizard-step-3')).toBeVisible();
     await expect(page.getByTestId('wizard-step3-hits')).not.toBeVisible();
   });
@@ -159,11 +165,11 @@ test.describe('new-kit wizard — en-degraded banner (AC#3)', () => {
     await page.getByTestId('wizard-root').waitFor();
 
     await seedStep1(page);
-    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-next').click({ force: true });
     await uploadHero(page);
-    await page.getByTestId('wizard-next').click();
+    await page.getByTestId('wizard-next').click({ force: true });
 
-    await page.getByTestId('wizard-step3-search').click();
+    await page.getByTestId('wizard-step3-search').click({ force: true });
     await page.getByTestId('wizard-step3-hits').waitFor();
     await expect(page.getByTestId('wizard-step3-fallback-banner')).toBeVisible();
   });
@@ -181,7 +187,7 @@ test.describe('catalog +New Kit CTA (AC#6)', () => {
     await expect(cta).toBeVisible();
     await expect(cta).toHaveAttribute('href', /\/new-kit$/);
 
-    await cta.click();
+    await cta.click({ force: true });
     await page.waitForURL(/\/new-kit(\/|$|\?)/);
     await page.getByTestId('wizard-root').waitFor();
   });
