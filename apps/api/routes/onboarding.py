@@ -19,6 +19,8 @@ insert rows via direct connection).
 
 from __future__ import annotations
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -35,7 +37,7 @@ class OnboardingNeededResponse(BaseModel):
 
 @router.get("/needed", response_model=OnboardingNeededResponse)
 def get_onboarding_needed(
-    session: Session = Depends(get_session),
+    session: Annotated[Session, Depends(get_session)],
 ) -> OnboardingNeededResponse:
     """Return whether onboarding is needed for this workspace."""
     row = session.execute(

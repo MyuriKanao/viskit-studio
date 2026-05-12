@@ -5,12 +5,11 @@ services.editor.* imports are patched before the route module loads them.
 """
 from __future__ import annotations
 
-import asyncio
 import io
 import re
+import sys
 import time
 import types
-import sys
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -18,7 +17,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -121,7 +119,6 @@ def app_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 def test_ocr_route_caches(app_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Second call must NOT invoke detect_text_boxes again (uses cache)."""
-    from apps.api.routes import images as images_mod
     import services.editor.ocr as ocr_mod  # already stubbed
 
     call_count = 0
@@ -130,7 +127,12 @@ def test_ocr_route_caches(app_client: TestClient, monkeypatch: pytest.MonkeyPatc
         nonlocal call_count
         call_count += 1
         class _TB:
-            x = 1; y = 2; w = 3; h = 4; text = "hi"; confidence = 0.95
+            x = 1
+            y = 2
+            w = 3
+            h = 4
+            text = "hi"
+            confidence = 0.95
         return [_TB()]
 
     # Patch the attribute on the already-imported stub module

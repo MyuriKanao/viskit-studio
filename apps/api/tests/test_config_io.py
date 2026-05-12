@@ -3,16 +3,15 @@ Tests for apps/api/lib/config_io.py — AC #6 sub-criteria (a-f).
 
 Each test maps to one AC sub-criterion:
   a) shared-lock read returns content + correct SHA-256
-  b) stale checksum → ConfigChecksumMismatch (409)
+  b) stale checksum → ConfigChecksumMismatchError (409)
   c) fresh checksum write succeeds, file updated
-  d) held lock → ConfigLockTimeout (ERR-CFG-001, 503, retry_after=2) with real timing
-  e) inode swap during write window → ConfigInodeChanged (ERR-CFG-002, 409)
+  d) held lock → ConfigLockTimeoutError (ERR-CFG-001, 503, retry_after=2) with real timing
+  e) inode swap during write window → ConfigInodeChangedError (ERR-CFG-002, 409)
   f) stale sentinel (dead PID) is reaped + WARN logged with ERR-CFG-003
 """
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import logging
 import os
@@ -24,11 +23,10 @@ import pytest
 
 from apps.api.lib import config_io
 from apps.api.lib.config_io import (
-    ConfigChecksumMismatch,
-    ConfigInodeChanged,
-    ConfigLockTimeout,
+    ConfigChecksumMismatchError,
+    ConfigInodeChangedError,
+    ConfigLockTimeoutError,
 )
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -50,7 +48,7 @@ def test_a_shared_lock_read_returns_content_and_checksum(tmp_config_path: Path) 
 
 
 # ---------------------------------------------------------------------------
-# (b) stale checksum → ConfigChecksumMismatch (409)
+# (b) stale checksum → ConfigChecksumMismatchError (409)
 # ---------------------------------------------------------------------------
 
 def test_b_exclusive_write_with_stale_checksum_returns_409(tmp_config_path: Path) -> None:
@@ -59,7 +57,7 @@ def test_b_exclusive_write_with_stale_checksum_returns_409(tmp_config_path: Path
     # Externally mutate the file so the on-disk checksum changes
     tmp_config_path.write_text("externally mutated content\n")
 
-    with pytest.raises(ConfigChecksumMismatch) as exc_info:
+    with pytest.raises(ConfigChecksumMismatchError) as exc_info:
         config_io.write(tmp_config_path, fresh_checksum, "new content")
 
     err = exc_info.value
@@ -82,7 +80,7 @@ def test_c_exclusive_write_with_fresh_checksum_succeeds(tmp_config_path: Path) -
 
 
 # ---------------------------------------------------------------------------
-# (d) held lock → ConfigLockTimeout with real timing
+# (d) held lock → ConfigLockTimeoutError with real timing
 # ---------------------------------------------------------------------------
 
 def test_d_held_lock_timeout_returns_503(
@@ -99,7 +97,7 @@ def test_d_held_lock_timeout_returns_503(
 
     t0 = time.monotonic()
     try:
-        with pytest.raises(ConfigLockTimeout) as exc_info:
+        with pytest.raises(ConfigLockTimeoutError) as exc_info:
             config_io.write(tmp_config_path, checksum, "x")
     finally:
         proc.terminate()
@@ -115,7 +113,7 @@ def test_d_held_lock_timeout_returns_503(
 
 
 # ---------------------------------------------------------------------------
-# (e) inode swap during write → ConfigInodeChanged (409)
+# (e) inode swap during write → ConfigInodeChangedError (409)
 # ---------------------------------------------------------------------------
 
 def test_e_inode_swap_during_write_returns_409(
@@ -126,7 +124,7 @@ def test_e_inode_swap_during_write_returns_409(
     """
     Patch _acquire_exclusive_lock to swap the file's inode AFTER the lock is
     acquired (i.e., between the pre-lock stat and the post-lock stat inside
-    write()).  The inode check should fire and raise ConfigInodeChanged.
+    write()).  The inode check should fire and raise ConfigInodeChangedError.
 
     Implementation note: write() stats the inode BEFORE opening the file, then
     stats it again AFTER _acquire_exclusive_lock returns. We monkeypatch
@@ -147,7 +145,7 @@ def test_e_inode_swap_during_write_returns_409(
 
     monkeypatch.setattr(config_io, "_acquire_exclusive_lock", _acquire_and_swap)
 
-    with pytest.raises(ConfigInodeChanged) as exc_info:
+    with pytest.raises(ConfigInodeChangedError) as exc_info:
         config_io.write(tmp_config_path, checksum, "new")
 
     err = exc_info.value

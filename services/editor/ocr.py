@@ -17,9 +17,9 @@ def _get_engine() -> Any:
 
 
 def detect_text_boxes(image_bytes: bytes) -> list[TextBox]:
-    import numpy as np
     from io import BytesIO
 
+    import numpy as np
     from PIL import Image
 
     img = np.array(Image.open(BytesIO(image_bytes)).convert("RGB"))

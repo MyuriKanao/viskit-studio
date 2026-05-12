@@ -8,14 +8,14 @@ Module API:
 Lock semantics:
   1. fcntl.flock LOCK_SH for read, LOCK_EX for write.
   2. 5-second timeout for LOCK_EX via LOCK_NB loop + 100ms sleeps.
-     On timeout: raise ConfigLockTimeout (ERR-CFG-001), HTTP 503, Retry-After: 2.
+     On timeout: raise ConfigLockTimeoutError (ERR-CFG-001), HTTP 503, Retry-After: 2.
   3. Inode stability: stat before+after acquiring lock. If st_ino changed,
-     raise ConfigInodeChanged (ERR-CFG-002), HTTP 409.
+     raise ConfigInodeChangedError (ERR-CFG-002), HTTP 409.
   4. Stale sentinel reaping: *.lock sidecar file holds writer PID.
      If PID dead (os.kill raises ProcessLookupError), reap + log WARN
-     ConfigStaleSentinelReaped (ERR-CFG-003). Not an error to caller.
+     ConfigStaleSentinelReapedError (ERR-CFG-003). Not an error to caller.
   5. Checksum: SHA-256 of content. write() requires expected_checksum to match;
-     mismatch -> ConfigChecksumMismatch, HTTP 409.
+     mismatch -> ConfigChecksumMismatchError, HTTP 409.
 """
 
 from __future__ import annotations
@@ -43,26 +43,26 @@ class ConfigIOError(Exception):
     http_status: int = 500
 
 
-class ConfigLockTimeout(ConfigIOError):
+class ConfigLockTimeoutError(ConfigIOError):
     """ERR-CFG-001 — could not acquire LOCK_EX within timeout."""
     error_code = "ERR-CFG-001"
     http_status = 503
     retry_after = 2
 
 
-class ConfigInodeChanged(ConfigIOError):
+class ConfigInodeChangedError(ConfigIOError):
     """ERR-CFG-002 — inode changed during lock-acquisition window (mv race)."""
     error_code = "ERR-CFG-002"
     http_status = 409
 
 
-class ConfigStaleSentinelReaped(ConfigIOError):
+class ConfigStaleSentinelReapedError(ConfigIOError):
     """ERR-CFG-003 — stale *.lock sentinel (dead PID) was reaped. WARN only."""
     error_code = "ERR-CFG-003"
     http_status = 200  # Not a caller error
 
 
-class ConfigChecksumMismatch(ConfigIOError):
+class ConfigChecksumMismatchError(ConfigIOError):
     """HTTP 409 — expected_checksum does not match current file checksum."""
     error_code = "ERR-CFG-004"
     http_status = 409
@@ -113,7 +113,7 @@ def _reap_stale_sentinel(sentinel: Path) -> None:
             "Stale sentinel reaped for %s (dead PID %s); error_code=%s",
             str(sentinel),
             pid,
-            ConfigStaleSentinelReaped.error_code,
+            ConfigStaleSentinelReapedError.error_code,
         )
 
 
@@ -134,7 +134,7 @@ def _remove_sentinel(sentinel: Path) -> None:
 def _acquire_exclusive_lock(fd: int, path: Path) -> None:
     """
     Acquire LOCK_EX with a 5-second timeout using LOCK_NB polling.
-    Raises ConfigLockTimeout on expiry.
+    Raises ConfigLockTimeoutError on expiry.
     """
     deadline = time.monotonic() + _LOCK_TIMEOUT_S
     while True:
@@ -144,7 +144,7 @@ def _acquire_exclusive_lock(fd: int, path: Path) -> None:
         except BlockingIOError:
             pass
         if time.monotonic() >= deadline:
-            raise ConfigLockTimeout(
+            raise ConfigLockTimeoutError(
                 f"Could not acquire LOCK_EX on {path} within {_LOCK_TIMEOUT_S}s"
             )
         time.sleep(_LOCK_SLEEP_S)
@@ -158,7 +158,7 @@ def read(path: Path) -> tuple[str, str]:
     """
     Acquire LOCK_SH, read file, return (content, sha256_checksum).
     """
-    with open(path, "r") as fh:
+    with open(path) as fh:
         fcntl.flock(fh.fileno(), fcntl.LOCK_SH)
         try:
             content = fh.read()
@@ -174,9 +174,9 @@ def write(path: Path, expected_checksum: str, new_content: str) -> tuple[str, in
     verify checksum, write new content, return (new_checksum, 200).
 
     Raises:
-        ConfigLockTimeout     — could not acquire lock in time (HTTP 503)
-        ConfigInodeChanged    — inode swapped during lock wait (HTTP 409)
-        ConfigChecksumMismatch — stale expected_checksum (HTTP 409)
+        ConfigLockTimeoutError     — could not acquire lock in time (HTTP 503)
+        ConfigInodeChangedError    — inode swapped during lock wait (HTTP 409)
+        ConfigChecksumMismatchError — stale expected_checksum (HTTP 409)
     """
     sentinel = _sentinel_path(path)
 
@@ -208,7 +208,7 @@ def write(path: Path, expected_checksum: str, new_content: str) -> tuple[str, in
                 inode_after = None
 
             if inode_before != inode_after:
-                raise ConfigInodeChanged(
+                raise ConfigInodeChangedError(
                     f"Inode changed for {path} during lock acquisition "
                     f"(before={inode_before}, after={inode_after})"
                 )
@@ -217,7 +217,7 @@ def write(path: Path, expected_checksum: str, new_content: str) -> tuple[str, in
             content = fh.read()
             current_checksum = _sha256(content)
             if current_checksum != expected_checksum:
-                raise ConfigChecksumMismatch(
+                raise ConfigChecksumMismatchError(
                     f"Checksum mismatch for {path}: "
                     f"expected={expected_checksum!r}, current={current_checksum!r}"
                 )

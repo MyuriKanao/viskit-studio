@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import base64
-from typing import Any
 from unittest.mock import MagicMock
 
 import httpx
 import pytest
 import respx
 
-import services.providers.cost as cost_mod
 from services.providers.base import ImageEdit, ImageEditResponse
 from services.providers.openai_compatible import OpenAICompatibleAdapter
 

@@ -27,9 +27,9 @@ from __future__ import annotations
 import os
 import sys
 from decimal import Decimal
+from typing import Any
 
 import psycopg
-
 
 # ---------------------------------------------------------------------------
 # Fixture definitions — match demo/dashboard.jsx DASHBOARD_KITS
@@ -41,7 +41,7 @@ SYSTEM_PASSWORD_HASH = "$2b$12$SEED_FIXTURE_PLACEHOLDER_HASH_FOR_FIXTURE_ONLY"
 WORKBENCH_NAME = "dashboard-fixture-wb"
 
 # (sku, name, category, price, brand, locale, status, score, brand_color_hex, style_prompt)
-KITS: list[tuple] = [
+KITS: list[tuple[Any, ...]] = [
     (
         "NEW001",
         "云感针织开衫",
@@ -148,7 +148,7 @@ def _ensure_system_user(cur: psycopg.Cursor) -> int:
     cur.execute("SELECT id FROM users WHERE username = %s", (SYSTEM_USERNAME,))
     row = cur.fetchone()
     assert row is not None
-    return row[0]
+    return int(row[0])
 
 
 def _ensure_workbench(cur: psycopg.Cursor, owner_id: int) -> int:
@@ -159,7 +159,7 @@ def _ensure_workbench(cur: psycopg.Cursor, owner_id: int) -> int:
     )
     row = cur.fetchone()
     if row:
-        return row[0]
+        return int(row[0])
     cur.execute(
         """
         INSERT INTO workbenches (name, owner_user_id)
@@ -170,7 +170,7 @@ def _ensure_workbench(cur: psycopg.Cursor, owner_id: int) -> int:
     )
     row = cur.fetchone()
     assert row is not None
-    return row[0]
+    return int(row[0])
 
 
 def _ensure_product_catalog(
@@ -195,7 +195,7 @@ def _ensure_product_catalog(
     cur.execute("SELECT id FROM product_catalogs WHERE sku = %s", (sku,))
     row = cur.fetchone()
     assert row is not None
-    return row[0]
+    return int(row[0])
 
 
 def _ensure_marketing_kit(
@@ -214,7 +214,7 @@ def _ensure_marketing_kit(
     )
     row = cur.fetchone()
     if row:
-        return row[0]
+        return int(row[0])
     cur.execute(
         """
         INSERT INTO marketing_kits
@@ -226,7 +226,7 @@ def _ensure_marketing_kit(
     )
     row = cur.fetchone()
     assert row is not None
-    return row[0]
+    return int(row[0])
 
 
 def _ensure_hero_images(

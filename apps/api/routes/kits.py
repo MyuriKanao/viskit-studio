@@ -14,7 +14,7 @@ import json
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -270,9 +270,9 @@ class KitListResponse(BaseModel):
 
 @router.get("", response_model=KitListResponse)
 def list_kits(
+    session: Annotated[Session, Depends(get_session)],
     recent: bool = Query(default=False),
     limit: int = Query(default=6, ge=1, le=50),
-    session: Session = Depends(get_session),
 ) -> KitListResponse:
     """Return the latest ``limit`` kits joined with their product catalog row.
 

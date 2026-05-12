@@ -17,9 +17,9 @@ from fastapi.testclient import TestClient
 
 from apps.api.lib import config_io
 from apps.api.lib.config_io import (
-    ConfigChecksumMismatch,
-    ConfigInodeChanged,
-    ConfigLockTimeout,
+    ConfigChecksumMismatchError,
+    ConfigInodeChangedError,
+    ConfigLockTimeoutError,
 )
 from apps.api.main import app
 
@@ -64,7 +64,7 @@ def test_save_endpoints_checksum_mismatch(
     tmp_config: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def _raise(*args, **kwargs):  # type: ignore[no-untyped-def]
-        raise ConfigChecksumMismatch("stale")
+        raise ConfigChecksumMismatchError("stale")
 
     monkeypatch.setattr(config_io, "write", _raise)
     with TestClient(app) as c:
@@ -89,7 +89,7 @@ def test_save_endpoints_inode_changed(
     tmp_config: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def _raise(*args, **kwargs):  # type: ignore[no-untyped-def]
-        raise ConfigInodeChanged("inode swap")
+        raise ConfigInodeChangedError("inode swap")
 
     monkeypatch.setattr(config_io, "write", _raise)
     with TestClient(app) as c:
@@ -112,7 +112,7 @@ def test_save_endpoints_lock_timeout(
     tmp_config: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def _raise(*args, **kwargs):  # type: ignore[no-untyped-def]
-        raise ConfigLockTimeout("timeout")
+        raise ConfigLockTimeoutError("timeout")
 
     monkeypatch.setattr(config_io, "write", _raise)
     with TestClient(app) as c:

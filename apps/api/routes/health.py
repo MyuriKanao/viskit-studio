@@ -9,8 +9,8 @@ from fastapi.responses import JSONResponse
 
 from apps.api.lib.db import ping_postgres
 from apps.api.lib.milvus_client import ping_milvus
-from apps.api.lib.redis_client import ping_redis
 from apps.api.lib.minio_client import ping_minio
+from apps.api.lib.redis_client import ping_redis
 
 router = APIRouter()
 

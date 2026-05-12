@@ -22,9 +22,9 @@ from pydantic import BaseModel
 
 from apps.api.lib import config_io
 from apps.api.lib.config_io import (
-    ConfigChecksumMismatch,
-    ConfigInodeChanged,
-    ConfigLockTimeout,
+    ConfigChecksumMismatchError,
+    ConfigInodeChangedError,
+    ConfigLockTimeoutError,
 )
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
@@ -95,13 +95,13 @@ def save_endpoints(payload: SaveEndpointsRequest) -> SaveEndpointsResponse:
         new_sha, _status = config_io.write(
             path, payload.expected_sha256, payload.new_yaml
         )
-    except ConfigLockTimeout as exc:
+    except ConfigLockTimeoutError as exc:
         raise HTTPException(
             status_code=503,
             detail={"code": exc.error_code, "retry_after_s": exc.retry_after},
             headers={"Retry-After": str(exc.retry_after)},
         ) from exc
-    except ConfigChecksumMismatch as exc:
+    except ConfigChecksumMismatchError as exc:
         current_yaml, current_sha = config_io.read(path)
         raise HTTPException(
             status_code=409,
@@ -111,7 +111,7 @@ def save_endpoints(payload: SaveEndpointsRequest) -> SaveEndpointsResponse:
                 "current_sha256": current_sha,
             },
         ) from exc
-    except ConfigInodeChanged as exc:
+    except ConfigInodeChangedError as exc:
         current_yaml, _ = config_io.read(path)
         raise HTTPException(
             status_code=409,

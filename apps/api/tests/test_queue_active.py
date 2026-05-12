@@ -68,7 +68,13 @@ def test_queue_active_two_kits(client_with_bus: TestClient) -> None:
     for entry in body:
         assert isinstance(entry["stages"], list)
         assert len(entry["stages"]) >= 1
-        assert entry["current_stage"] in {"preflight", "enqueued", "in_progress", "color_locked", "done"}
+        assert entry["current_stage"] in {
+            "preflight",
+            "enqueued",
+            "in_progress",
+            "color_locked",
+            "done",
+        }
         assert isinstance(entry["eta_ms"], int)
 
 

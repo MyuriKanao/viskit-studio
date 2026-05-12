@@ -17,7 +17,6 @@ from services.editor.inpaint_text import inpaint_region
 from services.editor.types import MaskBox
 from tests.editor.conftest import FakeImageEdit
 
-
 # ---------------------------------------------------------------------------
 # Minimal FakeRegistry (dict-backed, .get() method)
 # ---------------------------------------------------------------------------

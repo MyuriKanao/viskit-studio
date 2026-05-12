@@ -17,7 +17,6 @@ import psycopg
 from minio import Minio
 from minio.error import S3Error
 
-
 KIT_ID = "sample-yungan-knit-cardigan"
 BUCKET = "aishop-kits"
 PREFIX = f"{KIT_ID}/"
@@ -144,7 +143,7 @@ def main() -> None:
         detail_paths: list[str] = []
 
         # Upload hero images (32x32 placeholders)
-        for name, color in zip(HERO_NAMES, HERO_COLORS):
+        for name, color in zip(HERO_NAMES, HERO_COLORS, strict=True):
             png = make_solid_png(32, 32, *color)
             obj = f"{PREFIX}{name}.png"
             upload_png(minio, BUCKET, obj, png)
@@ -152,7 +151,7 @@ def main() -> None:
             print(f"  uploaded {obj}")
 
         # Upload detail images (32x48 placeholders)
-        for name, color in zip(DETAIL_NAMES, DETAIL_COLORS):
+        for name, color in zip(DETAIL_NAMES, DETAIL_COLORS, strict=True):
             png = make_solid_png(32, 48, *color)
             obj = f"{PREFIX}{name}.png"
             upload_png(minio, BUCKET, obj, png)

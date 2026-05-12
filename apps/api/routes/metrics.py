@@ -9,7 +9,8 @@ bucket (Mon-Sun) along with 12-week sparkline arrays for kits/compliance/cost.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -67,10 +68,10 @@ def _twelve_week_starts(today: date) -> list[date]:
 
 @router.get("/weekly", response_model=WeeklyMetricsResponse)
 def get_weekly_metrics(
-    session: Session = Depends(get_session),
+    session: Annotated[Session, Depends(get_session)],
 ) -> WeeklyMetricsResponse:
     """Aggregate live metrics — current-ISO-week kits + 12-week sparklines."""
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     week_start = _iso_week_start(today)
     week_end_exclusive = week_start + timedelta(days=7)
     month_start = _month_start(today)

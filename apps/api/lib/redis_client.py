@@ -30,5 +30,5 @@ async def ping_redis(timeout: float = 2.0) -> str:
 
     try:
         return await asyncio.wait_for(_check(), timeout=timeout)
-    except (asyncio.TimeoutError, Exception):
+    except (TimeoutError, Exception):
         return "disconnected"

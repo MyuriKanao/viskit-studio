@@ -8,7 +8,7 @@ implementing the minimal ``Session.execute`` surface the route consumes.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 
 from apps.api.lib.db import get_session
 from apps.api.main import app
-
 
 # ---------------------------------------------------------------------------
 # Minimal SQLAlchemy Session stub
@@ -115,7 +114,7 @@ def _iso_week_monday(today: date) -> date:
     return today - timedelta(days=today.weekday())
 
 
-_today = datetime.now(timezone.utc).date()
+_today = datetime.now(UTC).date()
 _this_monday = _iso_week_monday(_today)
 
 _SEEDED_PLAN: list[tuple[Any, list[Any] | None]] = [

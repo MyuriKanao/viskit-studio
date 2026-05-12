@@ -31,5 +31,5 @@ async def ping_milvus(timeout: float = 2.0) -> str:
     loop = asyncio.get_event_loop()
     try:
         return await asyncio.wait_for(loop.run_in_executor(None, _check), timeout=timeout)
-    except (asyncio.TimeoutError, Exception):
+    except (TimeoutError, Exception):
         return "disconnected"

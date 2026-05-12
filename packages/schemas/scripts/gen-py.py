@@ -1,7 +1,8 @@
-import subprocess, sys
+import subprocess
 from pathlib import Path
 
-def main():
+
+def main() -> None:
     here = Path(__file__).parent.parent
     subprocess.run(
         [

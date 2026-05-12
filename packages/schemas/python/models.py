@@ -5,22 +5,21 @@ Source of truth: packages/schemas/openapi.yaml
 """
 from __future__ import annotations
 
-from enum import Enum
-from typing import Any, List, Optional
+from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
 
-class LocaleEnum(str, Enum):
+class LocaleEnum(StrEnum):
     zh = "zh"
     en = "en"
 
 
-class MarketingKitStatus(str, Enum):
+class MarketingKitStatus(StrEnum):
     queued = "queued"
     generating = "generating"
     ready = "ready"
@@ -28,7 +27,7 @@ class MarketingKitStatus(str, Enum):
     failed = "failed"
 
 
-class ModuleIdEnum(str, Enum):
+class ModuleIdEnum(StrEnum):
     M1 = "M1"
     M2 = "M2"
     M3 = "M3"
@@ -40,12 +39,12 @@ class ModuleIdEnum(str, Enum):
     M9 = "M9"
 
 
-class ProtocolEnum(str, Enum):
+class ProtocolEnum(StrEnum):
     openai_compatible = "openai_compatible"
     anthropic_compatible = "anthropic_compatible"
 
 
-class RoleEnum(str, Enum):
+class RoleEnum(StrEnum):
     vision = "vision"
     llm = "llm"
     image_gen = "image_gen"
@@ -62,7 +61,7 @@ class Workbench(BaseModel):
     id: str = Field(..., description="UUID")
     name: str
     owner_user_id: str = Field(..., description="UUID")
-    config_path: Optional[str] = None
+    config_path: str | None = None
     created_at: str = Field(..., description="ISO 8601 date-time")
 
 
@@ -71,9 +70,9 @@ class ProductCatalog(BaseModel):
     workbench_id: str = Field(..., description="UUID")
     sku: str
     name: str
-    category: Optional[str] = None
-    price: Optional[float] = None
-    brand: Optional[str] = None
+    category: str | None = None
+    price: float | None = None
+    brand: str | None = None
     locale: LocaleEnum
 
 
@@ -81,12 +80,12 @@ class MarketingKit(BaseModel):
     id: str = Field(..., description="UUID")
     product_catalog_id: str = Field(..., description="UUID")
     status: MarketingKitStatus
-    score: Optional[int] = Field(None, ge=0, le=100)
+    score: int | None = Field(None, ge=0, le=100)
     locale: LocaleEnum
     brand_color_hex: str = Field(..., pattern=r'^#[0-9A-Fa-f]{6}$')
     style_prompt: str = Field(..., min_length=1)
     created_at: str = Field(..., description="ISO 8601 date-time")
-    updated_at: Optional[str] = None
+    updated_at: str | None = None
 
 
 class CopywritingSpec(BaseModel):
@@ -102,9 +101,9 @@ class HeroImage(BaseModel):
     marketing_kit_id: str = Field(..., description="UUID")
     slot_index: int = Field(..., ge=1, le=5)
     png_path: str
-    template_id: Optional[str] = None
+    template_id: str | None = None
     prompt: str
-    brand_color_hex: Optional[str] = None
+    brand_color_hex: str | None = None
 
 
 class DetailImage(BaseModel):
@@ -113,24 +112,24 @@ class DetailImage(BaseModel):
     module_id: ModuleIdEnum
     png_path: str
     prompt: str
-    brand_color_hex: Optional[str] = None
+    brand_color_hex: str | None = None
 
 
 class BestsellerCorpus(BaseModel):
     id: str = Field(..., description="UUID")
     image_path: str
-    dense_vec: Optional[List[float]] = None
-    sparse_vec: Optional[dict[str, Any]] = None
+    dense_vec: list[float] | None = None
+    sparse_vec: dict[str, Any] | None = None
     sales: int
     category: str
     locale: LocaleEnum
 
 
 class ViolationItem(BaseModel):
-    rule_id: Optional[str] = None
-    severity: Optional[str] = None
-    location: Optional[str] = None
-    suggestion: Optional[str] = None
+    rule_id: str | None = None
+    severity: str | None = None
+    location: str | None = None
+    suggestion: str | None = None
 
 
 class ComplianceCheck(BaseModel):
@@ -138,7 +137,7 @@ class ComplianceCheck(BaseModel):
     copywriting_spec_id: str = Field(..., description="UUID")
     ruleset_id: str
     score: int = Field(..., ge=0, le=100)
-    violations: List[ViolationItem]
+    violations: list[ViolationItem]
     advisory: bool = Field(default=False)
 
 
@@ -146,21 +145,21 @@ class QualityGate(BaseModel):
     id: str = Field(..., description="UUID")
     marketing_kit_id: str = Field(..., description="UUID")
     threshold: int = Field(default=95)
-    human_edit_seconds: Optional[int] = None
-    passed_at: Optional[str] = None
+    human_edit_seconds: int | None = None
+    passed_at: str | None = None
 
 
 class EditItem(BaseModel):
-    index: Optional[int] = None
-    original: Optional[str] = None
-    new: Optional[str] = None
+    index: int | None = None
+    original: str | None = None
+    new: str | None = None
 
 
 class TextEditor(BaseModel):
     id: str = Field(..., description="UUID")
     image_id: str = Field(..., description="UUID")
-    edits: List[EditItem]
-    inpaint_model: Optional[str] = None
+    edits: list[EditItem]
+    inpaint_model: str | None = None
 
 
 class ModelProviderAdapter(BaseModel):

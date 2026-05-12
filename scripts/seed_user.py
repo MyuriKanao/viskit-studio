@@ -16,7 +16,6 @@ import sys
 import bcrypt
 import psycopg
 
-
 USERNAME = "aishop_local"
 WORK_FACTOR = 12
 
@@ -29,7 +28,7 @@ def parse_args() -> argparse.Namespace:
 
 def get_password(args: argparse.Namespace) -> str:
     if args.password:
-        return args.password
+        return str(args.password)
     return getpass.getpass("Password for aishop_local: ")
 
 
