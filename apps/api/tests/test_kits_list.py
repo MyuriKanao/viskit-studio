@@ -1,7 +1,9 @@
-"""Tests for GET /api/kits?recent=true — Dashboard kit cards.
+"""Tests for GET /api/kits — Dashboard kit cards (recent=true) + Catalog filters.
 
 The route runs four queries per request (COUNT + main JOIN + per-kit hero
 JOIN + per-kit detail JOIN), so the FakeSession replays a deterministic plan.
+The Catalog filter coverage uses the same shim and asserts the SQL fragments
+that the route emits when filter/sort/paginate params are present.
 """
 
 from __future__ import annotations
@@ -37,8 +39,12 @@ class _Row:
 class FakeSession:
     def __init__(self, plan: list[tuple[Any, list[Any] | None]]) -> None:
         self._plan = list(plan)
+        self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def execute(self, stmt: Any, params: dict[str, Any] | None = None) -> _FakeResult:
+        # Record the rendered SQL + bound params so Catalog filter tests can
+        # assert WHERE/ORDER BY/LIMIT fragments without booting Postgres.
+        self.calls.append((str(stmt), dict(params or {})))
         if not self._plan:
             return _FakeResult(scalar_value=None, rows=[])
         scalar, rows = self._plan.pop(0)
@@ -145,7 +151,7 @@ def test_kits_list_seeded(client_with_session: TestClient) -> None:
 
 
 def test_kits_list_limit_validation() -> None:
-    """``limit`` must be in [1, 50]; 0 or 100 should 422."""
+    """``limit`` must be in [1, 100] (EPIC-8 bumped the cap from 50)."""
 
     def _override() -> Iterator[FakeSession]:
         yield FakeSession([])
@@ -154,6 +160,103 @@ def test_kits_list_limit_validation() -> None:
     try:
         with TestClient(app) as c:
             assert c.get("/api/kits?limit=0").status_code == 422
-            assert c.get("/api/kits?limit=51").status_code == 422
+            assert c.get("/api/kits?limit=101").status_code == 422
+            # Boundary: 100 must validate (route returns 200 with empty body
+            # because the fake plan is exhausted).
+            assert c.get("/api/kits?limit=100").status_code == 200
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+
+# ---------------------------------------------------------------------------
+# EPIC-8 Catalog filter coverage
+# ---------------------------------------------------------------------------
+
+# Mirrors plan AC #3: filtering by `compliance ≥ 80` and `status=ready` must
+# reach the SQL.  We don't run real Postgres — we assert the bound params and
+# rendered SQL fragments.
+_FILTER_PLAN: list[tuple[Any, list[Any] | None]] = [
+    (1, None),  # COUNT
+    (
+        None,
+        [
+            _Row(
+                id=7,
+                status="ready",
+                score=88,
+                locale="zh",
+                updated_at=None,
+                sku="ZHKIT",
+                name="过滤命中",
+                category="美妆",
+            )
+        ],
+    ),
+    (None, []),  # hero
+    (None, []),  # detail
+]
+
+
+def test_kits_list_filters_min_score_and_status() -> None:
+    captured: dict[str, FakeSession] = {}
+
+    def _override() -> Iterator[FakeSession]:
+        s = FakeSession(_FILTER_PLAN)
+        captured["session"] = s
+        yield s
+
+    app.dependency_overrides[get_session] = _override
+    try:
+        with TestClient(app) as c:
+            response = c.get(
+                "/api/kits?status=ready&min_score=80&locale=zh"
+                "&category=%E7%BE%8E%E5%A6%86&sort=score&order=desc"
+                "&limit=20&offset=10"
+            )
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert body["total"] == 1
+            assert body["items"][0]["category"] == "美妆"
+
+            # First call is COUNT, second is the SELECT — both must carry the
+            # whole WHERE clause and bound params.
+            count_sql, count_params = captured["session"].calls[0]
+            select_sql, select_params = captured["session"].calls[1]
+            for sql in (count_sql, select_sql):
+                assert "mk.status = :status" in sql
+                assert "mk.score >= :min_score" in sql
+                assert "mk.locale = :locale" in sql
+                assert "pc.category = :category" in sql
+            # SELECT additionally carries ORDER BY + LIMIT/OFFSET.
+            assert "ORDER BY mk.score DESC NULLS LAST, mk.id DESC" in select_sql
+            assert "LIMIT :limit OFFSET :offset" in select_sql
+            for binding in (count_params, select_params):
+                assert binding["status"] == "ready"
+                assert binding["min_score"] == 80
+                assert binding["locale"] == "zh"
+                assert binding["category"] == "美妆"
+            assert select_params["limit"] == 20
+            assert select_params["offset"] == 10
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+
+def test_kits_list_no_filters_keeps_dashboard_call_shape() -> None:
+    """``?recent=true&limit=6`` (Dashboard's call) must still 200 + emit no
+    WHERE filters, preserving the EPIC-7 contract."""
+    captured: dict[str, FakeSession] = {}
+
+    def _override() -> Iterator[FakeSession]:
+        s = FakeSession(_EMPTY_PLAN)
+        captured["session"] = s
+        yield s
+
+    app.dependency_overrides[get_session] = _override
+    try:
+        with TestClient(app) as c:
+            response = c.get("/api/kits?recent=true&limit=6")
+            assert response.status_code == 200, response.text
+            count_sql, _ = captured["session"].calls[0]
+            assert "WHERE" not in count_sql.upper().replace("WHERE.id", "")
     finally:
         app.dependency_overrides.pop(get_session, None)

@@ -17,6 +17,8 @@ export interface KitListItem {
   status: string;
   score: number | null;
   locale: string | null;
+  category?: string | null;
+  updated_at?: string | null;
   thumbs: (string | null)[];
 }
 

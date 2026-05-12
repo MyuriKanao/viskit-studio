@@ -14,7 +14,7 @@ import json
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -260,6 +260,8 @@ class KitListItem(BaseModel):
     status: str
     score: int | None
     locale: str | None
+    category: str | None = None
+    updated_at: str | None = None
     thumbs: list[str | None]
 
 
@@ -268,39 +270,81 @@ class KitListResponse(BaseModel):
     total: int
 
 
+# Whitelisted sort columns — values are interpolated into SQL, so the keys
+# MUST match the Literal type on the `sort` query param exactly.
+_SORT_COLUMNS: dict[str, str] = {
+    "created_at": "mk.created_at",
+    "updated_at": "mk.updated_at",
+    "score": "mk.score",
+}
+
+
 @router.get("", response_model=KitListResponse)
 def list_kits(
     session: Annotated[Session, Depends(get_session)],
     recent: bool = Query(default=False),
-    limit: int = Query(default=6, ge=1, le=50),
+    limit: int = Query(default=6, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    status: str | None = Query(default=None, max_length=32),
+    locale: str | None = Query(default=None, max_length=8),
+    min_score: int | None = Query(default=None, ge=0, le=100),
+    category: str | None = Query(default=None, max_length=64),
+    sort: Literal["created_at", "updated_at", "score"] = Query(default="created_at"),
+    order: Literal["asc", "desc"] = Query(default="desc"),
 ) -> KitListResponse:
-    """Return the latest ``limit`` kits joined with their product catalog row.
+    """Return kits joined with their product catalog row, paginated & filtered.
 
     ``thumbs`` is the concatenation of up-to-5 hero png_paths (slot 1..5) and
     up-to-9 detail png_paths (M1..M9) — 14 slots total, NULL-padded for any
     missing rows.  Callers render placeholder cells for NULL entries.
 
-    ``recent`` is currently advisory; the route always sorts by ``created_at
-    DESC``.  The flag exists so the frontend can call ``/api/kits?recent=true``
-    without a 404 from a path mismatch.
+    ``recent`` is advisory; sort defaults to ``created_at DESC`` to preserve
+    the EPIC-7 Dashboard call shape (``?recent=true&limit=6``).  Catalog
+    (EPIC-8) passes ``offset``, ``status``, ``locale``, ``min_score``,
+    ``category``, ``sort``, ``order`` for filtered/paginated views.
     """
-    del recent  # always sorted by created_at DESC; flag is advisory for now
+    del recent  # advisory for back-compat; ordering is driven by `sort`/`order`
+
+    filters: list[str] = []
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    if status is not None:
+        filters.append("mk.status = :status")
+        params["status"] = status
+    if locale is not None:
+        filters.append("mk.locale = :locale")
+        params["locale"] = locale
+    if min_score is not None:
+        filters.append("mk.score >= :min_score")
+        params["min_score"] = min_score
+    if category is not None:
+        filters.append("pc.category = :category")
+        params["category"] = category
+
+    where_clause = "WHERE " + " AND ".join(filters) if filters else ""
+    sort_col = _SORT_COLUMNS[sort]
+    order_sql = "ASC" if order == "asc" else "DESC"
 
     total_row = session.execute(
-        text("SELECT COUNT(*) FROM marketing_kits")
+        text(
+            "SELECT COUNT(*) FROM marketing_kits mk"
+            " JOIN product_catalogs pc ON pc.id = mk.product_catalog_id"
+            f" {where_clause}"
+        ),
+        params,
     ).scalar()
     total = int(total_row or 0)
 
     kit_rows = session.execute(
         text(
-            "SELECT mk.id, mk.status, mk.score, mk.locale,"
-            " pc.sku, pc.name"
+            "SELECT mk.id, mk.status, mk.score, mk.locale, mk.updated_at,"
+            " pc.sku, pc.name, pc.category"
             " FROM marketing_kits mk"
             " JOIN product_catalogs pc ON pc.id = mk.product_catalog_id"
-            " ORDER BY mk.created_at DESC"
-            " LIMIT :limit"
+            f" {where_clause}"
+            f" ORDER BY {sort_col} {order_sql} NULLS LAST, mk.id DESC"
+            " LIMIT :limit OFFSET :offset"
         ),
-        {"limit": limit},
+        params,
     ).all()
 
     items: list[KitListItem] = []
@@ -334,6 +378,7 @@ def list_kits(
             detail_map.get(f"M{i}") for i in range(1, 10)
         ]
 
+        updated_at = getattr(row, "updated_at", None)
         items.append(
             KitListItem(
                 id=int(row.id),
@@ -343,6 +388,8 @@ def list_kits(
                 status=row.status,
                 score=int(row.score) if row.score is not None else None,
                 locale=row.locale,
+                category=getattr(row, "category", None),
+                updated_at=updated_at.isoformat() if updated_at is not None else None,
                 thumbs=hero_thumbs + detail_thumbs,
             )
         )

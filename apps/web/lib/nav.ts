@@ -38,8 +38,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'sidebar.catalog',
     href: '/catalog',
     icon: FolderOpen,
-    enabled: false,
-    comingInEpic: 8,
+    enabled: true,
   },
   {
     id: 'newKit',
