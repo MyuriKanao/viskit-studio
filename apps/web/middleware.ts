@@ -26,10 +26,11 @@ function resolveLocale(request: NextRequest): string {
 }
 
 function rewriteUrl(request: NextRequest, locale: string, page: string): NextResponse {
-  const prefix = locale === DEFAULT_LOCALE ? '' : `/${locale}`;
-  const target = `${prefix}/${page}`;
+  // Internal rewrite targets must include the [locale] segment to resolve to
+  // app/[locale]/<page>/page.tsx. next-intl's localePrefix='as-needed' only
+  // governs the public/canonical URL form, not internal rewrites.
   const url = request.nextUrl.clone();
-  url.pathname = target;
+  url.pathname = `/${locale}/${page}`;
   return NextResponse.rewrite(url);
 }
 
