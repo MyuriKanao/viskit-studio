@@ -55,8 +55,11 @@ test.describe('catalog page — table view', () => {
     await page.goto('/zh/catalog');
     await page.getByTestId('catalog-grid').waitFor();
 
-    // Switch to table view
-    await page.getByTestId('view-toggle-table').click();
+    // Switch to table view. Force-click because the 240px fixed sidebar /
+    // sticky topbar can intercept pointer events at the chromium-mobile
+    // viewport (375px wide); the test asserts the state change, not the
+    // visual hit-target. See settings.spec.ts:44 for the same pattern.
+    await page.getByTestId('view-toggle-table').click({ force: true });
     await expect(page.getByTestId('catalog-table')).toBeVisible();
 
     // AC#1: no h-scroll
@@ -77,7 +80,8 @@ test.describe('catalog page — table view', () => {
 
     await page.goto('/zh/catalog');
     await page.getByTestId('catalog-grid').waitFor();
-    await page.getByTestId('view-toggle-table').click();
+    // Force-click for chromium-mobile viewport overlap; see comment above.
+    await page.getByTestId('view-toggle-table').click({ force: true });
     await page.getByTestId('catalog-table').waitFor();
 
     // Advisory badge visible for en items (text: "仅供参考")
