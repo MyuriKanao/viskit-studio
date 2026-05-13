@@ -280,5 +280,22 @@
     "providers_card_title": "Providers",
     "endpoints_count_label": "Configured endpoints",
     "manage_providers": "Manage providers"
+  },
+  "templates": {
+    "page_title": "Templates",
+    "summary_pattern": "{count} templates",
+    "loading": "Loading…",
+    "load_error": "Failed to load templates",
+    "empty_title": "No templates yet",
+    "empty_hint": "Templates will appear here in a future release.",
+    "category_hero": "Hero",
+    "category_detail_m3": "Detail M3",
+    "category_lifestyle": "Lifestyle",
+    "category_short_video": "Short video",
+    "category_amazon_hero": "Amazon hero",
+    "locale_zh": "ZH",
+    "locale_en": "EN",
+    "thumbnail_placeholder": "No preview",
+    "tags_more_pattern": "+{count} more"
   }
 }

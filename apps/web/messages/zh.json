@@ -280,5 +280,22 @@
     "providers_card_title": "服务商",
     "endpoints_count_label": "已配置端点",
     "manage_providers": "管理服务商"
+  },
+  "templates": {
+    "page_title": "模板库",
+    "summary_pattern": "共 {count} 个模板",
+    "loading": "加载中…",
+    "load_error": "加载失败",
+    "empty_title": "暂无模板",
+    "empty_hint": "模板将在后续版本中提供。",
+    "category_hero": "主图",
+    "category_detail_m3": "详情 M3",
+    "category_lifestyle": "场景图",
+    "category_short_video": "短视频",
+    "category_amazon_hero": "Amazon 主图",
+    "locale_zh": "中文",
+    "locale_en": "英文",
+    "thumbnail_placeholder": "暂无预览",
+    "tags_more_pattern": "+{count} 个"
   }
 }

@@ -60,8 +60,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'sidebar.templates',
     href: '/templates',
     icon: Image,
-    enabled: false,
-    comingInEpic: 8,
+    enabled: true,
   },
   {
     id: 'queue',

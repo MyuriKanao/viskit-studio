@@ -1,0 +1,82 @@
+[
+  {
+    "id": "hero-taobao-skincare",
+    "name": "淘宝主图 — 护肤品",
+    "name_en": "Taobao Hero — Skincare",
+    "category": "hero",
+    "tags": ["taobao", "tmall"],
+    "locale": "zh",
+    "description": "适合护肤品类目的淘宝主图模板，白底干净，突出产品细节。",
+    "thumbnail_url": null
+  },
+  {
+    "id": "hero-tmall-fashion",
+    "name": "天猫主图 — 服饰",
+    "name_en": "Tmall Hero — Fashion",
+    "category": "hero",
+    "tags": ["tmall", "taobao"],
+    "locale": "zh",
+    "description": "适合服饰品类的天猫主图模板，展示整体搭配效果。",
+    "thumbnail_url": null
+  },
+  {
+    "id": "detail-m3-electronics",
+    "name": "详情 M3 — 数码电器",
+    "name_en": "Detail M3 — Electronics",
+    "category": "detail_m3",
+    "tags": ["taobao", "tmall"],
+    "locale": "zh",
+    "description": "数码电器类目详情页 M3 模块，强调参数对比与卖点文案。",
+    "thumbnail_url": null
+  },
+  {
+    "id": "detail-m3-home-decor",
+    "name": "详情 M3 — 家居",
+    "name_en": null,
+    "category": "detail_m3",
+    "tags": ["taobao"],
+    "locale": "zh",
+    "description": "家居品类详情页 M3 模块，暖色调氛围渲染。",
+    "thumbnail_url": null
+  },
+  {
+    "id": "lifestyle-food-en",
+    "name": "Lifestyle — Food",
+    "name_en": "Lifestyle — Food",
+    "category": "lifestyle",
+    "tags": ["amazon"],
+    "locale": "en",
+    "description": "Lifestyle photography template for food and beverage products targeting Amazon US.",
+    "thumbnail_url": null
+  },
+  {
+    "id": "short-video-douyin-beauty",
+    "name": "短视频 — 美妆开箱",
+    "name_en": "Short Video — Beauty Unboxing",
+    "category": "short_video",
+    "tags": ["douyin", "short-video"],
+    "locale": "zh",
+    "description": "美妆品类竖版短视频封面模板，适配抖音 9:16 规格。",
+    "thumbnail_url": null
+  },
+  {
+    "id": "short-video-douyin-food",
+    "name": "短视频 — 食品场景",
+    "name_en": null,
+    "category": "short_video",
+    "tags": ["douyin", "short-video"],
+    "locale": "zh",
+    "description": "食品类目短视频封面，突出场景感与食欲色调。",
+    "thumbnail_url": null
+  },
+  {
+    "id": "amazon-hero-home-en",
+    "name": "Amazon Hero — Home & Kitchen",
+    "name_en": "Amazon Hero — Home & Kitchen",
+    "category": "amazon_hero",
+    "tags": ["amazon"],
+    "locale": "en",
+    "description": "Main image template for Home & Kitchen category on Amazon, white-background compliant.",
+    "thumbnail_url": null
+  }
+]

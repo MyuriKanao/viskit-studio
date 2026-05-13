@@ -12,6 +12,7 @@
     "gen:api": "node scripts/gen-api.mjs",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium",
+    "test": "vitest run",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest"
   },
