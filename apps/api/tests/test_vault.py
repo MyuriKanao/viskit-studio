@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from services.providers.registry import ProviderConfigError
 from services.retrieval.ingest import IngestError, IngestReport
 
 # ---------------------------------------------------------------------------
@@ -313,3 +314,95 @@ def test_post_vault_ingest_payload_too_large() -> None:
 
     assert resp.status_code == 413, resp.text
     assert resp.json()["detail"]["code"] == "VAULT_PAYLOAD_TOO_LARGE"
+
+
+def test_post_vault_ingest_replace_drops_collection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """mode=replace must reach run_ingest with mode='replace'; report counters echo back."""
+    captured: dict[str, Any] = {}
+
+    def _spy_ingest(**kw: Any) -> IngestReport:
+        captured.update(kw)
+        return IngestReport(
+            total_rows=2,
+            inserted=2,
+            upserted=0,
+            replaced=2,
+            deduplicated=0,
+            recomputed_embeddings=0,
+            locale_counts={"zh": 2},
+        )
+
+    monkeypatch.setattr("apps.api.routes.vault.run_ingest", _spy_ingest)
+
+    original_registry = getattr(app.state, "registry", None)
+    app.state.registry = object()
+    try:
+        with TestClient(app) as c:
+            resp = c.post(
+                "/api/vault/ingest",
+                files={"file": ("data.csv", _MINIMAL_CSV, "text/csv")},
+                data={"mode": "replace"},
+            )
+    finally:
+        app.state.registry = original_registry
+
+    assert resp.status_code == 200, resp.text
+    # Route must propagate mode="replace" verbatim — this is the corpus-wipe path.
+    assert captured["mode"] == "replace"
+    body = resp.json()
+    assert body["replaced"] == 2
+    assert body["inserted"] == 2
+
+
+def test_post_vault_ingest_provider_misconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ProviderConfigError must surface as 503/VAULT_PROVIDER_MISCONFIGURED, not the generic Milvus code."""
+    monkeypatch.setattr(
+        "apps.api.routes.vault.run_ingest",
+        lambda **kw: (_ for _ in ()).throw(
+            ProviderConfigError("ERR-PROV-001", "embedding role unresolved")
+        ),
+    )
+    original_registry = getattr(app.state, "registry", None)
+    app.state.registry = object()
+    try:
+        with TestClient(app) as c:
+            resp = c.post(
+                "/api/vault/ingest",
+                files={"file": ("data.csv", _MINIMAL_CSV, "text/csv")},
+                data={"mode": "upsert"},
+            )
+    finally:
+        app.state.registry = original_registry
+
+    assert resp.status_code == 503, resp.text
+    body = resp.json()
+    assert body["detail"]["code"] == "VAULT_PROVIDER_MISCONFIGURED"
+    assert "ERR-PROV-001" in body["detail"]["message"]
+
+
+def test_get_vault_assets_count_query_fails() -> None:
+    """Data query succeeds but count(*) raises → 503/VAULT_MILVUS_UNAVAILABLE."""
+
+    class _PartialFailClient:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def query(self, **kwargs: Any) -> list[dict[str, Any]]:
+            self.calls += 1
+            # First call (data) succeeds with a single row; second call (count) raises.
+            if "count(*)" in kwargs.get("output_fields", []):
+                raise ConnectionError("count query down")
+            return _SAMPLE_ROWS[:1]
+
+    broken = _PartialFailClient()
+    app.state.milvus_client = broken
+    try:
+        with TestClient(app) as c:
+            resp = c.get("/api/vault/assets")
+    finally:
+        app.state.milvus_client = None
+
+    assert resp.status_code == 503, resp.text
+    assert resp.json()["detail"]["code"] == "VAULT_MILVUS_UNAVAILABLE"
+    # Sanity: both branches were exercised.
+    assert broken.calls == 2

@@ -318,6 +318,8 @@
     "ingest_mode_upsert": "增量更新（推荐）",
     "ingest_mode_append": "追加",
     "ingest_mode_replace": "替换全部",
+    "ingest_replace_warning": "「替换全部」会清空 Milvus aishop_bestsellers 全部数据（新建套包向导 Step 3 检索也读取该 corpus），且无法撤销。请确认后再继续。",
+    "ingest_replace_confirm_label": "请输入「{token}」以确认替换",
     "ingest_submit": "开始导入",
     "ingest_cancel": "取消",
     "ingest_pending": "导入中…",
@@ -331,6 +333,6 @@
     "sales_pattern": "销量 {count}",
     "pagination_prev": "上一页",
     "pagination_next": "下一页",
-    "page_label": "第 {page} 页"
+    "page_label": "第 {page} / {total_pages} 页"
   }
 }

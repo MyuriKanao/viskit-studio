@@ -25,7 +25,19 @@ router = APIRouter(prefix="/api/templates", tags=["templates"])
 
 
 class TemplateSummary(BaseModel):
-    """A single template entry as returned by GET /api/templates."""
+    """A single template entry as returned by GET /api/templates.
+
+    Field contract for ``thumbnail_url``:
+      * ``None`` — no thumbnail; the card renders a translated placeholder.
+      * Absolute URL (``https://…``) — fetched verbatim by the frontend ``<img>``.
+      * Repo-relative path (``/static/templates/...``) — must start with ``/``
+        and resolve under the web app's public asset root.  Any other form
+        (bare filename, relative segment, ``file://``, etc.) is unsupported
+        and reserved for future EPICs.
+
+    EPIC-10 will introduce thumbnail generation; the rule above is the
+    boundary it must respect.
+    """
 
     id: str
     name: str

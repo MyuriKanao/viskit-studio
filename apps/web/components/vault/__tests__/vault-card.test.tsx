@@ -45,7 +45,7 @@ const MESSAGES = {
     sales_pattern: '{count} sold',
     pagination_prev: 'Previous',
     pagination_next: 'Next',
-    page_label: 'Page {page}',
+    page_label: 'Page {page} of {total_pages}',
   },
 };
 

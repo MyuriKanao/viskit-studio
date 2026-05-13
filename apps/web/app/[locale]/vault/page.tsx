@@ -33,6 +33,7 @@ export default function VaultPage() {
   const total = query.data?.total ?? 0;
   const count = items.length;
   const page = Math.floor(offset / PAGE_SIZE) + 1;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   function handleIngestSuccess(report: VaultIngestResponse) {
     setToast({
@@ -127,7 +128,9 @@ export default function VaultPage() {
               >
                 {t('pagination_prev')}
               </button>
-              <span className="font-mono text-xs text-ink-faint">{t('page_label', { page })}</span>
+              <span className="font-mono text-xs text-ink-faint">
+                {t('page_label', { page, total_pages: totalPages })}
+              </span>
               <button
                 type="button"
                 aria-label={t('pagination_next')}

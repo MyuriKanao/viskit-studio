@@ -15,6 +15,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
+from services.providers.registry import ProviderConfigError
 from services.retrieval.filters import FilterSpec, build_expression
 from services.retrieval.ingest import IngestError, IngestReport
 from services.retrieval.ingest import ingest as run_ingest
@@ -257,6 +258,11 @@ async def post_vault_ingest(
         raise HTTPException(
             status_code=400,
             detail={"code": "VAULT_INGEST_INVALID", "message": str(exc)},
+        ) from exc
+    except ProviderConfigError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "VAULT_PROVIDER_MISCONFIGURED", "message": str(exc)},
         ) from exc
     except HTTPException:
         raise

@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,6 +33,8 @@ const MESSAGES = {
     ingest_mode_upsert: 'Upsert (recommended)',
     ingest_mode_append: 'Append',
     ingest_mode_replace: 'Replace all',
+    ingest_replace_warning: 'Replace all wipes the corpus.',
+    ingest_replace_confirm_label: 'Type "{token}" to confirm',
     ingest_submit: 'Start ingest',
     ingest_cancel: 'Cancel',
     ingest_pending: 'Importing…',
@@ -46,7 +48,7 @@ const MESSAGES = {
     sales_pattern: '{count} sold',
     pagination_prev: 'Previous',
     pagination_next: 'Next',
-    page_label: 'Page {page}',
+    page_label: 'Page {page} of {total_pages}',
   },
 };
 
@@ -105,5 +107,48 @@ describe('IngestModal', () => {
 
     // Before submit: not disabled
     expect((submitBtn as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('mode=replace gates submit until the confirm token is typed', () => {
+    renderModal();
+
+    const modeSelect = screen.getByLabelText('Write mode') as HTMLSelectElement;
+    fireEvent.change(modeSelect, { target: { value: 'replace' } });
+
+    const submitBtn = screen.getByRole('button', {
+      name: 'Start ingest',
+    }) as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(true);
+    expect(screen.getByTestId('vault-ingest-replace-gate')).toBeTruthy();
+
+    const confirmInput = screen.getByLabelText('Type "replace" to confirm') as HTMLInputElement;
+    fireEvent.change(confirmInput, { target: { value: 'wrong' } });
+    expect(submitBtn.disabled).toBe(true);
+
+    fireEvent.change(confirmInput, { target: { value: 'replace' } });
+    expect(submitBtn.disabled).toBe(false);
+  });
+
+  it('mode=replace gate clears when switching back to a safe mode', () => {
+    renderModal();
+
+    const modeSelect = screen.getByLabelText('Write mode') as HTMLSelectElement;
+    fireEvent.change(modeSelect, { target: { value: 'replace' } });
+    const confirmInput = screen.getByLabelText('Type "replace" to confirm') as HTMLInputElement;
+    fireEvent.change(confirmInput, { target: { value: 'replace' } });
+
+    // Switch back to upsert — gate disappears, submit enabled.
+    fireEvent.change(modeSelect, { target: { value: 'upsert' } });
+    expect(screen.queryByTestId('vault-ingest-replace-gate')).toBeNull();
+    const submitBtn = screen.getByRole('button', {
+      name: 'Start ingest',
+    }) as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(false);
+
+    // Switch to replace again — gate should be re-armed (confirm cleared).
+    fireEvent.change(modeSelect, { target: { value: 'replace' } });
+    const reInput = screen.getByLabelText('Type "replace" to confirm') as HTMLInputElement;
+    expect(reInput.value).toBe('');
+    expect(submitBtn.disabled).toBe(true);
   });
 });

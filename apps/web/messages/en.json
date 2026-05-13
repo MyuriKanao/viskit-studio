@@ -318,6 +318,8 @@
     "ingest_mode_upsert": "Upsert (recommended)",
     "ingest_mode_append": "Append",
     "ingest_mode_replace": "Replace all",
+    "ingest_replace_warning": "\"Replace all\" wipes the entire Milvus aishop_bestsellers collection (also read by the new-kit wizard's Step 3 retrieval) and cannot be undone.",
+    "ingest_replace_confirm_label": "Type \"{token}\" to confirm",
     "ingest_submit": "Start ingest",
     "ingest_cancel": "Cancel",
     "ingest_pending": "Importing…",
@@ -331,6 +333,6 @@
     "sales_pattern": "{count} sold",
     "pagination_prev": "Previous",
     "pagination_next": "Next",
-    "page_label": "Page {page}"
+    "page_label": "Page {page} of {total_pages}"
   }
 }

@@ -393,3 +393,62 @@ def test_csv_parsing_handles_missing_columns(tmp_path: Path) -> None:
 
     assert report.total_rows == 2
     assert report.locale_counts == {"zh": 0, "en": 0, "other": 2}
+
+
+# ---------------------------------------------------------------------------
+# 8. append + provider mismatch → reject (silent mixed-provider corpus)
+# ---------------------------------------------------------------------------
+
+
+def test_append_mode_rejects_provider_mismatch(tmp_path: Path) -> None:
+    """Append silently mixes providers — reject up-front."""
+    csv_path = _write_csv(
+        tmp_path / "rows.csv",
+        ["img/a.jpg,dress,red,casual,spring,100,red dress,49.0,zh"],
+    )
+    seeded = [
+        {
+            "image_path": "img/old.jpg",
+            "embedding_provider": "openai_compatible@old",
+            "embedding_dim": 8,
+        }
+    ]
+    client = FakeMilvusClient(preseeded=seeded)
+    registry = _FakeRegistry(_FakeEmbedAdapter(provider="openai_compatible@new", dim=8))
+
+    with pytest.raises(IngestError, match="embedding_provider mismatch"):
+        ingest(
+            csv_path,
+            mode="append",
+            registry=registry,
+            milvus_client_factory=_factory(client),
+            output_report_path=tmp_path / "report.json",
+        )
+
+
+def test_upsert_mode_allows_provider_mismatch(tmp_path: Path) -> None:
+    """Upsert reconciles per row (RECOMPUTE_EMBEDDING) — must NOT trip the guard."""
+    csv_path = _write_csv(
+        tmp_path / "rows.csv",
+        ["img/x.jpg,dress,red,casual,spring,100,red dress,49.0,zh"],
+    )
+    seeded = [
+        {
+            "image_path": "img/old.jpg",
+            "embedding_provider": "openai_compatible@old",
+            "embedding_dim": 8,
+        }
+    ]
+    client = FakeMilvusClient(preseeded=seeded)
+    registry = _FakeRegistry(_FakeEmbedAdapter(provider="openai_compatible@new", dim=8))
+
+    report = ingest(
+        csv_path,
+        mode="upsert",
+        registry=registry,
+        milvus_client_factory=_factory(client),
+        output_report_path=tmp_path / "report.json",
+    )
+
+    # New image_path → straight insert; existing seeded row left untouched.
+    assert report.inserted == 1

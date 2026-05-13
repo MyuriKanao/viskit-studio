@@ -6,6 +6,7 @@ import {
   mockTemplatesError,
   mockTemplatesList,
 } from './_helpers/mock-templates';
+import { clickSidebarLink } from './_helpers/sidebar';
 
 /**
  * EPIC-8 Templates page happy paths.
@@ -65,13 +66,9 @@ test.describe('templates page', () => {
     await page.goto('/zh/dashboard');
     await page.getByRole('navigation', { name: 'Primary' }).waitFor();
 
-    // Sidebar link to the Templates page. Force-click — the 240px fixed sidebar
-    // can intercept pointer events at the chromium-mobile viewport (375px
-    // wide); the test asserts the navigation, not the visual hit-target.
-    // Precedent: queue.spec.ts:65, settings.spec.ts:44, catalog.spec.ts:62.
     // localePrefix='as-needed' strips the `/zh` prefix for the default
     // locale, so the URL after navigation is `/templates` (not `/zh/templates`).
-    await page.getByRole('link', { name: '模板' }).click({ force: true });
+    await clickSidebarLink(page, '模板');
     await expect(page).toHaveURL(/\/templates$/);
   });
 });

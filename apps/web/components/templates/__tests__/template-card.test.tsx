@@ -91,4 +91,17 @@ describe('TemplateCard', () => {
     const desc = screen.getByText('A vibrant hero image for summer campaigns.');
     expect(desc.className).toContain('line-clamp-2');
   });
+
+  it('omits the description <p> entirely when description is null', () => {
+    const template: Template = { ...BASE_TEMPLATE, description: null };
+    const { container } = renderWithIntl(<TemplateCard template={template} />);
+
+    // Card body has no <p> at all when description is null — line-clamp-2 is
+    // applied to the description paragraph; its absence is the assertion.
+    const paragraphs = container.querySelectorAll('p');
+    expect(paragraphs.length).toBe(0);
+    // Sanity: name and category still render.
+    expect(screen.getByText('Summer Hero')).toBeDefined();
+    expect(screen.getByText('Hero')).toBeDefined();
+  });
 });

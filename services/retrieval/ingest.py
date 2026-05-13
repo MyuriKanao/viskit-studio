@@ -278,20 +278,44 @@ def ingest(
     factory: Callable[..., Any] = milvus_client_factory or _default_client_factory
     client = factory()
 
-    # ---- Dim-mismatch guard ------------------------------------------------
-    if embedding_dim and hasattr(client, "query"):
-        existing = client.query(
-            COLLECTION_NAME,
-            filter="",
-            output_fields=["embedding_dim"],
-        )
-        for record in existing or []:
-            existing_dim = record.get("embedding_dim")
-            if existing_dim is not None and int(existing_dim) != embedding_dim:
-                raise IngestError(
-                    f"embedding_dim mismatch: existing rows have dim "
-                    f"{existing_dim}, new embedding has dim {embedding_dim}"
-                )
+    # ---- Dim-mismatch + provider-mismatch guards ---------------------------
+    # `upsert` reconciles per-row (logs RECOMPUTE_EMBEDDING) and `replace`
+    # rebuilds the collection — both reconcile by design.  `append`, however,
+    # would silently mix embedding providers in the corpus, which corrupts
+    # similarity rankings.  Reject up-front in that case.
+    if hasattr(client, "query") and mode != "replace":
+        probe_fields: list[str] = []
+        if embedding_dim:
+            probe_fields.append("embedding_dim")
+        if mode == "append":
+            probe_fields.append("embedding_provider")
+        if probe_fields:
+            existing = client.query(
+                COLLECTION_NAME,
+                filter="",
+                output_fields=probe_fields,
+            )
+            for record in existing or []:
+                existing_dim = record.get("embedding_dim")
+                if (
+                    embedding_dim
+                    and existing_dim is not None
+                    and int(existing_dim) != embedding_dim
+                ):
+                    raise IngestError(
+                        f"embedding_dim mismatch: existing rows have dim "
+                        f"{existing_dim}, new embedding has dim {embedding_dim}"
+                    )
+                if mode == "append":
+                    old_provider = record.get("embedding_provider")
+                    if old_provider and old_provider != current_provider:
+                        raise IngestError(
+                            f"embedding_provider mismatch in append mode: "
+                            f"existing rows use {old_provider!r}, new rows "
+                            f"would use {current_provider!r}. Use "
+                            f"mode='upsert' to re-embed per row or "
+                            f"mode='replace' to rebuild the corpus."
+                        )
 
     locale_counts = {"zh": 0, "en": 0, "other": 0}
     for row in rows:

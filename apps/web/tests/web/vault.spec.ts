@@ -7,6 +7,7 @@ import {
   mockVaultAssetsError,
   mockVaultIngest,
 } from './_helpers/mock-vault';
+import { clickSidebarLink } from './_helpers/sidebar';
 
 /**
  * EPIC-8 Vault page happy paths.
@@ -66,10 +67,7 @@ test.describe('vault page', () => {
     await page.goto('/zh/dashboard');
     await page.getByRole('navigation', { name: 'Primary' }).waitFor();
 
-    // Force-click — the 240px fixed sidebar can intercept pointer events at
-    // the chromium-mobile viewport (375px wide); we assert navigation, not
-    // visual hit-target.
-    await page.getByRole('link', { name: '图库' }).click({ force: true });
+    await clickSidebarLink(page, '图库');
     await expect(page).toHaveURL(/\/vault$/);
   });
 

@@ -31,3 +31,6 @@ __pycache__/
 
 # Docker volumes
 volumes/
+
+# OMC orchestration state — local-only, never committed
+.omc/
