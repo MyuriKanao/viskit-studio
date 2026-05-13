@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
@@ -82,7 +82,7 @@ class VaultIngestResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _get_milvus_client(req: Request) -> object:
+def _get_milvus_client(req: Request) -> Any:
     """Return app.state.milvus_client if wired, else lazy-construct MilvusClient().
 
     Only raises 503 if the lazy construction itself fails — a None value in

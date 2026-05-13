@@ -13,8 +13,14 @@ import { useQueueActive } from '@/hooks/use-queue-active';
  *
  * Composes the shared /api/queue/active hook + dashboard's QueueRow to
  * surface every in-flight job in one place. Polling cadence (4s) lives
- * inside `useQueueActive`; no manual refresh affordance per spec. No
- * pause/resume — arq integration for that is architect-flagged WEAK.
+ * inside `useQueueActive`; no manual refresh affordance per spec.
+ *
+ * Pause/resume is INTENTIONALLY out of scope. The orchestrator runs
+ * jobs in-process via `KitEventBus` (see services/imagegen) rather than
+ * the arq dependency declared in `pyproject.toml`, and adding pause
+ * controls would require re-architecting around a Redis-backed worker
+ * pool. Acceptable for a single-tenant self-hosted tool; revisit only
+ * if a real multi-operator workflow emerges.
  */
 export default function QueuePage() {
   const t = useTranslations('queue');

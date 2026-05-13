@@ -23,7 +23,11 @@ export default defineConfig({
     locale: 'zh-CN',
     timezoneId: 'Asia/Shanghai',
     navigationTimeout: 60_000,
-    actionTimeout: 15_000,
+    // Heavy route segments (kit-detail, editor) routinely take >15s to
+    // fully render under `pnpm start` on slower dev boxes, so bumping
+    // the locator-action budget to 30s avoids spurious waitFor timeouts
+    // without inflating the per-test wall clock when the page is fast.
+    actionTimeout: 30_000,
   },
   projects: [
     {
@@ -54,6 +58,13 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
   },
   expect: {
+    // Production `pnpm start` hydration + first-render of route segments
+    // that weren't compiled in the previous run can exceed the 5s default
+    // expect budget on slower dev boxes — observed ~15s for `/queue` to
+    // swap from queue-loading to queue-list after the mocked /api/queue/active
+    // response arrives.  Bumping to 20s gives headroom without masking
+    // real regressions.
+    timeout: 20_000,
     toHaveScreenshot: { maxDiffPixelRatio: 0.03 },
   },
 });

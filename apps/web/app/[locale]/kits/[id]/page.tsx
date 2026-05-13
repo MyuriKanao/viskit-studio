@@ -1,15 +1,29 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
 import * as React from 'react';
 
 import { CompliancePanel } from '@/components/kit-detail/compliance-panel';
 import { CostDock } from '@/components/kit-detail/cost-dock';
 import { ImageGrid, type ImageMeta } from '@/components/kit-detail/image-grid';
-import { SpecMarkdown } from '@/components/kit-detail/spec-markdown';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { useRecentKits } from '@/hooks/use-recent-kits';
+
+// `SpecMarkdown` pulls in react-markdown + remark-gfm (~40 kB gz). Split it
+// out so the kit-detail route's First Load JS stays under the catalog /
+// new-kit baseline; the spec column renders progressively after the image
+// grid, so the deferred load is invisible to the operator.
+const SpecMarkdown = dynamic(
+  () => import('@/components/kit-detail/spec-markdown').then((m) => m.SpecMarkdown),
+  {
+    ssr: false,
+    loading: () => (
+      <div aria-hidden="true" className="h-32 animate-pulse rounded-card bg-surface-02" />
+    ),
+  }
+);
 
 type Params = { id: string };
 

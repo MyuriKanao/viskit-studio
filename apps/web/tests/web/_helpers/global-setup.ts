@@ -20,21 +20,31 @@ export default async function globalSetup(_config: FullConfig): Promise<void> {
 
   let seeded = false;
   let detail = '';
-  try {
-    execSync('make seed-fixtures', {
-      cwd: repoRoot,
-      stdio: 'pipe',
-      timeout: 60_000,
-    });
-    seeded = true;
-    detail = 'make seed-fixtures succeeded';
-  } catch (err) {
-    detail = err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240);
+  // Short-circuit before shelling out when DATABASE_URL is unset — the
+  // seed scripts will fail with a multi-line ERROR otherwise. Most local
+  // Playwright runs hit network-mocked specs and don't need a live DB,
+  // so a single-line skip is the right signal.
+  if (!process.env.DATABASE_URL) {
+    detail = 'DATABASE_URL unset — skipping make seed-fixtures (mocked specs only)';
     // eslint-disable-next-line no-console
-    console.warn(
-      '[playwright globalSetup] make seed-fixtures failed — visual baselines may drift unless re-recorded with a live DB. detail:',
-      detail
-    );
+    console.info('[playwright globalSetup]', detail);
+  } else {
+    try {
+      execSync('make seed-fixtures', {
+        cwd: repoRoot,
+        stdio: 'pipe',
+        timeout: 60_000,
+      });
+      seeded = true;
+      detail = 'make seed-fixtures succeeded';
+    } catch (err) {
+      detail = err instanceof Error ? err.message.slice(0, 240) : String(err).slice(0, 240);
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[playwright globalSetup] make seed-fixtures failed — visual baselines may drift unless re-recorded with a live DB. detail:',
+        detail
+      );
+    }
   }
 
   try {

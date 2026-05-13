@@ -10,7 +10,8 @@ _engine: Any | None = None
 def _get_engine() -> Any:
     global _engine
     if _engine is None:
-        from paddleocr import PaddleOCR  # heavy import, lazy
+        # paddleocr ships no PEP 561 stubs; runtime-only dependency.
+        from paddleocr import PaddleOCR  # type: ignore[import-not-found]  # heavy import, lazy
 
         _engine = PaddleOCR(lang="ch", show_log=False)
     return _engine

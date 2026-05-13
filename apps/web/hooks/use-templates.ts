@@ -10,6 +10,7 @@ import { type UseQueryResult, useQuery } from '@tanstack/react-query';
  * (mirrors useQueueActive shape).
  *
  * No refetchInterval — templates are static seed data; staleTime 5 min.
+ * Retry policy inherited from the global QueryClient (queries: retry false).
  */
 export interface Template {
   id: string;
@@ -42,6 +43,5 @@ export function useTemplates(): UseQueryResult<TemplatesSnapshot, Error> {
       return { templates };
     },
     staleTime: 5 * 60 * 1000,
-    retry: false,
   });
 }

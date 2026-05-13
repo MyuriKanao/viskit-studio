@@ -7,7 +7,8 @@ import { type UseQueryResult, useQuery } from '@tanstack/react-query';
  *
  * queryKey includes all filter params + pagination so each unique
  * combination is independently cached. staleTime 30s (corpus is mostly
- * stable between ingest runs). retry: false mirrors use-templates precedent.
+ * stable between ingest runs). Retry policy inherited from the global
+ * QueryClient (queries: retry false).
  */
 export interface VaultAsset {
   id: number;
@@ -68,6 +69,5 @@ export function useVaultAssets(
       return (await response.json()) as VaultListResponse;
     },
     staleTime: 30_000,
-    retry: false,
   });
 }

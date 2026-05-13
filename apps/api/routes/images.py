@@ -64,18 +64,16 @@ async def ocr_image(image_id: str, request: Request) -> OcrResponse:
     from services.editor.ocr import detect_text_boxes
 
     boxes = await asyncio.to_thread(detect_text_boxes, image_bytes)
-    result = {
-        "boxes": [
-            TextBoxOut(
-                x=b.x, y=b.y, w=b.w, h=b.h, text=b.text, confidence=b.confidence
-            ).model_dump()
+    response = OcrResponse(
+        boxes=[
+            TextBoxOut(x=b.x, y=b.y, w=b.w, h=b.h, text=b.text, confidence=b.confidence)
             for b in boxes
         ],
-        "engine": "paddleocr",
-        "version": "2.x",
-    }
-    _OCR_CACHE[image_id] = result
-    return OcrResponse(**result)
+        engine="paddleocr",
+        version="2.x",
+    )
+    _OCR_CACHE[image_id] = response.model_dump()
+    return response
 
 
 @router.post("/{image_id}/edit", response_model=EditAccepted, status_code=202)

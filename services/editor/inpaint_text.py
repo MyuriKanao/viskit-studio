@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image, ImageDraw
 
@@ -37,7 +37,7 @@ def inpaint_region(
         size=size,
         kit_id=kit_id,
     )
-    return response.image
+    return cast(bytes, response.image)
 
 
 __all__ = ["inpaint_region"]
