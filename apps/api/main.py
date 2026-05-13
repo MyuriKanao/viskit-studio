@@ -23,6 +23,7 @@ from apps.api.routes.queue import router as queue_router
 from apps.api.routes.retrieval import router as retrieval_router
 from apps.api.routes.settings import router as settings_router
 from apps.api.routes.templates import router as templates_router
+from apps.api.routes.vault import router as vault_router
 from services.imagegen.orchestrator import KitEventBus
 from services.providers.registry import ProviderConfigError
 from services.providers.registry import boot as boot_registry
@@ -92,3 +93,4 @@ app.include_router(providers_router)
 app.include_router(onboarding_router)
 app.include_router(settings_router)
 app.include_router(templates_router)
+app.include_router(vault_router)

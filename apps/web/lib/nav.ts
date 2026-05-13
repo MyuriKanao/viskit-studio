@@ -52,8 +52,7 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'sidebar.vault',
     href: '/vault',
     icon: Database,
-    enabled: false,
-    comingInEpic: 8,
+    enabled: true,
   },
   {
     id: 'templates',
