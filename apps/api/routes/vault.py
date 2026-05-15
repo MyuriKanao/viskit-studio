@@ -3,6 +3,11 @@
 Wraps services.retrieval.ingest.ingest() synchronously for the POST /ingest
 endpoint, and issues two client.query() calls for GET /assets (data + count).
 No new Postgres tables — Milvus is the sole data store for this route.
+
+EPIC-10 extends this file with:
+- POST /tags/apply  — bulk add/remove tags on vault assets (Postgres sidecar)
+- GET /tags         — frequency-sorted tag autocomplete list
+- GET /assets?tags= — AND-filter by tags via Postgres pre-query
 """
 
 from __future__ import annotations
@@ -12,9 +17,14 @@ import tempfile
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy import delete, func, select, text, tuple_
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 
+from apps.api.lib.db import get_session
+from apps.api.models.vault_asset_tag import VaultAssetTag
 from services.providers.registry import ProviderConfigError
 from services.retrieval.filters import FilterSpec, build_expression
 from services.retrieval.hybrid_search import neighbors_by_id
@@ -27,6 +37,9 @@ router = APIRouter(prefix="/api/vault", tags=["vault"])
 __all__ = [
     "NeighborOut",
     "NeighborsResponse",
+    "TagApplyRequest",
+    "TagApplyResponse",
+    "TagFrequency",
     "VaultAsset",
     "VaultIngestResponse",
     "VaultListResponse",
@@ -83,6 +96,24 @@ class VaultIngestResponse(BaseModel):
     deduplicated: int
     recomputed_embeddings: int
     locale_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class TagApplyRequest(BaseModel):
+    action: Literal["add", "remove"]
+    asset_ids: list[int]
+    tags: list[str]
+
+
+class TagApplyResponse(BaseModel):
+    applied_count: int
+    inserted_count: int
+    noop_count: int
+    affected_assets: list[int]
+
+
+class TagFrequency(BaseModel):
+    tag: str
+    count: int
 
 
 class NeighborOut(BaseModel):
@@ -201,8 +232,41 @@ def get_vault_assets(
     style: Annotated[str | None, Query(max_length=50)] = None,
     locale: Annotated[str | None, Query(max_length=8)] = None,
     min_sales: Annotated[int | None, Query(ge=0)] = None,
+    tags: Annotated[list[str] | None, Query()] = None,
+    db: Session = Depends(get_session),  # noqa: B008
 ) -> VaultListResponse:
-    """List bestseller assets from Milvus with optional filters + offset pagination."""
+    """List bestseller assets from Milvus with optional filters + offset pagination.
+
+    EPIC-10: ``tags`` (repeating query param) filters to assets carrying ALL listed
+    tags (AND semantics per ADR-EPIC10-001).  A Postgres pre-query resolves the
+    matching asset IDs; if the intersection is empty the endpoint short-circuits
+    without touching Milvus.
+    """
+    # --- EPIC-10: tag AND pre-filter ---
+    tag_asset_ids: list[int] | None = None
+    if tags:
+        canonical_tags = [t.strip().lower() for t in tags]
+        for t in canonical_tags:
+            if not t:
+                raise HTTPException(
+                    status_code=422,
+                    detail="tag must not be empty or whitespace-only",
+                )
+        n = len(canonical_tags)
+        rows_pg = db.execute(
+            text(
+                "SELECT asset_id FROM vault_asset_tags"
+                " WHERE tag = ANY(:tags)"
+                " GROUP BY asset_id"
+                " HAVING COUNT(DISTINCT tag) = :n"
+            ),
+            {"tags": canonical_tags, "n": n},
+        ).fetchall()
+        tag_asset_ids = [r[0] for r in rows_pg]
+        if not tag_asset_ids:
+            # Short-circuit: no assets carry ALL requested tags
+            return VaultListResponse(items=[], total=0, limit=limit, offset=offset)
+
     client = _get_milvus_client(req)
 
     try:
@@ -216,6 +280,12 @@ def get_vault_assets(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Splice tag-AND constraint into the Milvus filter expression
+    if tag_asset_ids is not None:
+        id_list = ", ".join(str(i) for i in tag_asset_ids)
+        tag_expr = f"id in [{id_list}]"
+        expr = f"{expr} && {tag_expr}" if expr else tag_expr
 
     try:
         rows = client.query(
@@ -337,6 +407,108 @@ async def post_vault_ingest(
         recomputed_embeddings=report.recomputed_embeddings,
         locale_counts=dict(report.locale_counts),
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /tags/apply — EPIC-10 bulk tag add/remove
+# ---------------------------------------------------------------------------
+# IMPORTANT: declared BEFORE GET /{asset_id}/neighbors so FastAPI literal-path
+# matching takes precedence over the int-param pattern.
+
+
+@router.post("/tags/apply", response_model=TagApplyResponse)
+def post_vault_tags_apply(
+    body: TagApplyRequest,
+    db: Session = Depends(get_session),  # noqa: B008
+) -> TagApplyResponse:
+    """Bulk add or remove tags on vault assets (Postgres sidecar).
+
+    Idempotent: re-adding an existing tag is a no-op; removing an absent tag
+    is a no-op.  Returns operator-intent count (``applied_count``), actual DB
+    rows changed (``inserted_count``), and no-op delta (``noop_count``) so the
+    UI can surface truthful feedback (ADR-EPIC10-003, iter-2 revision #1).
+    """
+    # --- Validation ---
+    if not body.asset_ids:
+        raise HTTPException(status_code=422, detail="asset_ids must not be empty")
+    if not body.tags:
+        raise HTTPException(status_code=422, detail="tags must not be empty")
+
+    # Canonicalize: strip + lowercase (ADR-EPIC10-003)
+    canonical_tags: list[str] = []
+    for raw in body.tags:
+        t = raw.strip().lower()
+        if not t:
+            raise HTTPException(
+                status_code=422,
+                detail=f"tag {raw!r} is empty after stripping whitespace",
+            )
+        if len(t) > 64:
+            raise HTTPException(
+                status_code=422,
+                detail=f"tag {raw!r} exceeds 64 characters after stripping",
+            )
+        canonical_tags.append(t)
+
+    applied_count = len(body.asset_ids) * len(canonical_tags)
+    pairs = [(a, t) for a in body.asset_ids for t in canonical_tags]
+
+    if body.action == "add":
+        stmt = (
+            insert(VaultAssetTag)
+            .values([{"asset_id": a, "tag": t} for a, t in pairs])
+            .on_conflict_do_nothing(index_elements=["asset_id", "tag"])
+            .returning(VaultAssetTag.asset_id)
+        )
+        result = db.execute(stmt)
+        returned_ids = [row[0] for row in result.fetchall()]
+        inserted_count = len(returned_ids)
+    else:
+        # action == "remove"
+        stmt_del = (
+            delete(VaultAssetTag)
+            .where(
+                tuple_(VaultAssetTag.asset_id, VaultAssetTag.tag).in_(pairs)
+            )
+            .returning(VaultAssetTag.asset_id)
+        )
+        result = db.execute(stmt_del)
+        returned_ids = [row[0] for row in result.fetchall()]
+        inserted_count = len(returned_ids)
+
+    noop_count = applied_count - inserted_count
+    affected_assets = sorted(set(returned_ids))
+
+    return TagApplyResponse(
+        applied_count=applied_count,
+        inserted_count=inserted_count,
+        noop_count=noop_count,
+        affected_assets=affected_assets,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /tags — EPIC-10 tag frequency list for autocomplete
+# ---------------------------------------------------------------------------
+# IMPORTANT: declared BEFORE GET /{asset_id}/neighbors (same literal-before-param
+# ordering constraint).
+
+
+@router.get("/tags", response_model=list[TagFrequency])
+def get_vault_tags(
+    db: Session = Depends(get_session),  # noqa: B008
+) -> list[TagFrequency]:
+    """Return all tags sorted by frequency desc then name asc, capped at 500.
+
+    Powers the tag-input combobox autocomplete on the /vault page.
+    """
+    rows = db.execute(
+        select(VaultAssetTag.tag, func.count().label("count"))
+        .group_by(VaultAssetTag.tag)
+        .order_by(text("count DESC, tag ASC"))
+        .limit(500)
+    ).fetchall()
+    return [TagFrequency(tag=row[0], count=row[1]) for row in rows]
 
 
 # ---------------------------------------------------------------------------
