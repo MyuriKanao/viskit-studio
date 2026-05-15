@@ -198,3 +198,59 @@ export async function mockVaultTagsApply(
     await route.fulfill({ status: 200, contentType: 'application/json', body });
   });
 }
+
+/**
+ * EPIC-11: stateful mock for the inspired endpoints + the assets list.
+ *
+ * Backs the toggle with an in-memory Set so the same asset can be flipped
+ * across reloads (within a single page session). The assets-list response
+ * is re-derived on each request so `inspired:bool` reflects the live set.
+ */
+export async function mockVaultInspired(
+  page: Page,
+  initialInspired: number[] = []
+): Promise<void> {
+  const state = new Set<number>(initialInspired);
+
+  await page.route('**/api/vault/assets**', async (route) => {
+    const items = VAULT_FIXTURE_ITEMS.map((item) => ({
+      ...item,
+      inspired: state.has(item.id),
+    }));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ items, total: items.length, limit: 30, offset: 0 }),
+    });
+  });
+
+  await page.route('**/api/vault/inspired', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ids: Array.from(state).sort((a, b) => a - b) }),
+      });
+    } else {
+      await route.continue();
+    }
+  });
+
+  await page.route('**/api/vault/inspired/toggle', async (route) => {
+    const body = JSON.parse(route.request().postData() ?? '{}') as { asset_id: number };
+    const id = body.asset_id;
+    let inspired: boolean;
+    if (state.has(id)) {
+      state.delete(id);
+      inspired = false;
+    } else {
+      state.add(id);
+      inspired = true;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ asset_id: id, inspired }),
+    });
+  });
+}
