@@ -105,8 +105,11 @@ class VaultIngestResponse(BaseModel):
 
 class TagApplyRequest(BaseModel):
     action: Literal["add", "remove"]
-    asset_ids: list[int]
-    tags: list[str]
+    # TD-EPIC10-1: bound the multiplicative blow-up. With both caps a worst
+    # case yields 500 * 10 = 5_000 pairs per request — large enough for the
+    # bulk-tagging UX, tiny enough for one Postgres roundtrip.
+    asset_ids: list[int] = Field(min_length=1, max_length=500)
+    tags: list[str] = Field(min_length=1, max_length=10)
 
 
 class TagApplyResponse(BaseModel):
@@ -263,6 +266,15 @@ def get_vault_assets(
     # --- EPIC-10: tag AND pre-filter ---
     tag_asset_ids: list[int] | None = None
     if tags:
+        # TD-EPIC10-1: cap the multi-tag intersection cardinality. The AND
+        # filter is bounded by the user-controlled `tags=` count; without
+        # this cap a malicious or buggy client could send hundreds of
+        # repeated params and force a wide GROUP BY HAVING scan.
+        if len(tags) > 50:
+            raise HTTPException(
+                status_code=422,
+                detail="too many tags (max 50)",
+            )
         canonical_tags = [t.strip().lower() for t in tags]
         for t in canonical_tags:
             if not t:

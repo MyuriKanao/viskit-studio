@@ -239,6 +239,58 @@ def test_apply_422_unknown_action() -> None:
     assert resp.status_code == 422, resp.text
 
 
+def test_apply_422_too_many_asset_ids() -> None:
+    """TD-EPIC10-1: asset_ids longer than 500 → 422 (Pydantic max_length)."""
+    fake = FakeSession()
+    app.dependency_overrides[get_session] = lambda: iter([fake])
+    try:
+        with TestClient(app) as c:
+            resp = c.post(
+                "/api/vault/tags/apply",
+                json={
+                    "action": "add",
+                    "asset_ids": list(range(501)),
+                    "tags": ["summer"],
+                },
+            )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+    assert resp.status_code == 422, resp.text
+
+
+def test_apply_422_too_many_tags() -> None:
+    """TD-EPIC10-1: tags longer than 10 → 422 (Pydantic max_length)."""
+    fake = FakeSession()
+    app.dependency_overrides[get_session] = lambda: iter([fake])
+    try:
+        with TestClient(app) as c:
+            resp = c.post(
+                "/api/vault/tags/apply",
+                json={
+                    "action": "add",
+                    "asset_ids": [1],
+                    "tags": [f"t{i}" for i in range(11)],
+                },
+            )
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+    assert resp.status_code == 422, resp.text
+
+
+def test_get_assets_422_too_many_tag_params() -> None:
+    """TD-EPIC10-1: GET /assets?tags[] longer than 50 → 422."""
+    fake = FakeSession()
+    app.dependency_overrides[get_session] = lambda: iter([fake])
+    try:
+        with TestClient(app) as c:
+            qs = "&".join(f"tags=tag{i}" for i in range(51))
+            resp = c.get(f"/api/vault/assets?{qs}")
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+    assert resp.status_code == 422, resp.text
+    assert "too many tags" in resp.text.lower()
+
+
 def test_get_assets_empty_string_tag_returns_422() -> None:
     """?tags= with an empty string value → 422."""
     fake = FakeSession()
