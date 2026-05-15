@@ -9,16 +9,14 @@ export type { VaultAsset };
 
 interface VaultCardProps {
   item: VaultAsset;
+  onSelect?: (item: VaultAsset) => void;
 }
 
-export function VaultCard({ item }: VaultCardProps) {
+export function VaultCard({ item, onSelect }: VaultCardProps) {
   const t = useTranslations('vault');
 
-  return (
-    <article
-      data-testid={`vault-card-${item.id}`}
-      className="mb-s-3 break-inside-avoid rounded-card border border-border-subtle bg-surface-01 overflow-hidden"
-    >
+  const inner = (
+    <>
       <img
         src={item.image_url}
         alt={item.description || item.category}
@@ -37,6 +35,28 @@ export function VaultCard({ item }: VaultCardProps) {
           <span>¥{item.price.toFixed(2)}</span>
         </div>
       </div>
+    </>
+  );
+
+  if (onSelect) {
+    return (
+      <button
+        type="button"
+        data-testid={`vault-card-${item.id}`}
+        onClick={() => onSelect(item)}
+        className="mb-s-3 block w-full text-left break-inside-avoid rounded-card border border-border-subtle bg-surface-01 overflow-hidden hover:border-border-strong focus:outline-none focus:ring-2 focus:ring-accent"
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <article
+      data-testid={`vault-card-${item.id}`}
+      className="mb-s-3 break-inside-avoid rounded-card border border-border-subtle bg-surface-01 overflow-hidden"
+    >
+      {inner}
     </article>
   );
 }

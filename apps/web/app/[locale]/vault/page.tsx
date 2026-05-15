@@ -1,15 +1,28 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
-import { IngestModal } from '@/components/vault/ingest-modal';
 import { VaultFiltersBar } from '@/components/vault/vault-filters';
 import { VaultGrid } from '@/components/vault/vault-grid';
-import { type VaultFilters, useVaultAssets } from '@/hooks/use-vault-assets';
+import { type VaultAsset, type VaultFilters, useVaultAssets } from '@/hooks/use-vault-assets';
 import type { VaultIngestResponse } from '@/hooks/use-vault-ingest';
+
+// EPIC-9 bundle budget: First Load JS ≤ 170 kB for /vault. Drawer + Ingest
+// modal are click-only — both go behind next/dynamic so they don't ship on
+// initial paint. Mirrors TD-6 pattern.
+const VaultDrawer = dynamic(
+  () => import('@/components/drawers/VaultDrawer').then((m) => m.VaultDrawer),
+  { ssr: false }
+);
+const IngestModal = dynamic(
+  () => import('@/components/vault/ingest-modal').then((m) => m.IngestModal),
+  { ssr: false }
+);
 
 const PAGE_SIZE = 30;
 
@@ -21,6 +34,9 @@ const PAGE_SIZE = 30;
  */
 export default function VaultPage() {
   const t = useTranslations('vault');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [filters, setFilters] = React.useState<VaultFilters>({});
   const [offset, setOffset] = React.useState(0);
   const [ingestOpen, setIngestOpen] = React.useState(false);
@@ -30,6 +46,44 @@ export default function VaultPage() {
 
   const query = useVaultAssets({ limit: PAGE_SIZE, offset, ...filters });
   const items = query.data?.items ?? [];
+
+  // URL-driven drawer state: ?asset=<id> survives refresh + sharing.
+  const selectedAssetId = React.useMemo(() => {
+    const raw = searchParams.get('asset');
+    if (!raw) return null;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [searchParams]);
+  const selectedAsset = React.useMemo<VaultAsset | null>(
+    () => items.find((i) => i.id === selectedAssetId) ?? null,
+    [items, selectedAssetId]
+  );
+
+  const updateAssetParam = React.useCallback(
+    (assetId: number | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (assetId === null) {
+        params.delete('asset');
+      } else {
+        params.set('asset', String(assetId));
+      }
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
+  const handleSelect = React.useCallback(
+    (item: VaultAsset) => updateAssetParam(item.id),
+    [updateAssetParam]
+  );
+
+  const handleDrawerOpenChange = React.useCallback(
+    (open: boolean) => {
+      if (!open) updateAssetParam(null);
+    },
+    [updateAssetParam]
+  );
   const total = query.data?.total ?? 0;
   const count = items.length;
   const page = Math.floor(offset / PAGE_SIZE) + 1;
@@ -113,7 +167,7 @@ export default function VaultPage() {
                 <span className="text-sm text-ink-muted">{t('empty_hint')}</span>
               </div>
             ) : (
-              <VaultGrid items={items} />
+              <VaultGrid items={items} onSelect={handleSelect} />
             )}
           </section>
 
@@ -150,6 +204,12 @@ export default function VaultPage() {
         onOpenChange={setIngestOpen}
         onSuccess={handleIngestSuccess}
         onError={handleIngestError}
+      />
+
+      <VaultDrawer
+        asset={selectedAsset}
+        open={selectedAssetId !== null && selectedAsset !== null}
+        onOpenChange={handleDrawerOpenChange}
       />
     </div>
   );

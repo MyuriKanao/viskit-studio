@@ -8,13 +8,14 @@ import { VaultCard } from './vault-card';
 
 interface VaultGridProps {
   items: VaultAsset[];
+  onSelect?: (item: VaultAsset) => void;
 }
 
-export function VaultGrid({ items }: VaultGridProps) {
+export function VaultGrid({ items, onSelect }: VaultGridProps) {
   return (
     <div className="columns-2 md:columns-3 lg:columns-4 gap-s-3" data-testid="vault-grid">
       {items.map((item) => (
-        <VaultCard key={item.id} item={item} />
+        <VaultCard key={item.id} item={item} onSelect={onSelect} />
       ))}
     </div>
   );

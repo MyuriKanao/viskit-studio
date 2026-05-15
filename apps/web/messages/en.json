@@ -160,7 +160,16 @@
     "pagination_aria": "Pagination",
     "pagination_prev": "Previous",
     "pagination_next": "Next",
-    "pagination_page": "Page {page}/{total}"
+    "pagination_page": "Page {page}/{total}",
+    "drawer_title": "SKU details",
+    "drawer_close_aria": "Close drawer",
+    "drawer_kits_title": "Kit history",
+    "drawer_no_kits": "No kits yet",
+    "drawer_bestsellers_title": "Last retrieved bestsellers",
+    "drawer_bestsellers_empty": "This kit has no retrieval snapshot recorded",
+    "drawer_open_kit_cta": "View kit",
+    "drawer_kit_status": "Status",
+    "drawer_kit_score": "Compliance"
   },
   "onboarding": {
     "page_title": "Welcome",
@@ -333,6 +342,32 @@
     "sales_pattern": "{count} sold",
     "pagination_prev": "Previous",
     "pagination_next": "Next",
-    "page_label": "Page {page} of {total_pages}"
+    "page_label": "Page {page} of {total_pages}",
+    "drawer_title": "Asset details",
+    "drawer_close_aria": "Close drawer",
+    "drawer_meta_id": "ID",
+    "drawer_meta_category": "Category",
+    "drawer_meta_season": "Season",
+    "drawer_meta_locale": "Locale",
+    "drawer_meta_brand": "Brand",
+    "drawer_meta_sales": "Sales",
+    "drawer_meta_price": "Price",
+    "drawer_meta_color": "Color",
+    "drawer_meta_style": "Style",
+    "drawer_meta_description": "Description",
+    "drawer_histogram_title": "Similarity distribution",
+    "drawer_histogram_full": "Across all {total} corpus assets",
+    "drawer_histogram_sampled": "Based on {sample} of {total} assets",
+    "drawer_histogram_empty": "Not enough data for a distribution",
+    "drawer_topn_title": "Top-{k} nearest neighbors",
+    "drawer_topn_distance": "Similarity {value}",
+    "drawer_use_as_ref_cta": "Use as reference",
+    "drawer_loading": "Loading…",
+    "drawer_error": "Failed to load — please retry"
+  },
+  "newKit": {
+    "ref_pinned_banner": "Reference asset #{id} selected; complete the basics first",
+    "ref_pinned_chip": "Pinned reference #{id}",
+    "ref_clear_cta": "Clear reference"
   }
 }
