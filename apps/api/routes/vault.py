@@ -17,13 +17,21 @@ from pydantic import BaseModel, Field
 
 from services.providers.registry import ProviderConfigError
 from services.retrieval.filters import FilterSpec, build_expression
+from services.retrieval.hybrid_search import neighbors_by_id
 from services.retrieval.ingest import IngestError, IngestReport
 from services.retrieval.ingest import ingest as run_ingest
 from services.retrieval.schema import COLLECTION_NAME
 
 router = APIRouter(prefix="/api/vault", tags=["vault"])
 
-__all__ = ["router", "VaultAsset", "VaultListResponse", "VaultIngestResponse"]
+__all__ = [
+    "NeighborOut",
+    "NeighborsResponse",
+    "VaultAsset",
+    "VaultIngestResponse",
+    "VaultListResponse",
+    "router",
+]
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -75,6 +83,48 @@ class VaultIngestResponse(BaseModel):
     deduplicated: int
     recomputed_embeddings: int
     locale_counts: dict[str, int] = Field(default_factory=dict)
+
+
+class NeighborOut(BaseModel):
+    """One nearest-neighbor row in the /neighbors response.
+
+    ``distance`` is the cosine *similarity* (Milvus COSINE metric) — higher
+    means more similar.  Frontend renders both the raw value and a 3x3 grid
+    sorted by similarity descending.
+    """
+
+    id: int
+    image_path: str
+    image_url: str
+    distance: float
+    category: str | None = None
+    season: str | None = None
+    description: str | None = None
+    sales_count: int | None = None
+    price: float | None = None
+    locale: str | None = None
+
+
+class HistogramOut(BaseModel):
+    """Bucketed cosine-similarity distribution for the SimilarityHistogram SVG."""
+
+    bins: list[int]
+    edges: list[float]
+
+
+class NeighborsResponse(BaseModel):
+    """Body of ``GET /api/vault/{id}/neighbors``.
+
+    ``sampled`` + ``sample_size`` let the frontend caption the histogram
+    honestly when the corpus exceeds the FLAT-index threshold
+    (ADR-EPIC9-004) — "based on N of M assets".
+    """
+
+    neighbors: list[NeighborOut]
+    histogram: HistogramOut
+    sampled: bool
+    sample_size: int | None = None
+    total_corpus: int
 
 
 # ---------------------------------------------------------------------------
@@ -286,4 +336,66 @@ async def post_vault_ingest(
         deduplicated=report.deduplicated,
         recomputed_embeddings=report.recomputed_embeddings,
         locale_counts=dict(report.locale_counts),
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /{id}/neighbors — EPIC-9 vault drawer
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{asset_id}/neighbors", response_model=NeighborsResponse)
+def get_vault_asset_neighbors(
+    req: Request,
+    asset_id: int,
+    k: Annotated[int, Query(ge=1, le=50)] = 9,
+) -> NeighborsResponse:
+    """Top-k nearest neighbors of *asset_id* + corpus-wide distance histogram.
+
+    Powers the Vault drawer (EPIC-9). Returns 404 when the asset id isn't in
+    the corpus; 503 if Milvus is unreachable.  See
+    ``services.retrieval.hybrid_search.neighbors_by_id`` for the algorithm.
+    """
+    client = _get_milvus_client(req)
+
+    try:
+        result = neighbors_by_id(client, asset_id=asset_id, k=k)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "VAULT_ASSET_NOT_FOUND"},
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "VAULT_MILVUS_UNAVAILABLE"},
+        ) from exc
+
+    # Construct response by field name (NOT validation_alias kwargs — mypy
+    # rejects those on pydantic v2 BaseModel constructors; see
+    # feedback_pydantic_alias_mypy.md).
+    return NeighborsResponse(
+        neighbors=[
+            NeighborOut(
+                id=n.id,
+                image_path=n.image_path,
+                image_url=n.image_url,
+                distance=n.distance,
+                category=n.metadata.get("category"),
+                season=n.metadata.get("season"),
+                description=n.metadata.get("description"),
+                sales_count=n.metadata.get("sales_count"),
+                price=n.metadata.get("price"),
+                locale=n.metadata.get("locale"),
+            )
+            for n in result.neighbors
+        ],
+        histogram=HistogramOut(
+            bins=result.histogram_bins, edges=result.bin_edges
+        ),
+        sampled=result.sampled,
+        sample_size=result.sample_size,
+        total_corpus=result.total_corpus,
     )

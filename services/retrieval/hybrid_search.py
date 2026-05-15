@@ -11,9 +11,18 @@ from pymilvus import AnnSearchRequest, RRFRanker
 from services.retrieval.filters import FilterSpec, build_expression
 from services.retrieval.schema import COLLECTION_NAME
 
-__all__ = ["SearchHit", "hybrid_search"]
+__all__ = [
+    "NeighborHit",
+    "NeighborsResult",
+    "SearchHit",
+    "hybrid_search",
+    "neighbors_by_id",
+]
 
+# Milvus PK `id` is auto_id INT64; surfacing it lets callers build
+# /api/vault/{id}/neighbors and persist `kit_meta.retrieved_bestseller_ids`.
 _OUTPUT_FIELDS = [
+    "id",
     "image_path",
     "image_url",
     "category",
@@ -26,6 +35,11 @@ _OUTPUT_FIELDS = [
     "locale",
 ]
 
+# EPIC-9: FLAT index has no tuning knobs; sampling caps candidate set when
+# corpus crosses this threshold (ADR-EPIC9-004). Histogram is "honest" via the
+# `sampled` flag in the response, not by silently truncating.
+_NEIGHBOR_SAMPLE_THRESHOLD = 5000
+
 
 @dataclass(frozen=True, slots=True)
 class SearchHit:
@@ -33,6 +47,32 @@ class SearchHit:
     image_url: str
     score: float
     metadata: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class NeighborHit:
+    """A single neighbor in the EPIC-9 vault /neighbors response.
+
+    ``id`` is the Milvus PK (auto_id INT64) — surfaced so the frontend can
+    deep-link the drawer back to /new-kit?ref=<id> and so the Catalog drawer
+    can read ``kit_meta.retrieved_bestseller_ids`` against it.
+    """
+
+    id: int
+    image_path: str
+    image_url: str
+    distance: float
+    metadata: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class NeighborsResult:
+    neighbors: list[NeighborHit]
+    histogram_bins: list[int]
+    bin_edges: list[float]
+    sampled: bool
+    sample_size: int | None
+    total_corpus: int
 
 
 def _parse_hits(raw_results: list[Any]) -> list[SearchHit]:
@@ -145,3 +185,167 @@ def hybrid_search(
                 existing_paths.add(fb_hit.image_path)
 
     return hits[:top_k]
+
+
+# ---------------------------------------------------------------------------
+# EPIC-9: image-vector reverse-lookup (vault drawer /neighbors endpoint)
+# ---------------------------------------------------------------------------
+
+
+def _parse_neighbor_hits(raw_results: list[Any]) -> list[NeighborHit]:
+    """Parse pymilvus ANN search results into NeighborHit instances."""
+    hits: list[NeighborHit] = []
+    result_group = raw_results[0] if raw_results else []
+    for hit in result_group:
+        entity = hit.get("entity", hit) if isinstance(hit, dict) else hit.entity
+        distance = hit["distance"] if isinstance(hit, dict) else hit.distance
+
+        def _get(field: str, _entity: Any = entity) -> Any:
+            return (
+                _entity[field]
+                if isinstance(_entity, dict)
+                else getattr(_entity, field, None)
+            )
+
+        asset_id_raw = _get("id")
+        if asset_id_raw is None:
+            # Skip rows that somehow lack PK — keeps the response shape sane.
+            continue
+        image_path = _get("image_path") or ""
+        image_url = _get("image_url") or ""
+        metadata: dict[str, Any] = {}
+        for field in _OUTPUT_FIELDS:
+            if field in ("id", "image_path", "image_url"):
+                continue
+            val = _get(field)
+            if val is not None:
+                metadata[field] = val
+        hits.append(
+            NeighborHit(
+                id=int(asset_id_raw),
+                image_path=str(image_path),
+                image_url=str(image_url),
+                distance=float(distance),
+                metadata=metadata,
+            )
+        )
+    return hits
+
+
+def _compute_histogram(
+    values: list[float], *, bin_count: int
+) -> tuple[list[int], list[float]]:
+    """Equal-width histogram over [min, max].
+
+    Returns (counts, edges) with len(edges) == bin_count + 1.  Empty input
+    yields ([], []); a degenerate constant input puts every value in bin 0.
+    """
+    if not values or bin_count <= 0:
+        return [], []
+    lo = min(values)
+    hi = max(values)
+    if lo == hi:
+        counts = [0] * bin_count
+        counts[0] = len(values)
+        # Edges still span a nominal range so callers can render axis labels.
+        edges = [lo for _ in range(bin_count + 1)]
+        return counts, edges
+    width = (hi - lo) / bin_count
+    counts = [0] * bin_count
+    for v in values:
+        idx = int((v - lo) / width)
+        if idx >= bin_count:
+            idx = bin_count - 1
+        counts[idx] += 1
+    edges = [lo + width * i for i in range(bin_count + 1)]
+    return counts, edges
+
+
+def neighbors_by_id(
+    client: Any,
+    asset_id: int,
+    k: int,
+    *,
+    sample_threshold: int = _NEIGHBOR_SAMPLE_THRESHOLD,
+    histogram_bin_count: int = 20,
+) -> NeighborsResult:
+    """Reverse-lookup the top-k nearest neighbors of ``asset_id`` in the corpus.
+
+    Two pymilvus calls happen here:
+      1. ``client.query(filter="id == X", output_fields=["dense_vector"])`` to
+         fetch the seed asset's embedding.
+      2. ``client.search(data=[vec], anns_field="dense_vector", ...)`` for the
+         actual reverse-lookup, with ``limit = min(sample_threshold, total)``.
+
+    Raises:
+        LookupError: ``asset_id`` not present in the corpus (caller maps to
+            HTTP 404 with code ``VAULT_ASSET_NOT_FOUND``).
+
+    The histogram covers all candidates returned from step 2 (excluding the
+    seed itself).  When ``total_corpus > sample_threshold``, the FLAT index is
+    capped at ``sample_threshold`` and the result is flagged ``sampled=True``
+    — Architect B3 / ADR-EPIC9-004.  The seed asset is filtered from
+    ``neighbors``; ``neighbors[:k]`` are returned in distance order.
+    """
+    # 1) Total corpus size — drives the `sampled` flag.
+    count_rows = client.query(
+        collection_name=COLLECTION_NAME,
+        filter="",
+        output_fields=["count(*)"],
+    )
+    total_corpus = int(count_rows[0]["count(*)"]) if count_rows else 0
+
+    # 2) Fetch the seed asset's dense vector. Defense-in-depth: enforce int
+    # locally so a future caller bypassing the FastAPI path coercion can't
+    # smuggle a string into the Milvus expression DSL.
+    if not isinstance(asset_id, int) or isinstance(asset_id, bool):
+        raise TypeError(f"asset_id must be int, got {type(asset_id).__name__}")
+    seed_rows = client.query(
+        collection_name=COLLECTION_NAME,
+        filter=f"id == {asset_id}",
+        output_fields=["dense_vector"],
+        limit=1,
+    )
+    if not seed_rows:
+        raise LookupError(f"asset id={asset_id} not found")
+    seed_row = seed_rows[0]
+    seed_vec = (
+        seed_row.get("dense_vector")
+        if isinstance(seed_row, dict)
+        else getattr(seed_row, "dense_vector", None)
+    )
+    if seed_vec is None:
+        raise LookupError(f"asset id={asset_id} has no dense_vector")
+
+    # 3) ANN search with capped candidate set; +1 covers the seed itself.
+    sampled = total_corpus > sample_threshold
+    candidate_limit = min(sample_threshold, max(total_corpus, k + 1))
+    sample_size = candidate_limit if sampled else None
+
+    raw = client.search(
+        collection_name=COLLECTION_NAME,
+        data=[seed_vec],
+        anns_field="dense_vector",
+        search_params={"metric_type": "COSINE"},
+        limit=candidate_limit,
+        output_fields=_OUTPUT_FIELDS,
+    )
+    all_hits = _parse_neighbor_hits(raw)
+
+    # 4) Strip the seed asset; preserve distance-ordering.
+    filtered = [h for h in all_hits if h.id != asset_id]
+    neighbors = filtered[:k]
+
+    # 5) Histogram over all filtered distances.
+    bins, edges = _compute_histogram(
+        [h.distance for h in filtered], bin_count=histogram_bin_count
+    )
+
+    return NeighborsResult(
+        neighbors=neighbors,
+        histogram_bins=bins,
+        bin_edges=edges,
+        sampled=sampled,
+        sample_size=sample_size,
+        total_corpus=total_corpus,
+    )
