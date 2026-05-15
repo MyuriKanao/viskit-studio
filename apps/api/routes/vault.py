@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from apps.api.lib.db import get_session
+from apps.api.models.vault_asset_inspired import VaultAssetInspired
 from apps.api.models.vault_asset_tag import VaultAssetTag
 from services.providers.registry import ProviderConfigError
 from services.retrieval.filters import FilterSpec, build_expression
@@ -35,6 +36,9 @@ from services.retrieval.schema import COLLECTION_NAME
 router = APIRouter(prefix="/api/vault", tags=["vault"])
 
 __all__ = [
+    "InspiredListResponse",
+    "InspiredToggleRequest",
+    "InspiredToggleResponse",
     "NeighborOut",
     "NeighborsResponse",
     "TagApplyRequest",
@@ -79,6 +83,7 @@ class VaultAsset(BaseModel):
     description: str
     price: float
     locale: str
+    inspired: bool = False
 
 
 class VaultListResponse(BaseModel):
@@ -114,6 +119,19 @@ class TagApplyResponse(BaseModel):
 class TagFrequency(BaseModel):
     tag: str
     count: int
+
+
+class InspiredToggleRequest(BaseModel):
+    asset_id: int
+
+
+class InspiredToggleResponse(BaseModel):
+    asset_id: int
+    inspired: bool
+
+
+class InspiredListResponse(BaseModel):
+    ids: list[int]
 
 
 class NeighborOut(BaseModel):
@@ -309,7 +327,21 @@ def get_vault_assets(
         ) from exc
 
     total = int(count_rows[0]["count(*)"] if count_rows else 0)
-    items = [VaultAsset(**row) for row in rows]
+
+    # EPIC-11: join Postgres inspired flags into the page response.
+    # Set membership is O(1); important because limit can reach 100.
+    page_ids = [int(row["id"]) for row in rows]
+    inspired_ids: set[int] = set()
+    if page_ids:
+        inspired_ids = set(
+            db.execute(
+                select(VaultAssetInspired.asset_id).where(
+                    VaultAssetInspired.asset_id.in_(page_ids)
+                )
+            ).scalars().all()
+        )
+
+    items = [VaultAsset(**row, inspired=(int(row["id"]) in inspired_ids)) for row in rows]
 
     return VaultListResponse(items=items, total=total, limit=limit, offset=offset)
 
@@ -509,6 +541,67 @@ def get_vault_tags(
         .limit(500)
     ).fetchall()
     return [TagFrequency(tag=row[0], count=row[1]) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# POST /inspired/toggle — EPIC-11 idempotent inspiration toggle
+# ---------------------------------------------------------------------------
+# IMPORTANT: declared BEFORE GET /{asset_id}/neighbors so the literal path
+# wins over the int-param pattern (same constraint as the EPIC-10 tag routes).
+
+
+@router.post("/inspired/toggle", response_model=InspiredToggleResponse)
+def post_vault_inspired_toggle(
+    body: InspiredToggleRequest,
+    db: Session = Depends(get_session),  # noqa: B008
+) -> InspiredToggleResponse:
+    """Toggle the inspired flag for one asset.
+
+    Idempotent insert-or-delete on the primary key.  Single-tenant studio,
+    so no race-condition window is contended in practice; the operation is
+    structured to be safe under retry regardless (re-query after the action).
+    """
+    existing = db.execute(
+        select(VaultAssetInspired.asset_id).where(
+            VaultAssetInspired.asset_id == body.asset_id
+        )
+    ).first()
+
+    if existing is not None:
+        db.execute(
+            delete(VaultAssetInspired).where(
+                VaultAssetInspired.asset_id == body.asset_id
+            )
+        )
+        db.commit()
+        return InspiredToggleResponse(asset_id=body.asset_id, inspired=False)
+
+    db.execute(
+        insert(VaultAssetInspired)
+        .values(asset_id=body.asset_id)
+        .on_conflict_do_nothing(index_elements=["asset_id"])
+    )
+    db.commit()
+    return InspiredToggleResponse(asset_id=body.asset_id, inspired=True)
+
+
+# ---------------------------------------------------------------------------
+# GET /inspired — EPIC-11 full inspired-id set
+# ---------------------------------------------------------------------------
+
+
+@router.get("/inspired", response_model=InspiredListResponse)
+def get_vault_inspired(
+    db: Session = Depends(get_session),  # noqa: B008
+) -> InspiredListResponse:
+    """Return the full set of inspired asset ids (sorted ascending).
+
+    No pagination: the inspired set is operator-curated and stays tiny.
+    """
+    rows = db.execute(
+        select(VaultAssetInspired.asset_id).order_by(VaultAssetInspired.asset_id)
+    ).scalars().all()
+    return InspiredListResponse(ids=list(rows))
 
 
 # ---------------------------------------------------------------------------
