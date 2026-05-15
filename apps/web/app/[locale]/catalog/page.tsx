@@ -1,7 +1,7 @@
 'use client';
 
 import { useLocale, useTranslations } from 'next-intl';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
 import { CatalogFilters } from '@/components/catalog/CatalogFilters';
@@ -13,6 +13,8 @@ import { SortMenu } from '@/components/catalog/SortMenu';
 import type { SortMenuLabels } from '@/components/catalog/SortMenu';
 import { ViewToggle } from '@/components/catalog/ViewToggle';
 import type { CatalogView } from '@/components/catalog/ViewToggle';
+import { CatalogDrawer } from '@/components/drawers/CatalogDrawer';
+import type { CatalogDrawerSku } from '@/components/drawers/CatalogDrawer';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -32,6 +34,8 @@ export default function CatalogPage() {
   const t = useTranslations('catalog');
   const locale = useLocale() as 'zh' | 'en';
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // View mode
   const [view, setView] = React.useState<CatalogView>('grid');
@@ -76,15 +80,46 @@ export default function CatalogPage() {
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
 
-  const onRowClick = React.useCallback(
-    (kit: KitListItem) => {
-      const prefix = locale === 'zh' ? '' : `/${locale}`;
-      router.push(`${prefix}/kits/${kit.id}`);
+  // EPIC-9: ?sku=<sku> drives the per-SKU drawer; clicking a row opens it
+  // instead of navigating straight to /kits/{id}. The drawer carries a CTA
+  // to jump to /kits/{id} when the user wants the full detail page.
+  const selectedSkuParam = searchParams.get('sku');
+  const updateSkuParam = React.useCallback(
+    (sku: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (sku === null) {
+        params.delete('sku');
+      } else {
+        params.set('sku', sku);
+      }
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [locale, router]
+    [pathname, router, searchParams]
   );
 
+  const onRowClick = React.useCallback(
+    (kit: KitListItem) => updateSkuParam(kit.sku),
+    [updateSkuParam]
+  );
   const onKitClick = onRowClick;
+
+  const selectedSku: CatalogDrawerSku | null = React.useMemo(() => {
+    if (selectedSkuParam === null) return null;
+    const hit = kits.find((k) => k.sku === selectedSkuParam);
+    if (hit) {
+      return { sku: hit.sku, name: hit.name, category: hit.category ?? null };
+    }
+    // Allow drawer to open even before list resolves (e.g. deep link)
+    return { sku: selectedSkuParam, name: selectedSkuParam, category: null };
+  }, [kits, selectedSkuParam]);
+
+  const handleDrawerOpenChange = React.useCallback(
+    (open: boolean) => {
+      if (!open) updateSkuParam(null);
+    },
+    [updateSkuParam]
+  );
 
   const clearFilters = React.useCallback(() => {
     setStatus(null);
@@ -253,6 +288,12 @@ export default function CatalogPage() {
           </nav>
         ) : null}
       </main>
+
+      <CatalogDrawer
+        sku={selectedSku}
+        open={selectedSku !== null}
+        onOpenChange={handleDrawerOpenChange}
+      />
     </div>
   );
 }

@@ -100,6 +100,11 @@ class GenerateRequest(BaseModel):
     brand_color_hex: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
     style_prompt: str | None = None
     locale: Literal["zh", "en"]
+    # EPIC-9 Phase 4a: Milvus PKs of the references picked in Step 3.
+    # Persisted as a sidecar so the Catalog drawer can render the
+    # "上次检索到的 bestsellers" subsection later. Default-empty keeps the
+    # contract backward-compatible for callers that don't track ids.
+    retrieved_bestseller_ids: list[int] = Field(default_factory=list)
 
 
 class GenerateResponse(BaseModel):
@@ -298,6 +303,32 @@ def _persist_kit(
                 "brand_color_hex": payload.brand_color_hex,
             },
         )
+    # EPIC-9 Phase 4a sidecar — mirrors compliance/cost convention in
+    # services/imagegen/orchestrator.py:633-677. Written best-effort: a
+    # filesystem hiccup here must not poison the DB write (which has
+    # already committed via SQLAlchemy autoflush).
+    try:
+        kit_root = Path(str(result.compliance_path)).parent
+        kit_root.mkdir(parents=True, exist_ok=True)
+        meta_path = kit_root / "kit_meta.json"
+        meta_path.write_text(
+            json.dumps(
+                {
+                    "db_kit_id": db_kit_id,
+                    "retrieved_bestseller_ids": list(payload.retrieved_bestseller_ids),
+                    "version": 1,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        # Sidecar is advisory; legacy Catalog drawer still renders the
+        # empty-state copy if this file is missing.
+        pass
+
     # Commit is owned by the ``get_session`` FastAPI dependency
     # (apps/api/lib/db.py:30-34): committing here would shadow the
     # dependency's rollback path if a downstream caller adds post-persist
@@ -437,6 +468,7 @@ def list_kits(
     locale: str | None = Query(default=None, max_length=8),
     min_score: int | None = Query(default=None, ge=0, le=100),
     category: str | None = Query(default=None, max_length=64),
+    sku: str | None = Query(default=None, max_length=64),
     sort: Literal["created_at", "updated_at", "score"] = Query(default="created_at"),
     order: Literal["asc", "desc"] = Query(default="desc"),
 ) -> KitListResponse:
@@ -467,6 +499,9 @@ def list_kits(
     if category is not None:
         filters.append("pc.category = :category")
         params["category"] = category
+    if sku is not None:
+        filters.append("pc.sku = :sku")
+        params["sku"] = sku
 
     where_clause = "WHERE " + " AND ".join(filters) if filters else ""
     sort_col = _SORT_COLUMNS[sort]
@@ -543,3 +578,71 @@ def list_kits(
         )
 
     return KitListResponse(items=items, total=total)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/kits/{db_kit_id}/meta — EPIC-9 Catalog drawer
+# ---------------------------------------------------------------------------
+
+
+class KitMetaResponse(BaseModel):
+    """Side-car payload for the EPIC-9 Catalog drawer.
+
+    Legacy Kits generated before Phase 4a will surface as HTTP 404 here, and
+    the drawer renders an empty-state copy ("本 Kit 未记录检索快照").
+    """
+
+    db_kit_id: int
+    retrieved_bestseller_ids: list[int]
+
+
+@router.get("/{db_kit_id}/meta", response_model=KitMetaResponse)
+def get_kit_meta(
+    db_kit_id: int,
+    session: Annotated[Session, Depends(get_session)],
+) -> KitMetaResponse:
+    """Read ``kit_meta.json`` for *db_kit_id*; 404 if the sidecar doesn't exist.
+
+    The sidecar is keyed by the kit UUID (``data/imagegen/kits/{uuid}/``), so
+    we recover the kit_root by walking up from any persisted ``png_path``.
+    """
+    row = session.execute(
+        text(
+            "SELECT png_path FROM hero_images"
+            " WHERE marketing_kit_id = :id AND png_path IS NOT NULL"
+            " LIMIT 1"
+        ),
+        {"id": db_kit_id},
+    ).first()
+    if row is None or row.png_path is None:
+        raise HTTPException(
+            status_code=404, detail={"code": "KIT_META_NOT_FOUND"}
+        )
+
+    # png_path: data/imagegen/kits/{uuid}/hero/H1.png → kit_root two levels up.
+    kit_root = Path(str(row.png_path)).parent.parent
+    meta_path = kit_root / "kit_meta.json"
+    if not meta_path.is_file():
+        raise HTTPException(
+            status_code=404, detail={"code": "KIT_META_NOT_FOUND"}
+        )
+
+    try:
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=500, detail={"code": "KIT_META_READ_FAILED"}
+        ) from exc
+
+    ids = data.get("retrieved_bestseller_ids", [])
+    if not isinstance(ids, list):
+        ids = []
+    # Defensive: coerce to int and drop non-numeric entries. Booleans subclass
+    # int in Python; reject them explicitly so a hand-edited ``true`` in the
+    # sidecar doesn't coerce to ``1``.
+    cleaned = [
+        int(x)
+        for x in ids
+        if isinstance(x, (int, float)) and not isinstance(x, bool)
+    ]
+    return KitMetaResponse(db_kit_id=db_kit_id, retrieved_bestseller_ids=cleaned)

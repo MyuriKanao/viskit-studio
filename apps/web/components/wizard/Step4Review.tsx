@@ -34,6 +34,7 @@ export function Step4Review() {
   const sellingPoints = useWizardStore((s) => s.sellingPoints);
   const kitClientId = useWizardStore((s) => s.kitClientId);
   const setStylePrompt = useWizardStore((s) => s.setStylePrompt);
+  const pinnedRefAssetId = useWizardStore((s) => s.pinnedRefAssetId);
 
   const stylePromptMut = useStylePrompt();
   const specMut = useKitSpec();
@@ -83,12 +84,29 @@ export function Step4Review() {
     }
 
     setPhase('generating');
+    // EPIC-9 Phase 4a + Phase 5: persist the Milvus PKs of the selected
+    // references AND fold in the deep-link pinnedRefAssetId. Hits without
+    // an id (legacy fixtures) are dropped silently; the pinned id is
+    // deduped against the selection.
+    const seen = new Set<number>();
+    const retrievedBestsellerIds: number[] = [];
+    for (const h of selectedHits) {
+      if (typeof h.id === 'number' && !seen.has(h.id)) {
+        seen.add(h.id);
+        retrievedBestsellerIds.push(h.id);
+      }
+    }
+    if (pinnedRefAssetId !== null && !seen.has(pinnedRefAssetId)) {
+      retrievedBestsellerIds.push(pinnedRefAssetId);
+    }
+
     const result = await gen.start({
       kit_id: kitClientId,
       brand_color_hex: brandColor,
       locale,
       spec: specRes.spec,
       style_prompt: styleRes.style_prompt,
+      retrieved_bestseller_ids: retrievedBestsellerIds,
     });
 
     if (!result) {
@@ -116,6 +134,7 @@ export function Step4Review() {
     brandColor,
     uiLocale,
     router,
+    pinnedRefAssetId,
   ]);
 
   const busy = phase === 'style_prompt' || phase === 'spec' || phase === 'generating';

@@ -169,6 +169,8 @@ export interface GenerateParams {
   locale: WizardLocale;
   spec: SpecOutPayload;
   style_prompt: string;
+  /** EPIC-9 Phase 4a — persisted into kit_meta.json for the Catalog drawer. */
+  retrieved_bestseller_ids?: number[];
 }
 
 export interface GenerateResult {
@@ -298,6 +300,7 @@ export function useGenerateKit(): UseGenerateKitResult {
           locale: params.locale,
           spec: params.spec,
           style_prompt: params.style_prompt,
+          retrieved_bestseller_ids: params.retrieved_bestseller_ids ?? [],
         }),
         signal: ctrl.signal,
       }

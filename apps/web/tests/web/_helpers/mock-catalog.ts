@@ -118,3 +118,37 @@ export async function mockKitsCatalog(
     await route.fulfill({ status: 200, contentType: 'application/json', body });
   });
 }
+
+/**
+ * Intercept the per-Kit ``/api/kits/{id}/meta`` reads driving the EPIC-9
+ * Catalog drawer "上次检索到的 bestsellers" subsection.
+ *
+ * The default route returns 404 (legacy Kit — no kit_meta sidecar). Pass an
+ * id-keyed map to return populated payloads for specific kits.
+ */
+export async function mockKitMeta(
+  page: Page,
+  payloadById: Record<number, number[] | null> = {}
+): Promise<void> {
+  await page.route(/\/api\/kits\/(\d+)\/meta/, async (route) => {
+    const match = route
+      .request()
+      .url()
+      .match(/\/api\/kits\/(\d+)\/meta/);
+    const id = match ? Number.parseInt(match[1] ?? '', 10) : Number.NaN;
+    const ids = Number.isFinite(id) ? payloadById[id] : undefined;
+    if (ids === undefined || ids === null) {
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({ detail: { code: 'KIT_META_NOT_FOUND' } }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ db_kit_id: id, retrieved_bestseller_ids: ids }),
+    });
+  });
+}

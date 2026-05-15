@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
 import { Sidebar } from '@/components/shell/sidebar';
@@ -47,16 +48,79 @@ function useStepValid(step: WizardStep): boolean {
   return true; // step 4 — Generate button is owned by Step4Review.
 }
 
+function useHighestValidStep(): WizardStep {
+  const skuMeta = useWizardStore((s) => s.skuMeta);
+  const image = useWizardStore((s) => s.image);
+  const selectedHits = useWizardStore((s) => s.selectedHits);
+  const sellingPoints = useWizardStore((s) => s.sellingPoints);
+
+  const price = Number.parseFloat(skuMeta.price);
+  const step1Ok =
+    skuMeta.sku.trim().length > 0 &&
+    skuMeta.name.trim().length > 0 &&
+    skuMeta.brand.trim().length > 0 &&
+    skuMeta.category.trim().length > 0 &&
+    Number.isFinite(price) &&
+    price > 0;
+  if (!step1Ok) return 1;
+  const step2Ok = image !== null && image.length > 0;
+  if (!step2Ok) return 2;
+  const step3Ok =
+    selectedHits.length > 0 && sellingPoints.filter((s) => s.trim().length > 0).length > 0;
+  if (!step3Ok) return 3;
+  return 4;
+}
+
 export default function NewKitPage() {
   const t = useTranslations('wizard');
+  const tNewKit = useTranslations('newKit');
+  const searchParams = useSearchParams();
   const step = useWizardStore((s) => s.step);
   const back = useWizardStore((s) => s.back);
   const next = useWizardStore((s) => s.next);
   const reset = useWizardStore((s) => s.reset);
+  const setStep = useWizardStore((s) => s.setStep);
+  const setPinnedRefAssetId = useWizardStore((s) => s.setPinnedRefAssetId);
+  const pinnedRefAssetId = useWizardStore((s) => s.pinnedRefAssetId);
+
+  // EPIC-9 ADR-EPIC9-002: consume ?ref=<id> on mount → pin in store.
+  // ?step= is advisory: lands at min(requested, highestValid).
+  const highestValidStep = useHighestValidStep();
+  const refParam = searchParams.get('ref');
+  const stepParam = searchParams.get('step');
+
+  React.useEffect(() => {
+    if (refParam === null) return;
+    const parsed = Number.parseInt(refParam, 10);
+    if (Number.isFinite(parsed)) {
+      setPinnedRefAssetId(parsed);
+    }
+  }, [refParam, setPinnedRefAssetId]);
+
+  // ?step= is mount-advisory only — replaying it on every store change
+  // would yank the user backwards while they edit upstream fields.
+  const stepAppliedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (stepAppliedRef.current) return;
+    if (stepParam === null) {
+      stepAppliedRef.current = true;
+      return;
+    }
+    const requested = Number.parseInt(stepParam, 10);
+    if (!Number.isFinite(requested) || requested < 1 || requested > 4) {
+      stepAppliedRef.current = true;
+      return;
+    }
+    const landing = Math.min(requested, highestValidStep) as WizardStep;
+    setStep(landing);
+    stepAppliedRef.current = true;
+  }, [stepParam, highestValidStep, setStep]);
 
   const isFirst = step === 1;
   const isLast = step === TOTAL_STEPS;
   const stepValid = useStepValid(step);
+
+  const showRefBanner = step === 1 && pinnedRefAssetId !== null;
 
   return (
     <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[64px_1fr] bg-ink-base">
@@ -105,6 +169,15 @@ export default function NewKitPage() {
             );
           })}
         </ol>
+
+        {showRefBanner && pinnedRefAssetId !== null ? (
+          <output
+            data-testid="new-kit-ref-banner"
+            className="block rounded-card border border-accent/40 bg-accent/10 px-s-3 py-s-2 text-xs text-ink-primary"
+          >
+            {tNewKit('ref_pinned_banner', { id: pinnedRefAssetId })}
+          </output>
+        ) : null}
 
         <section
           aria-labelledby="wizard-step-heading"

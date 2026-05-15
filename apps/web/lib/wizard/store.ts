@@ -31,6 +31,8 @@ export interface RetrievalHit {
   score: number;
   metadata: RetrievalHitMetadata;
   image_path?: string;
+  /** Milvus PK — EPIC-9 Phase 4a. Optional only to keep older mocks working. */
+  id?: number;
 }
 
 export interface ProgressEvent {
@@ -68,6 +70,13 @@ export interface WizardState {
   stylePrompt: string | null;
   kitClientId: string;
   progressEvents: ProgressEvent[];
+  /**
+   * EPIC-9 Phase 5 — Vault drawer's "用作参考" CTA navigates to
+   * /new-kit?ref=<id>; the page consumes the param on mount and pins the
+   * id here. Excluded from the back()/Step-1 invalidate-downstream set so
+   * the user can edit basics without losing the reference.
+   */
+  pinnedRefAssetId: number | null;
 
   setStep: (step: WizardStep) => void;
   next: () => void;
@@ -83,6 +92,8 @@ export interface WizardState {
   setStylePrompt: (prompt: string | null) => void;
   appendProgress: (event: ProgressEvent) => void;
   resetProgress: () => void;
+  setPinnedRefAssetId: (id: number | null) => void;
+  clearPinnedRef: () => void;
   reset: () => void;
 }
 
@@ -110,6 +121,8 @@ const initialState = (): Omit<
   | 'setStylePrompt'
   | 'appendProgress'
   | 'resetProgress'
+  | 'setPinnedRefAssetId'
+  | 'clearPinnedRef'
   | 'reset'
 > => ({
   step: 1,
@@ -124,6 +137,7 @@ const initialState = (): Omit<
   stylePrompt: null,
   kitClientId: makeKitClientId(),
   progressEvents: [],
+  pinnedRefAssetId: null,
 });
 
 /**
@@ -132,6 +146,11 @@ const initialState = (): Omit<
  * Back-flow rule: any back-step that lands on Step 1 invalidates downstream
  * retrieval/style-prompt/progress state, since Step 2 will accept a different
  * image or filters and the prior hits/style become stale.
+ *
+ * EPIC-9 ADR-EPIC9-002: ``pinnedRefAssetId`` is EXCLUDED from the
+ * invalidate-downstream set below — the Vault deep-link must survive Step-1
+ * backnav. Adding it to the reset payload would silently break the contract
+ * tested by tests/web/new-kit-ref-handoff.spec.ts.
  */
 export const useWizardStore = create<WizardState>((set) => ({
   ...initialState(),
@@ -143,6 +162,7 @@ export const useWizardStore = create<WizardState>((set) => ({
       if (s.step <= 1) return {};
       const nextStep = (s.step - 1) as WizardStep;
       if (nextStep === 1) {
+        // EPIC-9 ADR-EPIC9-002: do NOT add `pinnedRefAssetId` here.
         return {
           step: nextStep,
           hits: [],
@@ -164,6 +184,8 @@ export const useWizardStore = create<WizardState>((set) => ({
   setStylePrompt: (stylePrompt) => set({ stylePrompt }),
   appendProgress: (event) => set((s) => ({ progressEvents: [...s.progressEvents, event] })),
   resetProgress: () => set({ progressEvents: [] }),
+  setPinnedRefAssetId: (pinnedRefAssetId) => set({ pinnedRefAssetId }),
+  clearPinnedRef: () => set({ pinnedRefAssetId: null }),
   reset: () => set({ ...initialState() }),
 }));
 

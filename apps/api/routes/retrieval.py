@@ -35,9 +35,18 @@ class SearchRequest(BaseModel):
 
 
 class SearchHitOut(BaseModel):
+    """Single retrieval hit surfaced to the wizard.
+
+    EPIC-9 Phase 4a: ``id`` is the Milvus PK so Step 3 can persist
+    ``kit_meta.retrieved_bestseller_ids`` for the Catalog drawer. Optional
+    only for back-compat with legacy fixtures; production responses always
+    set it once ``_OUTPUT_FIELDS`` includes ``id``.
+    """
+
     image_url: str
     score: float
     metadata: dict[str, Any]
+    id: int | None = None
 
 
 class SearchResponse(BaseModel):
@@ -112,7 +121,16 @@ async def search(req: Request, payload: SearchRequest) -> SearchResponse:
     hits = hybrid_search(client, query_dense, query_sparse, filter_spec, top_k=payload.top_k)
     return SearchResponse(
         hits=[
-            SearchHitOut(image_url=h.image_url, score=h.score, metadata=h.metadata)
+            SearchHitOut(
+                image_url=h.image_url,
+                score=h.score,
+                metadata=h.metadata,
+                id=(
+                    int(h.metadata["id"])
+                    if isinstance(h.metadata.get("id"), (int, float))
+                    else None
+                ),
+            )
             for h in hits
         ]
     )

@@ -16,6 +16,7 @@ function hitKey(h: RetrievalHit): string {
 
 export function Step3Retrieval() {
   const t = useTranslations('wizard');
+  const tNewKit = useTranslations('newKit');
   const image = useWizardStore((s) => s.image);
   const filters = useWizardStore((s) => s.filters);
   const hits = useWizardStore((s) => s.hits);
@@ -24,6 +25,8 @@ export function Step3Retrieval() {
   const setHits = useWizardStore((s) => s.setHits);
   const setSelectedHits = useWizardStore((s) => s.setSelectedHits);
   const setSellingPoints = useWizardStore((s) => s.setSellingPoints);
+  const pinnedRefAssetId = useWizardStore((s) => s.pinnedRefAssetId);
+  const clearPinnedRef = useWizardStore((s) => s.clearPinnedRef);
 
   const search = useRetrievalSearch();
 
@@ -74,6 +77,26 @@ export function Step3Retrieval() {
           </span>
         ) : null}
       </header>
+
+      {pinnedRefAssetId !== null ? (
+        <div
+          data-testid="wizard-step3-pinned-ref"
+          className="flex items-center justify-between gap-s-3 rounded-card border-2 border-warning bg-warning/10 px-s-3 py-s-2 text-xs text-ink-primary"
+        >
+          <span data-testid="wizard-step3-pinned-ref-label">
+            {tNewKit('ref_pinned_chip', { id: pinnedRefAssetId })}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={clearPinnedRef}
+            data-testid="wizard-step3-pinned-ref-clear"
+          >
+            {tNewKit('ref_clear_cta')}
+          </Button>
+        </div>
+      ) : null}
 
       {showFallbackBanner ? (
         <div
