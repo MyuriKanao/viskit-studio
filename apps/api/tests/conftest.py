@@ -5,9 +5,12 @@ from __future__ import annotations
 import multiprocessing
 import os
 import time
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 # ---------------------------------------------------------------------------
 # tmp_config_path — temp file with seed content
@@ -82,3 +85,49 @@ def held_lock_fixture(tmp_path: Path):
         if p.is_alive():
             p.terminate()
         p.join(timeout=2)
+
+
+# ---------------------------------------------------------------------------
+# postgres_test_db — real Postgres engine + migration runner (EPIC-10)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def postgres_test_db() -> Generator[Session, None, None]:
+    """Session-scoped fixture that boots a fresh Postgres schema and runs all migrations.
+
+    Requires ``TEST_DATABASE_URL`` env var; skips if absent (so CI without Postgres
+    doesn't fail collection).
+
+    Yields a bound :class:`sqlalchemy.orm.Session` for the test to query.
+    On teardown, drops the public schema.
+    """
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("TEST_DATABASE_URL not set")
+
+    engine = create_engine(url, isolation_level="AUTOCOMMIT")
+
+    # Drop and recreate the public schema for a clean slate
+    with engine.connect() as conn:
+        conn.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
+        conn.exec_driver_sql("CREATE SCHEMA public")
+
+    # Run all migrations in name-sorted order
+    migrations_dir = Path(__file__).parents[4] / "infra" / "migrations"
+    for sql_file in sorted(migrations_dir.glob("*.sql")):
+        sql_text = sql_file.read_text()
+        with engine.connect() as conn:
+            conn.exec_driver_sql(sql_text)
+
+    # Yield a session for tests
+    factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    session: Session = factory()
+    try:
+        yield session
+    finally:
+        session.close()
+        # Drop schema on teardown
+        with engine.connect() as conn:
+            conn.exec_driver_sql("DROP SCHEMA IF EXISTS public CASCADE")
+        engine.dispose()
