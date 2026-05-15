@@ -1,5 +1,6 @@
 .PHONY: bootstrap compose-up compose-down dev test lint typecheck \
-        seed-user seed-sample-kit grep-providers ingest-corpus schemas migrate \
+        seed-user seed-sample-kit grep-providers grep-radix-surface \
+        ingest-corpus schemas migrate \
         epic-4a-probe gen-api web-build web-e2e \
         seed-fixtures seed-dashboard-fixtures
 
@@ -59,6 +60,10 @@ seed-dashboard-fixtures:
 ## grep-providers: fail if vendor names leak outside services/providers/, config.yaml.example, tests/, docs/
 grep-providers:
 	bash scripts/grep_providers.sh
+
+## grep-radix-surface: fail if apps/web/components/ui/ gains an undocumented new Radix wrapper (EPIC-9 Architect B2)
+grep-radix-surface:
+	bash scripts/grep_radix_surface.sh
 
 ## ingest-corpus: bulk-ingest CSV into Milvus. Usage: make ingest-corpus CSV=fixtures/bestsellers_sample.csv [MODE=upsert]
 ingest-corpus:
