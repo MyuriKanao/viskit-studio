@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
 import { Sidebar } from '@/components/shell/sidebar';
@@ -45,9 +45,13 @@ const PAGE_SIZE = 30;
 export default function VaultPage() {
   const t = useTranslations('vault');
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [filters, setFilters] = React.useState<VaultFilters>({});
+  // ?tag= is URL-driven: initialize from searchParams so the filter chip
+  // is pre-filled on deep-link / refresh. ?asset= is independent (drawer).
+  const urlTag = searchParams.get('tag') ?? undefined;
+  const [filters, setFilters] = React.useState<VaultFilters>(() => ({
+    tag: urlTag,
+  }));
   const [offset, setOffset] = React.useState(0);
   const [ingestOpen, setIngestOpen] = React.useState(false);
   const [toast, setToast] = React.useState<{ kind: 'success' | 'error'; message: string } | null>(
@@ -103,18 +107,26 @@ export default function VaultPage() {
     [items, selectedAssetId]
   );
 
+  // Generic multi-key URL mutator — replaces one or more params atomically.
+  // Pass null to delete a key; any other value sets it.
+  const updateSearchParams = React.useCallback(
+    (deltas: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [k, v] of Object.entries(deltas)) {
+        if (v === null) params.delete(k);
+        else params.set(k, v);
+      }
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router]
+  );
+
+  // Thin shim — all existing call-sites keep working unchanged.
   const updateAssetParam = React.useCallback(
     (assetId: number | null) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (assetId === null) {
-        params.delete('asset');
-      } else {
-        params.set('asset', String(assetId));
-      }
-      const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      updateSearchParams({ asset: assetId === null ? null : String(assetId) });
     },
-    [pathname, router, searchParams]
+    [updateSearchParams]
   );
 
   const handleSelect = React.useCallback(
@@ -151,6 +163,11 @@ export default function VaultPage() {
   function handleFiltersChange(next: VaultFilters) {
     setFilters(next);
     setOffset(0);
+    // Keep ?tag= in sync with the filter chip so the URL is deep-linkable.
+    // Array tags join as comma-separated for single-param serialization;
+    // the hook sends them as repeating params to the backend.
+    const nextTag = Array.isArray(next.tag) ? next.tag.join(',') || null : (next.tag ?? null);
+    updateSearchParams({ tag: nextTag });
   }
 
   return (

@@ -38,6 +38,9 @@ export interface VaultFilters {
   style?: string;
   locale?: string;
   min_sales?: number;
+  /** Single tag or array of tags — AND-filter per ADR-EPIC10-001.
+   *  Serialized as repeating `tags=` params (FastAPI list[str]). */
+  tag?: string | string[];
 }
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -59,6 +62,13 @@ export function useVaultAssets(
       if (filters.style) qs.set('style', filters.style);
       if (filters.locale) qs.set('locale', filters.locale);
       if (filters.min_sales !== undefined) qs.set('min_sales', String(filters.min_sales));
+      // Repeating `tags=` params — FastAPI deserializes list[str] per ADR-EPIC10-001.
+      if (filters.tag !== undefined) {
+        const tags = Array.isArray(filters.tag) ? filters.tag : [filters.tag];
+        for (const t of tags) {
+          if (t) qs.append('tags', t);
+        }
+      }
 
       const response = await fetch(`${baseUrl}/api/vault/assets?${qs.toString()}`, {
         cache: 'no-store',

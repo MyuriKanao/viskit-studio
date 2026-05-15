@@ -1,9 +1,17 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
 import * as React from 'react';
 
 import type { VaultFilters } from '@/hooks/use-vault-assets';
+
+// VaultTagChip owns Popover + TagCombobox + useVaultTags — lazy so those
+// modules don't inflate /vault First Load JS (loaded only on first chip click).
+const VaultTagChip = dynamic(
+  () => import('@/components/vault/vault-tag-popover').then((m) => m.VaultTagChip),
+  { ssr: false }
+);
 
 interface VaultFiltersProps {
   value: VaultFilters;
@@ -16,6 +24,13 @@ const LOCALE_OPTIONS = ['zh', 'en', 'ja', 'ko', 'other'];
 
 export function VaultFiltersBar({ value, onChange }: VaultFiltersProps) {
   const t = useTranslations('vault');
+
+  // Normalise tag filter to string | undefined for v1 single-tag chip display.
+  const activeTag = Array.isArray(value.tag) ? (value.tag[0] ?? undefined) : value.tag;
+
+  function handleTagChange(next: string | undefined) {
+    onChange({ ...value, tag: next });
+  }
 
   function handleClear() {
     onChange({});
@@ -78,6 +93,15 @@ export function VaultFiltersBar({ value, onChange }: VaultFiltersProps) {
           })
         }
         className="w-28 rounded-input border border-border-subtle bg-surface-01 px-s-2 py-s-1 text-sm text-ink-primary"
+      />
+
+      {/* Tag filter chip — v1 single-tag select. Lazy-loaded to stay within bundle budget. */}
+      <VaultTagChip
+        activeTag={activeTag}
+        labelTag={t('filter_tag')}
+        labelAll={t('filter_tag_all')}
+        tooltipAnd={t('filter_tag_tooltip_and')}
+        onChange={handleTagChange}
       />
 
       <button
