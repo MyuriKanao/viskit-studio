@@ -60,7 +60,7 @@ test.describe('vault bulk-tag — AC#1 add flow', () => {
     // The button text in English locale is the bulk.action_add translation key.
     // We locate by its disabled-state class toggle on other buttons and type=button.
     // Pragmatically: first enabled non-clear action button inside toolbar.
-    const addBtn = toolbar.getByRole('button', { name: /^Add$|^添加$/ });
+    const addBtn = toolbar.getByRole('button', { name: /^Add tag$|^添加标签$/ });
     await addBtn.click({ force: true });
 
     // Wait for toast to appear — data-testid="vault-ingest-toast" is reused for bulk toast
@@ -111,7 +111,7 @@ test.describe('vault bulk-tag — AC#2 remove flow', () => {
     await comboInput.fill('test-y2k');
 
     // Click Remove
-    const removeBtn = toolbar.getByRole('button', { name: /^Remove$|^移除$/ });
+    const removeBtn = toolbar.getByRole('button', { name: /^Remove tag$|^移除标签$/ });
     await removeBtn.click({ force: true });
 
     // Toast confirms removal

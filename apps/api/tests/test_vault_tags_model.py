@@ -20,6 +20,7 @@ def test_composite_pk_uniqueness(postgres_test_db: Session) -> None:
     postgres_test_db.add(duplicate)
     with pytest.raises(IntegrityError):
         postgres_test_db.flush()
+    postgres_test_db.rollback()
 
 
 def test_tag_index_present(postgres_test_db: Session) -> None:

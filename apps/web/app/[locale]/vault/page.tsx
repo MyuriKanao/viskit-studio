@@ -44,6 +44,7 @@ const PAGE_SIZE = 30;
  */
 export default function VaultPage() {
   const t = useTranslations('vault');
+  const tBulk = useTranslations('vault.bulk');
   const router = useRouter();
   const searchParams = useSearchParams();
   // ?tag= is URL-driven: initialize from searchParams so the filter chip
@@ -78,21 +79,20 @@ export default function VaultPage() {
   // (toolbar owns useVaultTagsApply in its lazy chunk to stay within budget).
   const handleBulkApply = React.useCallback(
     (_action: 'add' | 'remove', tags: string[], resp: TagApplyResponse) => {
-      const tBulk = t as unknown as (key: string, values?: Record<string, unknown>) => string;
       const tag = tags.join(', ');
       const total = resp.affected_assets.length;
       const message =
         resp.noop_count > 0
-          ? tBulk('bulk.apply_success_with_noop', {
+          ? tBulk('apply_success_with_noop', {
               tag,
               total,
               inserted: resp.inserted_count,
               noop: resp.noop_count,
             })
-          : tBulk('bulk.apply_success_pure_insert', { tag, total });
+          : tBulk('apply_success_pure_insert', { tag, total });
       setToast({ kind: 'success', message });
     },
-    [t]
+    [tBulk]
   );
 
   // URL-driven drawer state: ?asset=<id> survives refresh + sharing.
