@@ -144,3 +144,57 @@ export async function mockVaultIngest(
     await route.fulfill({ status: 200, contentType: 'application/json', body });
   });
 }
+
+/**
+ * EPIC-10: GET /api/vault/tags fixture — tag frequency list.
+ *
+ * Default: 3 tags including "test-y2k" so autocomplete tests can assert
+ * that existing tags appear in the suggestion list.
+ */
+export const VAULT_TAGS_FIXTURE = [
+  { tag: 'test-y2k', count: 3 },
+  { tag: 'summer-sale', count: 7 },
+  { tag: 'test-classic', count: 2 },
+];
+
+export async function mockVaultTags(
+  page: Page,
+  payload: { tag: string; count: number }[] = VAULT_TAGS_FIXTURE
+): Promise<void> {
+  const body = JSON.stringify(payload);
+  await page.route('**/api/vault/tags', async (route) => {
+    // Ignore the apply endpoint — only intercept the plain GET /tags
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body });
+    } else {
+      await route.continue();
+    }
+  });
+}
+
+/**
+ * POST /api/vault/tags/apply mock — returns a configurable TagApplyResponse.
+ *
+ * Default simulates a pure-insert of 3 assets (no noops).
+ */
+export const VAULT_TAGS_APPLY_FIXTURE = {
+  applied_count: 3,
+  inserted_count: 3,
+  noop_count: 0,
+  affected_assets: [1, 2, 3],
+};
+
+export async function mockVaultTagsApply(
+  page: Page,
+  payload: {
+    applied_count: number;
+    inserted_count: number;
+    noop_count: number;
+    affected_assets: number[];
+  } = VAULT_TAGS_APPLY_FIXTURE
+): Promise<void> {
+  const body = JSON.stringify(payload);
+  await page.route('**/api/vault/tags/apply', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body });
+  });
+}

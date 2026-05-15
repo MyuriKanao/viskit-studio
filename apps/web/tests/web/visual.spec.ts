@@ -5,6 +5,12 @@ import { KITS_FIXTURE, mockKitsList } from './_helpers/mock-kits-list';
 import { mockWeeklyMetrics } from './_helpers/mock-metrics';
 import { mockProvidersHealth, mockProvidersSummary } from './_helpers/mock-providers';
 import { mockQueueActive } from './_helpers/mock-queue';
+import {
+  VAULT_FIXTURE_RESPONSE,
+  VAULT_TAGS_FIXTURE,
+  mockVaultAssets,
+  mockVaultTags,
+} from './_helpers/mock-vault';
 
 /**
  * EPIC-6 AC #1 — pixel-grade parity for shell chrome (sidebar + topbar).
@@ -84,6 +90,174 @@ test.describe('EPIC-7 visual baselines', () => {
     await page.getByRole('heading', { level: 1 }).waitFor();
     await expect(page).toHaveScreenshot('onboarding-zh-full.png', {
       fullPage: true,
+      maxDiffPixelRatio: 0.03,
+    });
+  });
+});
+
+/**
+ * EPIC-10 visual baselines — vault bulk-tag states.
+ *
+ * 3 states × 2 themes = 6 snapshots.
+ * Themes toggled via the existing data-theme attribute on <html>.
+ *
+ * Run with --update-snapshots to capture initial baselines:
+ *   cd apps/web && pnpm exec playwright test visual.spec.ts --update-snapshots --project=chromium-desktop --grep "EPIC-10 visual"
+ *
+ * These specs depend on EPIC-10 components (VaultBulkToolbar, VaultTagChip).
+ * They will fail until those components are present and the app builds cleanly.
+ */
+test.describe('EPIC-10 visual baselines', () => {
+  test('vault-selection-active light', async ({ page }) => {
+    await mockHealthOk(page);
+    await mockVaultAssets(page, VAULT_FIXTURE_RESPONSE);
+
+    await page.goto('/en/vault');
+    await page.getByRole('navigation', { name: 'Primary' }).waitFor();
+
+    // Ensure light theme
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-theme', 'light');
+    });
+
+    // Select cards 1 and 2 via checkboxes to show selection state + toolbar
+    await page
+      .locator('[data-testid="vault-card-1"] input[type="checkbox"]')
+      .check({ force: true });
+    await page
+      .locator('[data-testid="vault-card-2"] input[type="checkbox"]')
+      .check({ force: true });
+
+    // Wait for toolbar to mount (selection.size > 0)
+    await page.locator('[role="toolbar"]').waitFor();
+
+    await expect(page).toHaveScreenshot('vault-selection-active-light.png', {
+      fullPage: true,
+      maxDiffPixelRatio: 0.03,
+    });
+  });
+
+  test('vault-selection-active dark', async ({ page }) => {
+    await mockHealthOk(page);
+    await mockVaultAssets(page, VAULT_FIXTURE_RESPONSE);
+
+    await page.goto('/en/vault');
+    await page.getByRole('navigation', { name: 'Primary' }).waitFor();
+
+    // Switch to dark theme
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    });
+
+    await page
+      .locator('[data-testid="vault-card-1"] input[type="checkbox"]')
+      .check({ force: true });
+    await page
+      .locator('[data-testid="vault-card-2"] input[type="checkbox"]')
+      .check({ force: true });
+
+    await page.locator('[role="toolbar"]').waitFor();
+
+    await expect(page).toHaveScreenshot('vault-selection-active-dark.png', {
+      fullPage: true,
+      maxDiffPixelRatio: 0.03,
+    });
+  });
+
+  test('vault-bulk-toolbar light', async ({ page }) => {
+    await mockHealthOk(page);
+    await mockVaultAssets(page, VAULT_FIXTURE_RESPONSE);
+    await mockVaultTags(page, VAULT_TAGS_FIXTURE);
+
+    await page.goto('/en/vault');
+    await page.getByRole('navigation', { name: 'Primary' }).waitFor();
+
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-theme', 'light');
+    });
+
+    // Select a card to mount the toolbar
+    await page
+      .locator('[data-testid="vault-card-1"] input[type="checkbox"]')
+      .check({ force: true });
+
+    const toolbar = page.locator('[role="toolbar"]');
+    await toolbar.waitFor();
+
+    // Open the combobox so the tag input + suggestions are visible in the snapshot
+    await toolbar.locator('[role="searchbox"]').focus();
+
+    await expect(toolbar).toHaveScreenshot('vault-bulk-toolbar-light.png', {
+      maxDiffPixelRatio: 0.03,
+    });
+  });
+
+  test('vault-bulk-toolbar dark', async ({ page }) => {
+    await mockHealthOk(page);
+    await mockVaultAssets(page, VAULT_FIXTURE_RESPONSE);
+    await mockVaultTags(page, VAULT_TAGS_FIXTURE);
+
+    await page.goto('/en/vault');
+    await page.getByRole('navigation', { name: 'Primary' }).waitFor();
+
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    });
+
+    await page
+      .locator('[data-testid="vault-card-1"] input[type="checkbox"]')
+      .check({ force: true });
+
+    const toolbar = page.locator('[role="toolbar"]');
+    await toolbar.waitFor();
+
+    await toolbar.locator('[role="searchbox"]').focus();
+
+    await expect(toolbar).toHaveScreenshot('vault-bulk-toolbar-dark.png', {
+      maxDiffPixelRatio: 0.03,
+    });
+  });
+
+  test('vault-tag-filter-chip light', async ({ page }) => {
+    await mockHealthOk(page);
+    await mockVaultAssets(page, VAULT_FIXTURE_RESPONSE);
+    await mockVaultTags(page, VAULT_TAGS_FIXTURE);
+
+    // Navigate with ?tag= pre-set so the filter chip renders immediately
+    await page.goto('/en/vault?tag=test-y2k');
+    await page.getByRole('navigation', { name: 'Primary' }).waitFor();
+
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-theme', 'light');
+    });
+
+    // Wait for the tag chip to appear (VaultTagChip lazy-loads but renders for activeTag)
+    await page.getByRole('button', { name: 'test-y2k' }).waitFor({ timeout: 10_000 });
+
+    await expect(page).toHaveScreenshot('vault-tag-filter-chip-light.png', {
+      fullPage: false,
+      clip: { x: 0, y: 0, width: 1280, height: 180 },
+      maxDiffPixelRatio: 0.03,
+    });
+  });
+
+  test('vault-tag-filter-chip dark', async ({ page }) => {
+    await mockHealthOk(page);
+    await mockVaultAssets(page, VAULT_FIXTURE_RESPONSE);
+    await mockVaultTags(page, VAULT_TAGS_FIXTURE);
+
+    await page.goto('/en/vault?tag=test-y2k');
+    await page.getByRole('navigation', { name: 'Primary' }).waitFor();
+
+    await page.evaluate(() => {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    });
+
+    await page.getByRole('button', { name: 'test-y2k' }).waitFor({ timeout: 10_000 });
+
+    await expect(page).toHaveScreenshot('vault-tag-filter-chip-dark.png', {
+      fullPage: false,
+      clip: { x: 0, y: 0, width: 1280, height: 180 },
       maxDiffPixelRatio: 0.03,
     });
   });
