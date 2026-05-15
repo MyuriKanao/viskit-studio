@@ -22,6 +22,9 @@ export interface VaultAsset {
   description: string;
   price: number;
   locale: string;
+  /** EPIC-11: operator-marked inspiration flag. Optional for back-compat
+   *  with older response payloads during deploy windows. */
+  inspired?: boolean;
 }
 
 export interface VaultListResponse {

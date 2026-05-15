@@ -377,6 +377,11 @@
       "apply_success_with_noop": "已对 {total} 个资产应用 '{tag}'（{inserted} 新增, {noop} 已存在）",
       "apply_success_pure_insert": "已对 {total} 个资产应用 '{tag}'",
       "apply_error_generic": "应用标签失败"
+    },
+    "inspired": {
+      "toggle_on": "标记为灵感参考",
+      "toggle_off": "取消灵感参考",
+      "aria_label": "灵感开关"
     }
   },
   "newKit": {

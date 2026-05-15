@@ -11,9 +11,17 @@ interface VaultGridProps {
   onSelect?: (item: VaultAsset) => void;
   selection?: Set<number>;
   onToggleSelect?: (id: number, next: boolean) => void;
+  /** EPIC-11: render the star toggle overlay on each card. */
+  showInspiredToggle?: boolean;
 }
 
-export function VaultGrid({ items, onSelect, selection, onToggleSelect }: VaultGridProps) {
+export function VaultGrid({
+  items,
+  onSelect,
+  selection,
+  onToggleSelect,
+  showInspiredToggle,
+}: VaultGridProps) {
   return (
     <div className="columns-2 md:columns-3 lg:columns-4 gap-s-3" data-testid="vault-grid">
       {items.map((item) => (
@@ -23,6 +31,7 @@ export function VaultGrid({ items, onSelect, selection, onToggleSelect }: VaultG
           onSelect={onSelect}
           selected={selection?.has(item.id)}
           onToggleSelect={onToggleSelect}
+          showInspiredToggle={showInspiredToggle}
         />
       ))}
     </div>

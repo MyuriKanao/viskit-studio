@@ -1,20 +1,37 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
 import * as React from 'react';
 
 import type { VaultAsset } from '@/hooks/use-vault-assets';
 
 export type { VaultAsset };
 
+// EPIC-11: star toggle is lazy so its TanStack-mutation bytes don't ship in
+// the static /vault First Load (170 kB cap). First render of any card triggers
+// the chunk fetch once; subsequent renders are instant.
+const VaultCardStar = dynamic(
+  () => import('./vault-card-star').then((m) => m.VaultCardStar),
+  { ssr: false }
+);
+
 interface VaultCardProps {
   item: VaultAsset;
   onSelect?: (item: VaultAsset) => void;
   selected?: boolean;
   onToggleSelect?: (id: number, next: boolean) => void;
+  /** EPIC-11: when true, render the star toggle overlay. */
+  showInspiredToggle?: boolean;
 }
 
-export function VaultCard({ item, onSelect, selected, onToggleSelect }: VaultCardProps) {
+export function VaultCard({
+  item,
+  onSelect,
+  selected,
+  onToggleSelect,
+  showInspiredToggle,
+}: VaultCardProps) {
   const t = useTranslations('vault');
 
   const inner = (
@@ -30,6 +47,9 @@ export function VaultCard({ item, onSelect, selected, onToggleSelect }: VaultCar
             className="h-4 w-4 cursor-pointer rounded-sm accent-accent"
           />
         </span>
+      )}
+      {showInspiredToggle && (
+        <VaultCardStar assetId={item.id} inspired={item.inspired ?? false} />
       )}
       <img
         src={item.image_url}

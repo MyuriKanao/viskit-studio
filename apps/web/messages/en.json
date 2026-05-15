@@ -377,6 +377,11 @@
       "apply_success_with_noop": "Applied '{tag}' to {total} assets ({inserted} new, {noop} already had it)",
       "apply_success_pure_insert": "Applied '{tag}' to {total} assets",
       "apply_error_generic": "Failed to apply tag"
+    },
+    "inspired": {
+      "toggle_on": "Mark as inspiration reference",
+      "toggle_off": "Remove inspiration mark",
+      "aria_label": "Inspiration toggle"
     }
   },
   "newKit": {

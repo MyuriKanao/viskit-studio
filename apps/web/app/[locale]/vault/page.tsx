@@ -75,6 +75,7 @@ export default function VaultPage() {
     });
   }, []);
 
+
   // handleBulkApply receives the resolved TagApplyResponse from VaultBulkToolbar
   // (toolbar owns useVaultTagsApply in its lazy chunk to stay within budget).
   const handleBulkApply = React.useCallback(
@@ -233,6 +234,7 @@ export default function VaultPage() {
                 onSelect={handleSelect}
                 selection={selection}
                 onToggleSelect={toggleSelect}
+                showInspiredToggle
               />
             )}
           </section>
