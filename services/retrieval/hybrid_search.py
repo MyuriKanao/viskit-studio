@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 from pymilvus import AnnSearchRequest, RRFRanker
+
+logger = logging.getLogger(__name__)
 
 from services.retrieval.filters import FilterSpec, build_expression
 from services.retrieval.schema import COLLECTION_NAME
@@ -208,6 +211,23 @@ def hybrid_search(
             for h in hits
         ]
         hits.sort(key=lambda h: h.score, reverse=True)
+
+        # TD-EPIC11-3 telemetry: inspired hits landing just past the cut
+        # (top_k..top_k+2) are signal that the post-truncation boost
+        # decision is missing promotions. ADR-EPIC11-001 §Follow-Ups
+        # documents that if this fires in production we revisit
+        # oversample-and-retruncate.
+        missed = [
+            int(h.metadata["id"])
+            for h in hits[top_k : top_k + 3]
+            if h.metadata.get("id") in inspired_ids
+        ]
+        if missed:
+            logger.info(
+                "inspired_narrowly_missed_cut top_k=%d missed_ids=%s",
+                top_k,
+                missed,
+            )
 
     return hits[:top_k]
 

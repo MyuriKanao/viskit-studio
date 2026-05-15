@@ -122,3 +122,38 @@ def test_no_inspired_ids_leaves_scores_and_order_unchanged() -> None:
     assert [h.metadata["id"] for h in results] == [1, 2]
     assert results[0].score == pytest.approx(0.9)
     assert results[1].score == pytest.approx(0.4)
+
+
+def test_inspired_narrowly_missed_cut_emits_telemetry(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """TD-EPIC11-3: log fires when an inspired hit lands at rank top_k+1..top_k+3.
+
+    Setup: top_k=1, three hits with identical RRF score. Hit 99 is the
+    pre-boost leader and is NOT inspired (so it stays at rank 0 after
+    inspired hits get ×1.3); hits 5 and 6 are inspired and so end up at
+    ranks 1 and 2 — exactly the "narrowly missed cut" band the telemetry
+    is meant to catch.
+    """
+    raw = [
+        _raw_hit(asset_id=99, image_path="lead.jpg", score=1.0),
+        _raw_hit(asset_id=5, image_path="b.jpg", score=0.5),
+        _raw_hit(asset_id=6, image_path="c.jpg", score=0.5),
+    ]
+    client = _FakeClient(responses=[raw])
+
+    with caplog.at_level("INFO", logger="services.retrieval.hybrid_search"):
+        results = hybrid_search(
+            client,
+            _DENSE,
+            _SPARSE,
+            FilterSpec(),
+            top_k=1,
+            inspired_ids=frozenset({5, 6}),
+        )
+
+    assert [h.metadata["id"] for h in results] == [99]
+    telemetry = [r for r in caplog.records if "inspired_narrowly_missed_cut" in r.message]
+    assert len(telemetry) == 1
+    assert "missed_ids=[5, 6]" in telemetry[0].message
+    assert "top_k=1" in telemetry[0].message
