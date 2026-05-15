@@ -10,13 +10,27 @@ export type { VaultAsset };
 interface VaultCardProps {
   item: VaultAsset;
   onSelect?: (item: VaultAsset) => void;
+  selected?: boolean;
+  onToggleSelect?: (id: number, next: boolean) => void;
 }
 
-export function VaultCard({ item, onSelect }: VaultCardProps) {
+export function VaultCard({ item, onSelect, selected, onToggleSelect }: VaultCardProps) {
   const t = useTranslations('vault');
 
   const inner = (
     <>
+      {onToggleSelect !== undefined && (
+        <span className="absolute left-2 top-2 z-10">
+          <input
+            type="checkbox"
+            checked={selected ?? false}
+            aria-label={`Select asset ${item.id}`}
+            onChange={(e) => onToggleSelect(item.id, e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+            className="h-4 w-4 cursor-pointer rounded-sm accent-accent"
+          />
+        </span>
+      )}
       <img
         src={item.image_url}
         alt={item.description || item.category}
@@ -44,7 +58,7 @@ export function VaultCard({ item, onSelect }: VaultCardProps) {
         type="button"
         data-testid={`vault-card-${item.id}`}
         onClick={() => onSelect(item)}
-        className="mb-s-3 block w-full text-left break-inside-avoid rounded-card border border-border-subtle bg-surface-01 overflow-hidden hover:border-border-strong focus:outline-none focus:ring-2 focus:ring-accent"
+        className="relative mb-s-3 block w-full text-left break-inside-avoid rounded-card border border-border-subtle bg-surface-01 overflow-hidden hover:border-border-strong focus:outline-none focus:ring-2 focus:ring-accent"
       >
         {inner}
       </button>
@@ -54,7 +68,7 @@ export function VaultCard({ item, onSelect }: VaultCardProps) {
   return (
     <article
       data-testid={`vault-card-${item.id}`}
-      className="mb-s-3 break-inside-avoid rounded-card border border-border-subtle bg-surface-01 overflow-hidden"
+      className="relative mb-s-3 break-inside-avoid rounded-card border border-border-subtle bg-surface-01 overflow-hidden"
     >
       {inner}
     </article>

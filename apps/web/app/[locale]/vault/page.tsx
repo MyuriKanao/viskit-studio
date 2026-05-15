@@ -7,6 +7,10 @@ import * as React from 'react';
 
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
+// NOTE: useVaultTagsApply is intentionally NOT imported here. It lives in the
+// lazy vault-bulk-toolbar chunk so it doesn't inflate /vault First Load JS.
+// The TagApplyResponse type flows back via the toolbar's onApply callback.
+import type { TagApplyResponse } from '@/components/vault/vault-bulk-toolbar';
 import { VaultFiltersBar } from '@/components/vault/vault-filters';
 import { VaultGrid } from '@/components/vault/vault-grid';
 import { type VaultAsset, type VaultFilters, useVaultAssets } from '@/hooks/use-vault-assets';
@@ -21,6 +25,12 @@ const VaultDrawer = dynamic(
 );
 const IngestModal = dynamic(
   () => import('@/components/vault/ingest-modal').then((m) => m.IngestModal),
+  { ssr: false }
+);
+// EPIC-10 bundle budget: toolbar + combobox are selection-gated — lazy so
+// they don't inflate First Load JS when no selection is active.
+const VaultBulkToolbar = dynamic(
+  () => import('@/components/vault/vault-bulk-toolbar').then((m) => m.VaultBulkToolbar),
   { ssr: false }
 );
 
@@ -46,6 +56,40 @@ export default function VaultPage() {
 
   const query = useVaultAssets({ limit: PAGE_SIZE, offset, ...filters });
   const items = query.data?.items ?? [];
+  const [selection, setSelection] = React.useState<Set<number>>(new Set());
+
+  const toggleSelect = React.useCallback((id: number, next: boolean) => {
+    setSelection((prev) => {
+      const s = new Set(prev);
+      if (next) {
+        s.add(id);
+      } else {
+        s.delete(id);
+      }
+      return s;
+    });
+  }, []);
+
+  // handleBulkApply receives the resolved TagApplyResponse from VaultBulkToolbar
+  // (toolbar owns useVaultTagsApply in its lazy chunk to stay within budget).
+  const handleBulkApply = React.useCallback(
+    (_action: 'add' | 'remove', tags: string[], resp: TagApplyResponse) => {
+      const tBulk = t as unknown as (key: string, values?: Record<string, unknown>) => string;
+      const tag = tags.join(', ');
+      const total = resp.affected_assets.length;
+      const message =
+        resp.noop_count > 0
+          ? tBulk('bulk.apply_success_with_noop', {
+              tag,
+              total,
+              inserted: resp.inserted_count,
+              noop: resp.noop_count,
+            })
+          : tBulk('bulk.apply_success_pure_insert', { tag, total });
+      setToast({ kind: 'success', message });
+    },
+    [t]
+  );
 
   // URL-driven drawer state: ?asset=<id> survives refresh + sharing.
   const selectedAssetId = React.useMemo(() => {
@@ -167,7 +211,12 @@ export default function VaultPage() {
                 <span className="text-sm text-ink-muted">{t('empty_hint')}</span>
               </div>
             ) : (
-              <VaultGrid items={items} onSelect={handleSelect} />
+              <VaultGrid
+                items={items}
+                onSelect={handleSelect}
+                selection={selection}
+                onToggleSelect={toggleSelect}
+              />
             )}
           </section>
 
@@ -211,6 +260,14 @@ export default function VaultPage() {
         open={selectedAssetId !== null && selectedAsset !== null}
         onOpenChange={handleDrawerOpenChange}
       />
+
+      {selection.size > 0 && (
+        <VaultBulkToolbar
+          selection={selection}
+          onClear={() => setSelection(new Set())}
+          onApply={handleBulkApply}
+        />
+      )}
     </div>
   );
 }

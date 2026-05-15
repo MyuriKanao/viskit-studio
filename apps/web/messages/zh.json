@@ -363,7 +363,18 @@
     "drawer_topn_distance": "相似度 {value}",
     "drawer_use_as_ref_cta": "用作参考",
     "drawer_loading": "载入中…",
-    "drawer_error": "载入失败，请重试"
+    "drawer_error": "载入失败，请重试",
+    "bulk": {
+      "selection_count": "{count} 已选",
+      "action_add": "添加标签",
+      "action_remove": "移除标签",
+      "clear_selection": "清除选择",
+      "combobox_placeholder": "输入小写标签 (free-form)",
+      "combobox_create_pattern": "+ 创建 ''{input}''",
+      "apply_success_with_noop": "已对 {total} 个资产应用 '{tag}'（{inserted} 新增, {noop} 已存在）",
+      "apply_success_pure_insert": "已对 {total} 个资产应用 '{tag}'",
+      "apply_error_generic": "应用标签失败"
+    }
   },
   "newKit": {
     "ref_pinned_banner": "已选 #{id} 为参考素材，请先完成基础信息",

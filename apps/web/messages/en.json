@@ -363,7 +363,18 @@
     "drawer_topn_distance": "Similarity {value}",
     "drawer_use_as_ref_cta": "Use as reference",
     "drawer_loading": "Loading…",
-    "drawer_error": "Failed to load — please retry"
+    "drawer_error": "Failed to load — please retry",
+    "bulk": {
+      "selection_count": "{count} selected",
+      "action_add": "Add tag",
+      "action_remove": "Remove tag",
+      "clear_selection": "Clear selection",
+      "combobox_placeholder": "Type a lowercase tag…",
+      "combobox_create_pattern": "+ Create ''{input}''",
+      "apply_success_with_noop": "Applied '{tag}' to {total} assets ({inserted} new, {noop} already had it)",
+      "apply_success_pure_insert": "Applied '{tag}' to {total} assets",
+      "apply_error_generic": "Failed to apply tag"
+    }
   },
   "newKit": {
     "ref_pinned_banner": "Reference asset #{id} selected; complete the basics first",
