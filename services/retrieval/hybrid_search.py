@@ -40,6 +40,12 @@ _OUTPUT_FIELDS = [
 # `sampled` flag in the response, not by silently truncating.
 _NEIGHBOR_SAMPLE_THRESHOLD = 5000
 
+# EPIC-11: operator-marked "inspired" assets receive a soft RRF score boost
+# at the final fusion stage. ADR-EPIC11-001 locks the magnitude at 1.3 and
+# the placement at one site (post-fallback-merge, before top_k truncation)
+# to avoid double-multiplication.
+INSPIRED_BOOST_MULTIPLIER = 1.3
+
 
 @dataclass(frozen=True, slots=True)
 class SearchHit:
@@ -143,6 +149,7 @@ def hybrid_search(
     filter_spec: FilterSpec,
     *,
     top_k: int = 10,
+    inspired_ids: frozenset[int] = frozenset(),
 ) -> list[SearchHit]:
     """Hybrid dense+sparse retrieval with RRF fusion.
 
@@ -152,6 +159,12 @@ def hybrid_search(
     When filter_spec.fallback_locale is set AND primary returns < top_k hits,
     automatically retries with fallback_locale, merging by image_path
     (no duplicates). Fallback hits are marked metadata['from_fallback'] = True.
+
+    EPIC-11: if ``inspired_ids`` is non-empty, every hit whose
+    ``metadata['id']`` is in the set has its RRF score multiplied by
+    :data:`INSPIRED_BOOST_MULTIPLIER` after fallback merging and before
+    final top_k truncation, then the list is re-sorted by score desc so
+    boosted hits actually rise in rank order.
     """
     # Build primary spec without fallback so the filter uses only primary locale
     primary_spec = dataclasses.replace(filter_spec, fallback_locale=None)
@@ -183,6 +196,18 @@ def hybrid_search(
                     )
                 )
                 existing_paths.add(fb_hit.image_path)
+
+    # EPIC-11: post-fallback boost + resort. Single site so no hit is
+    # multiplied twice. SearchHit is frozen+slots, so use dataclasses.replace
+    # to rewrite the score.
+    if inspired_ids:
+        hits = [
+            dataclasses.replace(h, score=h.score * INSPIRED_BOOST_MULTIPLIER)
+            if h.metadata.get("id") in inspired_ids
+            else h
+            for h in hits
+        ]
+        hits.sort(key=lambda h: h.score, reverse=True)
 
     return hits[:top_k]
 

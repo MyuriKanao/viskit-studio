@@ -10,9 +10,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from apps.api.lib.db import get_session
+from apps.api.models.vault_asset_inspired import VaultAssetInspired
 from services.imagegen.style_synthesizer import StyleSynthesisError, synthesize_style
 from services.retrieval.filters import FilterSpec
 from services.retrieval.hybrid_search import SearchHit, hybrid_search
@@ -82,7 +86,11 @@ _SPARSE_STUB: dict[int, float] = {0: 1.0}
 
 
 @router.post("/search", response_model=SearchResponse)
-async def search(req: Request, payload: SearchRequest) -> SearchResponse:
+async def search(
+    req: Request,
+    payload: SearchRequest,
+    db: Session = Depends(get_session),  # noqa: B008
+) -> SearchResponse:
     """POST /api/retrieval/search — embed query image + hybrid retrieve."""
     registry = getattr(req.app.state, "registry", None)
     if registry is None:
@@ -118,7 +126,20 @@ async def search(req: Request, payload: SearchRequest) -> SearchResponse:
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"milvus unavailable: {exc}") from exc
 
-    hits = hybrid_search(client, query_dense, query_sparse, filter_spec, top_k=payload.top_k)
+    # EPIC-11: fetch the operator-curated inspired set once per request so the
+    # hybrid search can soft-boost matching hits before top_k truncation.
+    inspired_set: frozenset[int] = frozenset(
+        db.execute(select(VaultAssetInspired.asset_id)).scalars().all()
+    )
+
+    hits = hybrid_search(
+        client,
+        query_dense,
+        query_sparse,
+        filter_spec,
+        top_k=payload.top_k,
+        inspired_ids=inspired_set,
+    )
     return SearchResponse(
         hits=[
             SearchHitOut(
