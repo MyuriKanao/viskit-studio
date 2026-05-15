@@ -380,8 +380,7 @@
     },
     "inspired": {
       "toggle_on": "Mark as inspiration reference",
-      "toggle_off": "Remove inspiration mark",
-      "aria_label": "Inspiration toggle"
+      "toggle_off": "Remove inspiration mark"
     }
   },
   "newKit": {
