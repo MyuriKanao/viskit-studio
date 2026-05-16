@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { mockHealthOk } from './_helpers/mock-health';
-import { mockProvidersHealth, mockProvidersSummary } from './_helpers/mock-providers';
+import { mockProviderModels, mockProvidersHealth, mockProvidersSummary } from './_helpers/mock-providers';
 
 /**
  * EPIC-7 AC #3 — Providers hero page.
@@ -14,11 +14,11 @@ test.describe('providers hero page', () => {
     await mockProvidersHealth(page);
     await mockProvidersSummary(page);
 
-    await page.goto('/zh/providers');
+    await page.goto('/zh/providers', { waitUntil: 'domcontentloaded' });
     await page.getByRole('navigation', { name: 'Primary' }).waitFor();
 
     // Sankey ribbons rendered: each role band has aria-label "{role} band".
-    for (const role of ['vision', 'llm', 'image_gen', 'image_edit', 'embedding']) {
+    for (const role of ['vision', 'llm', 'image', 'embedding']) {
       await expect(page.getByLabel(`${role} band`).first()).toBeVisible();
     }
 
@@ -27,11 +27,23 @@ test.describe('providers hero page', () => {
     await expect(table).toBeVisible();
     await expect(table.getByText('llm-default-a')).toBeVisible();
 
+    await expect(table.getByText('https://llm.example.com/v1')).toBeVisible();
+
+    await mockProviderModels(page, {
+      role: 'llm',
+      ok: true,
+      latency_ms: 88,
+      models: ['llm-default-a'],
+      error: null,
+    });
+    await table.getByRole('button', { name: 'Test llm' }).click({ force: true });
+    await expect(table.getByText('88 ms')).toBeVisible();
+
     // YAML toggle tab visible.
     await expect(page.getByRole('tab', { name: /YAML|view_yaml_toggle/ })).toBeVisible();
 
     // Add endpoint button opens the modal.
-    await page.getByRole('button', { name: /新增服务商|Add endpoint/ }).click();
-    await expect(page.getByRole('dialog', { name: /新增服务商|Add endpoint/ })).toBeVisible();
+    await page.getByRole('button', { name: /添加端点|Add endpoint/ }).click();
+    await expect(page.getByRole('dialog', { name: /添加端点|Add endpoint/ })).toBeVisible();
   });
 });

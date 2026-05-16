@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import base64
 import os
+import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -19,6 +21,7 @@ from services.providers._http import make_session
 from services.providers.base import (
     ChatResponse,
     Message,
+    ProbeResult,
     VisionResponse,
 )
 
@@ -84,6 +87,8 @@ class AnthropicCompatibleAdapter:
         role: str,
         provider_alias: str = "default",
         timeout: float = 180.0,
+        clock: Callable[[], float] = time.monotonic,
+        api_key: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key_env = api_key_env
@@ -91,15 +96,23 @@ class AnthropicCompatibleAdapter:
         self.role = role
         self._provider_alias = provider_alias
         self._session: httpx.Client = make_session(timeout=timeout)
+        self._clock = clock
+        # See OpenAICompatibleAdapter — inline key bypasses os.environ for
+        # the candidate-probe flow.
+        self._api_key_override = api_key
+
+    def _resolve_api_key(self) -> str:
+        if self._api_key_override is not None:
+            return self._api_key_override
+        return os.environ.get(self.api_key_env, "")
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _headers(self) -> dict[str, str]:
-        api_key = os.environ.get(self.api_key_env, "")
         return {
-            "x-api-key": api_key,
+            "x-api-key": self._resolve_api_key(),
             "anthropic-version": _ANTHROPIC_VERSION,
             "content-type": "application/json",
         }
@@ -290,3 +303,55 @@ class AnthropicCompatibleAdapter:
                 model=actual_model,
                 raw=data,
             )
+
+    # ------------------------------------------------------------------
+    # Probeable
+    # ------------------------------------------------------------------
+
+    def probe(self, *, timeout: float = 5.0) -> ProbeResult:
+        """Hit ``GET {base_url}/v1/models`` to verify reachability + list models.
+
+        Never raises — failures are encoded in the returned :class:`ProbeResult`.
+        Uses a plain ``httpx.Client`` (no retry session) so the reported latency
+        reflects a single round-trip.
+        """
+        api_key = self._resolve_api_key()
+        if not api_key:
+            return ProbeResult(
+                ok=False, latency_ms=0, models=[],
+                error=f"{self.api_key_env} unset",
+            )
+        url = f"{self.base_url}/v1/models"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": _ANTHROPIC_VERSION,
+        }
+        started = self._clock()
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            elapsed = int((self._clock() - started) * 1000)
+            return ProbeResult(
+                ok=False, latency_ms=elapsed, models=[],
+                error=type(exc).__name__,
+            )
+        elapsed = int((self._clock() - started) * 1000)
+        if resp.status_code >= 400:
+            return ProbeResult(
+                ok=False, latency_ms=elapsed, models=[],
+                error=f"HTTP {resp.status_code}",
+            )
+        try:
+            payload = resp.json()
+            items = payload.get("data") if isinstance(payload, dict) else None
+            models = [
+                str(item["id"]) for item in (items or [])
+                if isinstance(item, dict) and item.get("id")
+            ]
+        except (ValueError, KeyError, TypeError):
+            return ProbeResult(
+                ok=False, latency_ms=elapsed, models=[],
+                error="invalid response body",
+            )
+        return ProbeResult(ok=True, latency_ms=elapsed, models=models, error=None)

@@ -83,8 +83,13 @@ class SettingsResponse(BaseModel):
 
 
 def _config_path() -> Path:
-    """Resolve the active config path at request time."""
-    return Path(os.environ.get("CONFIG_PATH", "config.yaml.example"))
+    """Resolve the active config path at request time.
+
+    Default matches ``apps.api.main`` so the routes read/write the same file
+    the registry was booted from.  ``config.yaml.example`` is read-only
+    documentation and must never be mutated by request handlers.
+    """
+    return Path(os.environ.get("CONFIG_PATH", "data/config.yaml"))
 
 
 def _parse_yaml(content: str) -> dict[str, Any]:

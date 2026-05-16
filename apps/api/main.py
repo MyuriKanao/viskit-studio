@@ -25,6 +25,7 @@ from apps.api.routes.settings import router as settings_router
 from apps.api.routes.templates import router as templates_router
 from apps.api.routes.vault import router as vault_router
 from services.imagegen.orchestrator import KitEventBus
+from apps.api.lib import secrets_store
 from services.providers.registry import ProviderConfigError
 from services.providers.registry import boot as boot_registry
 
@@ -33,13 +34,30 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Lifespan
 # ---------------------------------------------------------------------------
-# default to config.yaml.example so fresh-clone dev/test "just works"; production sets CONFIG_PATH
-_config_path = Path(os.environ.get("CONFIG_PATH", "config.yaml.example"))
+# Live runtime config lives at data/config.yaml (gitignored).  On fresh
+# clone we bootstrap it from the committed example so the API boots without
+# manual setup; the example file itself stays read-only as documentation.
+_config_path = Path(os.environ.get("CONFIG_PATH", "data/config.yaml"))
+_example_path = Path("config.yaml.example")
+
+
+def _bootstrap_config_if_missing(path: Path) -> None:
+    if path.exists():
+        return
+    if not _example_path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_example_path.read_text())
+    logger.info("Bootstrapped %s from %s", path, _example_path)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("AIShop API starting; config_path=%s", _config_path)
+    _bootstrap_config_if_missing(_config_path)
+    injected = secrets_store.load_into_env()
+    if injected:
+        logger.info("Loaded %d secrets from %s into env", injected, secrets_store.secrets_path())
     try:
         app.state.registry = boot_registry(_config_path)
     except ProviderConfigError as exc:

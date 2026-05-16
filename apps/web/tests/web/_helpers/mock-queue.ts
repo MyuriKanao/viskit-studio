@@ -11,7 +11,7 @@ export const QUEUE_FIXTURE = [
     name: '阳光防护乳',
     locale: 'zh-CN',
     stages: ['done', 'done', 'active', 'queued'],
-    current_stage: 'image_gen',
+    current_stage: 'in_progress',
     eta_ms: 42_000,
   },
 ];

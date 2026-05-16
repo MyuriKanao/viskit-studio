@@ -38,6 +38,7 @@ from services.providers.base import (
     ImageEditResponse,
     ImageGenResponse,
     Message,
+    ProbeResult,
     VisionResponse,
 )
 from services.providers.cost import record as record_cost
@@ -116,7 +117,7 @@ class OpenAICompatibleAdapter:
             token.  Resolved at call time, not at construction time, so tests
             can ``monkeypatch.setenv`` per case.
         model: Default model identifier sent in request bodies.
-        role: Logical role for cost-tracking (e.g. ``"llm"``, ``"image_gen"``).
+        role: Logical role for cost-tracking (e.g. ``"llm"``, ``"image"``).
         provider_alias: Suffix used in the cost-event ``provider_name`` column
             so multiple openai_compatible deployments can be billed separately.
         timeout: Per-request HTTP timeout in seconds.
@@ -137,6 +138,7 @@ class OpenAICompatibleAdapter:
         timeout: float = 180.0,
         clock: Callable[[], float] = time.monotonic,
         sleep_fn: Callable[[float], None] = time.sleep,
+        api_key: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key_env = api_key_env
@@ -146,6 +148,15 @@ class OpenAICompatibleAdapter:
         self.timeout = timeout
         self._clock = clock
         self._sleep = sleep_fn
+        # When set, ``api_key`` is used directly instead of reading
+        # ``os.environ[api_key_env]``.  Lets the candidate-probe route avoid
+        # mutating process-wide env state under concurrent requests.
+        self._api_key_override = api_key
+
+    def _resolve_api_key(self) -> str:
+        if self._api_key_override is not None:
+            return self._api_key_override
+        return os.environ.get(self.api_key_env, "")
 
     # ------------------------------------------------------------------
     # Internals
@@ -156,7 +167,7 @@ class OpenAICompatibleAdapter:
 
     def _headers(self) -> dict[str, str]:
         return {
-            "Authorization": f"Bearer {os.environ[self.api_key_env]}",
+            "Authorization": f"Bearer {self._resolve_api_key()}",
             "Content-Type": "application/json",
         }
 
@@ -397,7 +408,7 @@ class OpenAICompatibleAdapter:
 
         # Build headers without Content-Type so httpx sets multipart boundary.
         headers = {
-            "Authorization": f"Bearer {os.environ[self.api_key_env]}",
+            "Authorization": f"Bearer {self._resolve_api_key()}",
         }
         files = {
             "image": ("image.png", image, "image/png"),
@@ -580,3 +591,52 @@ class OpenAICompatibleAdapter:
             cost_usd=_token_cost(effective_model, tokens_in, 0),
         )
         return vectors
+
+    # ------------------------------------------------------------------
+    # Probeable
+    # ------------------------------------------------------------------
+
+    def probe(self, *, timeout: float = 5.0) -> ProbeResult:
+        """Hit ``GET {base_url}/models`` to verify reachability + list models.
+
+        Never raises — failures are encoded in the returned :class:`ProbeResult`.
+        Uses a plain ``httpx.Client`` (no retry session) so the reported latency
+        reflects a single round-trip.
+        """
+        api_key = self._resolve_api_key()
+        if not api_key:
+            return ProbeResult(
+                ok=False, latency_ms=0, models=[],
+                error=f"{self.api_key_env} unset",
+            )
+        url = f"{self.base_url}/models"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        started = self._clock()
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.get(url, headers=headers)
+        except httpx.HTTPError as exc:
+            elapsed = int((self._clock() - started) * 1000)
+            return ProbeResult(
+                ok=False, latency_ms=elapsed, models=[],
+                error=type(exc).__name__,
+            )
+        elapsed = int((self._clock() - started) * 1000)
+        if resp.status_code >= 400:
+            return ProbeResult(
+                ok=False, latency_ms=elapsed, models=[],
+                error=f"HTTP {resp.status_code}",
+            )
+        try:
+            payload = resp.json()
+            items = payload.get("data") if isinstance(payload, dict) else None
+            models = [
+                str(item["id"]) for item in (items or [])
+                if isinstance(item, dict) and item.get("id")
+            ]
+        except (ValueError, KeyError, TypeError):
+            return ProbeResult(
+                ok=False, latency_ms=elapsed, models=[],
+                error="invalid response body",
+            )
+        return ProbeResult(ok=True, latency_ms=elapsed, models=models, error=None)

@@ -20,6 +20,8 @@ __pycache__/
 # Environment — never commit secrets
 .env
 # .env.example is intentionally kept
+data/secrets.json
+data/config.yaml
 
 # macOS
 .DS_Store

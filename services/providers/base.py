@@ -26,12 +26,14 @@ __all__ = [
     "VisionResponse",
     "ImageGenResponse",
     "ImageEditResponse",
+    "ProbeResult",
     # Protocols
     "ChatLLM",
     "VisionLLM",
     "ImageGen",
     "ImageEdit",
     "Embedding",
+    "Probeable",
 ]
 
 
@@ -196,3 +198,31 @@ class Embedding(Protocol):
     ) -> list[list[float]]:
         """Return one embedding vector per element in ``inputs``."""
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class ProbeResult:
+    """Outcome of a single provider reachability + capability probe.
+
+    ``models`` is the list of model identifiers the endpoint advertised; an
+    empty list means either the endpoint omits a model catalog or the probe
+    failed.  ``error`` carries a short human-readable cause when ``ok`` is
+    false — never the raw response body (no risk of secret leakage).
+    """
+
+    ok: bool
+    latency_ms: int
+    models: list[str]
+    error: str | None
+
+
+@runtime_checkable
+class Probeable(Protocol):
+    """Protocol for backends that can report reachability and available models.
+
+    Implementations must NEVER raise — failures are encoded in the returned
+    :class:`ProbeResult` so callers can render a degraded state without a
+    try/except dance.
+    """
+
+    def probe(self, *, timeout: float = 5.0) -> ProbeResult: ...

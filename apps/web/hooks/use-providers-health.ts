@@ -11,6 +11,7 @@ import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 export interface ProviderHealthRow {
   endpoint_id: string;
   role: string;
+  base_url: string | null;
   status: 'ok' | 'warn' | 'error' | null;
   latency_ms: number | null;
   last_check: string | null;

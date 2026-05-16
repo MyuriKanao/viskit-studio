@@ -29,6 +29,7 @@ export default function ProvidersPage() {
   const health = useProvidersHealth();
   const [view, setView] = React.useState<'visual' | 'yaml'>('visual');
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [editingRole, setEditingRole] = React.useState<string | null>(null);
   const [conflict, setConflict] = React.useState<ConflictEventDetail | null>(null);
 
   React.useEffect(() => {
@@ -44,7 +45,7 @@ export default function ProvidersPage() {
     return (health.data ?? []).map((h) => ({
       endpoint_id: h.endpoint_id,
       role: h.role,
-      base_url: null,
+      base_url: h.base_url,
     }));
   }, [health.data]);
 
@@ -151,24 +152,20 @@ export default function ProvidersPage() {
                   </span>
                   <span className="font-mono text-xs text-ink-faint">role → endpoint</span>
                 </header>
-                <svg
-                  viewBox="0 0 900 380"
-                  preserveAspectRatio="xMidYMid meet"
-                  className="block h-auto w-full"
-                  role="img"
-                  aria-label="Active routing"
-                >
-                  <title>Active routing</title>
-                </svg>
-                <div className="-mt-[380px] aspect-[900/380] w-full">
-                  <SankeyRouting flows={flows} unbound={unbound} />
-                </div>
+                <SankeyRouting flows={flows} unbound={unbound} />
               </section>
               <section
                 aria-label="Endpoints"
                 className="rounded-card border border-border-subtle bg-surface-01 p-s-4"
               >
-                <EndpointTable endpoints={endpoints} health={health.data ?? []} />
+                <EndpointTable
+                  endpoints={endpoints}
+                  health={health.data ?? []}
+                  onEdit={(role) => {
+                    setEditingRole(role);
+                    setModalOpen(true);
+                  }}
+                />
               </section>
             </>
           ) : (
@@ -184,7 +181,11 @@ export default function ProvidersPage() {
 
       <AddEndpointModal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        editingRole={editingRole}
+        onClose={() => {
+          setModalOpen(false);
+          setEditingRole(null);
+        }}
         currentYaml={yamlText}
         currentSha=""
       />

@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 export type ProviderHealthRow = {
   endpoint_id: string;
   role: string;
+  base_url: string | null;
   status: 'ok' | 'warn' | 'error' | null;
   latency_ms: number | null;
   last_check: string | null;
@@ -13,6 +14,7 @@ export const HEALTH_FIXTURE: ProviderHealthRow[] = [
   {
     endpoint_id: 'vision-default-a',
     role: 'vision',
+    base_url: 'https://vision.example.com/v1',
     status: 'ok',
     latency_ms: 220,
     last_check: '2026-05-11T00:00:00Z',
@@ -21,30 +23,25 @@ export const HEALTH_FIXTURE: ProviderHealthRow[] = [
   {
     endpoint_id: 'llm-default-a',
     role: 'llm',
+    base_url: 'https://llm.example.com/v1',
     status: 'ok',
     latency_ms: 190,
     last_check: '2026-05-11T00:00:00Z',
     unbound: null,
   },
   {
-    endpoint_id: 'image-gen-default-a',
-    role: 'image_gen',
+    endpoint_id: 'image-default-a',
+    role: 'image',
+    base_url: 'https://image.example.com/v1',
     status: 'ok',
     latency_ms: 410,
     last_check: '2026-05-11T00:00:00Z',
     unbound: null,
   },
   {
-    endpoint_id: 'image-edit-default-a',
-    role: 'image_edit',
-    status: 'warn',
-    latency_ms: 720,
-    last_check: '2026-05-11T00:00:00Z',
-    unbound: null,
-  },
-  {
     endpoint_id: 'embedding-default-a',
     role: 'embedding',
+    base_url: 'https://embedding.example.com/v1',
     status: 'ok',
     latency_ms: 110,
     last_check: '2026-05-11T00:00:00Z',
@@ -53,11 +50,19 @@ export const HEALTH_FIXTURE: ProviderHealthRow[] = [
 ];
 
 export const SUMMARY_FIXTURE = {
-  endpoints_count: 5,
+  endpoints_count: 4,
   monthly_cap_usd: 120,
   brand_color: '#7A5AF8',
   default_locale: 'zh-CN',
   export_preset: 'taobao-standard',
+};
+
+export type ProviderProbeRow = {
+  role: string;
+  ok: boolean;
+  latency_ms: number;
+  models: string[];
+  error: string | null;
 };
 
 export async function mockProvidersHealth(
@@ -77,6 +82,25 @@ export async function mockProvidersSummary(
   const body = JSON.stringify(payload);
   await page.route('**/api/providers/summary', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body });
+  });
+}
+
+export async function mockProviderModels(
+  page: Page,
+  row: ProviderProbeRow = {
+    role: 'llm',
+    ok: true,
+    latency_ms: 88,
+    models: ['llm-default-a'],
+    error: null,
+  }
+): Promise<void> {
+  await page.route('**/api/providers/models**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ rows: [row] }),
+    });
   });
 }
 
