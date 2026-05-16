@@ -39,27 +39,32 @@ export function VaultTagChip({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        {activeTag ? (
-          <button
-            type="button"
-            title={tooltipAnd}
-            className="inline-flex items-center gap-s-1 rounded-input border border-accent bg-accent/10 px-s-2 py-s-1 text-sm text-accent"
-          >
-            <span>{activeTag}</span>
+      {activeTag ? (
+        // Chip is a non-interactive <span> wrapper holding two sibling
+        // <button>s: the tag-name button opens the popover, the × button
+        // clears the filter. Nesting two <button>s (the previous shape)
+        // was invalid HTML.
+        <span className="inline-flex items-center gap-s-1 rounded-input border border-accent bg-accent/10 px-s-2 py-s-1 text-sm text-accent">
+          <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label={labelAll}
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange(undefined);
-              }}
-              className="ml-0.5 cursor-pointer text-accent hover:text-ink-primary"
+              title={tooltipAnd}
+              className="cursor-pointer border-0 bg-transparent p-0 text-inherit"
             >
-              ×
+              {activeTag}
             </button>
+          </PopoverTrigger>
+          <button
+            type="button"
+            aria-label={labelAll}
+            onClick={() => onChange(undefined)}
+            className="ml-0.5 cursor-pointer border-0 bg-transparent p-0 text-accent hover:text-ink-primary"
+          >
+            ×
           </button>
-        ) : (
+        </span>
+      ) : (
+        <PopoverTrigger asChild>
           <button
             type="button"
             aria-label={labelTag}
@@ -67,8 +72,8 @@ export function VaultTagChip({
           >
             {labelTag}
           </button>
-        )}
-      </PopoverTrigger>
+        </PopoverTrigger>
+      )}
       <PopoverContent className="w-64 p-2" align="start">
         {open && (
           <TagCombobox
