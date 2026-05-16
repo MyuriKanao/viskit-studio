@@ -56,6 +56,7 @@ class SearchHit:
     image_url: str
     score: float
     metadata: dict[str, Any]
+    inspired: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +169,12 @@ def hybrid_search(
     :data:`INSPIRED_BOOST_MULTIPLIER` after fallback merging and before
     final top_k truncation, then the list is re-sorted by score desc so
     boosted hits actually rise in rank order.
+
+    EPIC-13: when ``inspired_ids`` is non-empty, this function also stamps
+    ``SearchHit.inspired = (int(metadata['id']) in inspired_ids)`` on every
+    hit (after the boost + sort, before truncation). When ``inspired_ids``
+    is empty, ``SearchHit.inspired`` falls through to its dataclass default
+    of ``False``.
     """
     # Build primary spec without fallback so the filter uses only primary locale
     primary_spec = dataclasses.replace(filter_spec, fallback_locale=None)
@@ -211,6 +218,24 @@ def hybrid_search(
             for h in hits
         ]
         hits.sort(key=lambda h: h.score, reverse=True)
+
+        # EPIC-13: stamp inspired flag on every hit using the SAME inspired_ids
+        # set the boost loop above consumed. Single mutation site; runs whenever
+        # inspired_ids is non-empty.
+        #
+        # INTENTIONAL GATE — DO NOT LIFT OUTSIDE `if inspired_ids:`. When
+        # inspired_ids is empty (the common case — sparse vault stars), this
+        # loop is skipped on purpose. SearchHit.inspired then falls through to
+        # its dataclass default (False). AC-4's "always present in response,
+        # never null/absent" invariant is carried by the Pydantic
+        # SearchHitOut.inspired:bool=False default propagating through the
+        # response builder — NOT by making this stamp loop unconditional. A
+        # future defensive PR that drops the gate will burn dataclasses.replace
+        # allocations on every empty-set request for zero behavior change.
+        hits = [
+            dataclasses.replace(h, inspired=h.metadata.get("id") in inspired_ids)
+            for h in hits
+        ]
 
         # TD-EPIC11-3 telemetry: inspired hits landing just past the cut
         # (top_k..top_k+2) are signal that the post-truncation boost

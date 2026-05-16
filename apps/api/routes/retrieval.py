@@ -51,6 +51,7 @@ class SearchHitOut(BaseModel):
     score: float
     metadata: dict[str, Any]
     id: int | None = None
+    inspired: bool = False
 
 
 class SearchResponse(BaseModel):
@@ -151,6 +152,7 @@ async def search(
                     if isinstance(h.metadata.get("id"), (int, float))
                     else None
                 ),
+                inspired=h.inspired,
             )
             for h in hits
         ]
