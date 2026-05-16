@@ -123,7 +123,28 @@ _SEEDED_PLAN: list[tuple[Any, list[Any] | None]] = [
 
 
 @pytest.mark.parametrize("client_with_session", [_SEEDED_PLAN], indirect=True)
-def test_kits_list_seeded(client_with_session: TestClient) -> None:
+def test_kits_list_seeded(
+    client_with_session: TestClient,
+    tmp_path: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # _thumb_if_exists resolves relative png_paths against _thumb_base(); point
+    # it at tmp_path and stage the files the plan claims exist so the route
+    # returns the paths verbatim instead of nulling them.
+    from apps.api.routes import kits as kits_route
+
+    monkeypatch.setattr(kits_route, "_thumb_base", lambda: tmp_path)
+    for rel in (
+        "kits/42/hero/1.png",
+        "kits/42/hero/2.png",
+        "kits/42/hero/4.png",
+        "kits/42/detail/M1.png",
+        "kits/42/detail/M5.png",
+    ):
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"")
+
     response = client_with_session.get("/api/kits?recent=true&limit=6")
     assert response.status_code == 200, response.text
     body = response.json()
@@ -148,6 +169,50 @@ def test_kits_list_seeded(client_with_session: TestClient) -> None:
     assert item["thumbs"][5] == "kits/42/detail/M1.png"
     assert item["thumbs"][6] is None
     assert item["thumbs"][9] == "kits/42/detail/M5.png"
+
+
+def test_kits_list_drops_dangling_png_paths(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Catalog thumbs must be None when the underlying PNG is missing on disk."""
+    from apps.api.routes import kits as kits_route
+
+    monkeypatch.setattr(kits_route, "_thumb_base", lambda: tmp_path)
+    # Stage only one hero PNG; everything else should null out.
+    real = tmp_path / "kits" / "42" / "hero" / "1.png"
+    real.parent.mkdir(parents=True, exist_ok=True)
+    real.write_bytes(b"")
+
+    plan: list[tuple[Any, list[Any] | None]] = [
+        (1, None),
+        (
+            None,
+            [
+                _Row(id=42, status="ready", score=None, locale="zh", sku="X", name="x"),
+            ],
+        ),
+        (
+            None,
+            [
+                _Row(slot_index=1, png_path="kits/42/hero/1.png"),  # exists
+                _Row(slot_index=2, png_path="kits/42/hero/missing.png"),  # not on disk
+            ],
+        ),
+        (None, []),
+    ]
+
+    def _override() -> Iterator[FakeSession]:
+        yield FakeSession(plan)
+
+    app.dependency_overrides[get_session] = _override
+    try:
+        with TestClient(app) as c:
+            body = c.get("/api/kits?limit=6").json()
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    thumbs = body["items"][0]["thumbs"]
+    assert thumbs[0] == "kits/42/hero/1.png"
+    assert thumbs[1] is None  # dangling row → null
+    assert all(t is None for t in thumbs[2:])
 
 
 def test_kits_list_limit_validation() -> None:

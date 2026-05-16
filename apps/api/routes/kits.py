@@ -47,6 +47,27 @@ def _output_dir() -> Path:
     return Path(os.environ.get("IMAGEGEN_OUTPUT_DIR", "data/imagegen"))
 
 
+def _thumb_base() -> Path:
+    # Repo root — relative png_paths in DB resolve here. Tests monkeypatch
+    # this to point at a tmp_path so they can stage real files.
+    return Path(__file__).resolve().parents[3]
+
+
+def _thumb_if_exists(png_path: str | None) -> str | None:
+    """Return png_path verbatim when the file actually exists, else None.
+
+    The catalog list endpoint advertises ``thumbs`` as URLs the browser can
+    fetch; dangling DB rows (seed placeholders, half-completed generates)
+    would otherwise surface as broken images.
+    """
+    if not png_path:
+        return None
+    candidate = Path(png_path)
+    if not candidate.is_absolute():
+        candidate = _thumb_base() / candidate
+    return png_path if candidate.exists() else None
+
+
 # ---------------------------------------------------------------------------
 # Request / response models
 # ---------------------------------------------------------------------------
@@ -543,7 +564,7 @@ def list_kits(
             {"kit_id": row.id},
         ).all()
         hero_map: dict[int, str | None] = {r.slot_index: r.png_path for r in hero_rows}
-        hero_thumbs: list[str | None] = [hero_map.get(i) for i in range(1, 6)]
+        hero_thumbs: list[str | None] = [_thumb_if_exists(hero_map.get(i)) for i in range(1, 6)]
 
         # Detail thumbs (M1..M9)
         detail_rows = session.execute(
@@ -558,7 +579,7 @@ def list_kits(
             r.module_id: r.png_path for r in detail_rows
         }
         detail_thumbs: list[str | None] = [
-            detail_map.get(f"M{i}") for i in range(1, 10)
+            _thumb_if_exists(detail_map.get(f"M{i}")) for i in range(1, 10)
         ]
 
         updated_at = getattr(row, "updated_at", None)
