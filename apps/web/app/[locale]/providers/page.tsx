@@ -7,7 +7,6 @@ import * as React from 'react';
 import { AddEndpointModal } from '@/components/providers/add-endpoint-modal';
 import { ConflictResolutionDialog } from '@/components/providers/conflict-resolution-dialog';
 import { type EndpointRow, EndpointTable } from '@/components/providers/endpoint-table';
-import { type SankeyFlow, SankeyRouting } from '@/components/providers/sankey-routing';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { Button } from '@/components/ui/button';
@@ -47,34 +46,6 @@ export default function ProvidersPage() {
       role: h.role,
       base_url: h.base_url,
     }));
-  }, [health.data]);
-
-  const flows: SankeyFlow[] = React.useMemo(() => {
-    return (health.data ?? [])
-      .filter((h) => !h.unbound || h.unbound.length === 0)
-      .map((h) => ({
-        role: h.role,
-        endpoint_id: h.endpoint_id,
-        latency_ms: h.latency_ms,
-      }));
-  }, [health.data]);
-
-  const unbound: string[] = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const h of health.data ?? []) {
-      if (h.unbound) {
-        for (const r of h.unbound) set.add(r);
-      }
-    }
-    // Allow ?force_unbound=role override (for visual-regression / e2e flag).
-    if (typeof window !== 'undefined') {
-      const sp = new URLSearchParams(window.location.search);
-      const force = sp.get('force_unbound');
-      if (force) {
-        for (const r of force.split(',')) set.add(r.trim());
-      }
-    }
-    return [...set];
   }, [health.data]);
 
   // Live YAML view — sourced from /api/providers/summary fetch on demand.
@@ -141,33 +112,19 @@ export default function ProvidersPage() {
           </header>
 
           {view === 'visual' ? (
-            <>
-              <section
-                aria-label={t('sankey_title')}
-                className="rounded-card border border-border-subtle bg-surface-01 p-s-4"
-              >
-                <header className="flex items-baseline justify-between gap-s-2 pb-s-3">
-                  <span className="font-display text-lg text-ink-primary">
-                    {t('active_routing_label')}
-                  </span>
-                  <span className="font-mono text-xs text-ink-faint">role → endpoint</span>
-                </header>
-                <SankeyRouting flows={flows} unbound={unbound} />
-              </section>
-              <section
-                aria-label="Endpoints"
-                className="rounded-card border border-border-subtle bg-surface-01 p-s-4"
-              >
-                <EndpointTable
-                  endpoints={endpoints}
-                  health={health.data ?? []}
-                  onEdit={(role) => {
-                    setEditingRole(role);
-                    setModalOpen(true);
-                  }}
-                />
-              </section>
-            </>
+            <section
+              aria-label="Endpoints"
+              className="rounded-card border border-border-subtle bg-surface-01 p-s-4"
+            >
+              <EndpointTable
+                endpoints={endpoints}
+                health={health.data ?? []}
+                onEdit={(role) => {
+                  setEditingRole(role);
+                  setModalOpen(true);
+                }}
+              />
+            </section>
           ) : (
             <pre
               aria-label={tab('on_disk_label')}
