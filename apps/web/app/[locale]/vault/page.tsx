@@ -108,6 +108,22 @@ export default function VaultPage() {
     [items, selectedAssetId]
   );
 
+  // Deep-link reconciliation: when ?asset=N points to an id that isn't on
+  // the current page (operator paginated past it, or the link was shared
+  // pre-filter), drop the stale param so the URL matches reality. Only run
+  // once the page query has settled — otherwise we'd nuke the param during
+  // the initial fetch frame.
+  React.useEffect(() => {
+    if (
+      selectedAssetId !== null &&
+      query.isFetched &&
+      !query.isError &&
+      selectedAsset === null
+    ) {
+      updateAssetParam(null);
+    }
+  }, [selectedAssetId, query.isFetched, query.isError, selectedAsset, updateAssetParam]);
+
   // Generic multi-key URL mutator — replaces one or more params atomically.
   // Pass null to delete a key; any other value sets it.
   const updateSearchParams = React.useCallback(

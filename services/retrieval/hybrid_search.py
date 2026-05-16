@@ -389,7 +389,12 @@ def neighbors_by_id(
 
     # 3) ANN search with capped candidate set; +1 covers the seed itself.
     sampled = total_corpus > sample_threshold
-    candidate_limit = min(sample_threshold, max(total_corpus, k + 1))
+    # Three constraints: at least k+1 (need room for seed + k neighbors after
+    # filtering out the seed), at most sample_threshold (memory + latency
+    # cap), never beyond total_corpus (Milvus can't return more). When tests
+    # override sample_threshold to a small value < k+1, the k+1 floor wins
+    # so the reverse-lookup still returns enough candidates.
+    candidate_limit = max(k + 1, min(sample_threshold, total_corpus))
     sample_size = candidate_limit if sampled else None
 
     raw = client.search(

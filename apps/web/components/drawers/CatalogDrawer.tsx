@@ -28,7 +28,12 @@ function KitBestsellerSubsection({ kit }: { kit: KitListItem }) {
   const meta = useKitMeta(kit.id, expanded);
 
   const ids = meta.data?.retrieved_bestseller_ids ?? [];
-  const isEmpty = !meta.isLoading && (meta.data === null || ids.length === 0);
+  // Gate on isFetched (not !isLoading) so the empty-state copy doesn't flash
+  // before the first fetch completes — `meta.isLoading` is also false while
+  // the query is disabled (collapsed details), which would otherwise render
+  // empty-state inside an un-mounted-content branch and on the brief frame
+  // between expand and fetch-start.
+  const isEmpty = meta.isFetched && (meta.data === null || ids.length === 0);
 
   return (
     <details

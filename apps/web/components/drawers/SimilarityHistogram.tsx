@@ -54,8 +54,15 @@ export function SimilarityHistogram({
       })
     : t('drawer_histogram_full', { total: totalCorpus });
 
-  const lowEdge = edges[0]?.toFixed(2) ?? '';
-  const highEdge = edges[edges.length - 1]?.toFixed(2) ?? '';
+  const lowEdgeNum = edges[0];
+  const highEdgeNum = edges[edges.length - 1];
+  // Degenerate edge case (all neighbors share the same distance, e.g. a
+  // tiny corpus of near-duplicates): showing "0.92 ... 0.92" reads as a
+  // bug to operators. Collapse to a single centered value instead.
+  const degenerate =
+    lowEdgeNum !== undefined && highEdgeNum !== undefined && lowEdgeNum === highEdgeNum;
+  const lowEdge = lowEdgeNum?.toFixed(2) ?? '';
+  const highEdge = highEdgeNum?.toFixed(2) ?? '';
 
   return (
     <section
@@ -96,8 +103,14 @@ export function SimilarityHistogram({
         })}
       </svg>
       <div className="flex justify-between font-mono text-[10px] text-ink-faint">
-        <span>{lowEdge}</span>
-        <span>{highEdge}</span>
+        {degenerate ? (
+          <span className="mx-auto">{lowEdge}</span>
+        ) : (
+          <>
+            <span>{lowEdge}</span>
+            <span>{highEdge}</span>
+          </>
+        )}
       </div>
     </section>
   );
