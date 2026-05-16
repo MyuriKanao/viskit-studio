@@ -516,7 +516,7 @@ async def _run_one_image_with_retry(
                 target_hex=payload.brand_color_hex,
                 dominant_hex=None,
                 status="error",
-                error_message="image_gen returned zero images",
+                error_message="image provider returned zero images",
             )
         else:
             png_bytes = response.images[0]
@@ -754,7 +754,7 @@ async def orchestrate_kit(
         )
 
     # ----- 3. Fan out 14 image jobs ---------------------------------------
-    image_role = "image_gen"
+    image_role = "image"
     image_binding = snapshot.providers.get(image_role)
     if image_binding is None:
         raise ProviderConfigError(

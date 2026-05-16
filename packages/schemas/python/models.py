@@ -47,8 +47,7 @@ class ProtocolEnum(StrEnum):
 class RoleEnum(StrEnum):
     vision = "vision"
     llm = "llm"
-    image_gen = "image_gen"
-    image_edit = "image_edit"
+    image = "image"
     embedding = "embedding"
     compliance_screen = "compliance_screen"
 

@@ -21,8 +21,7 @@ export interface SankeyRoutingProps {
 const ROLES: { id: string; color: string }[] = [
   { id: 'vision', color: 'var(--info)' },
   { id: 'llm', color: 'var(--accent-soft)' },
-  { id: 'image_gen', color: 'var(--accent)' },
-  { id: 'image_edit', color: 'var(--warning)' },
+  { id: 'image', color: 'var(--accent)' },
   { id: 'embedding', color: 'var(--success)' },
 ];
 

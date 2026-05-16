@@ -122,7 +122,7 @@ KITS: list[tuple[Any, ...]] = [
 COST_EVENT_TEMPLATES: list[tuple[str, str, Decimal]] = [
     ("copywriter", "openai_compatible", Decimal("0.0120")),
     ("compliance_screen", "anthropic_compatible", Decimal("0.0080")),
-    ("image_gen", "openai_compatible", Decimal("0.0400")),
+    ("image", "openai_compatible", Decimal("0.0400")),
     ("embedding", "openai_compatible", Decimal("0.0020")),
 ]
 
@@ -349,9 +349,9 @@ def _ensure_cost_events(cur: psycopg.Cursor, kit_id: int, sku: str) -> int:
                 kit_id,
                 role,
                 provider,
-                500 if role != "image_gen" else None,
+                500 if role != "image" else None,
                 200 if role == "copywriter" else None,
-                14 if role == "image_gen" else None,
+                14 if role == "image" else None,
                 cost,
             ),
         )

@@ -2,7 +2,7 @@
 
 Single-thread loop that fans through 5 hero (1024×1024) + 9 detail
 (1024×1536) sections, builds prompts via :mod:`services.imagegen.prompt_builder`,
-calls the ``image_gen`` provider role, persists PNGs, runs color-lock, and
+calls the ``image`` provider role, persists PNGs, runs color-lock, and
 emits a per-image cost event row.  After the loop completes it writes
 ``compliance.json`` (placeholder ``score=null``) and ``cost.json`` (raw event
 list) — the EPIC-7 Kit Detail page consumes these.
@@ -101,7 +101,7 @@ def _emit_cost_event(
         "image_id": image_id,
         "kit_id": kit_id,
         "template_id": template_id,
-        "role": "image_gen",
+        "role": "image",
         "provider_model": provider_model,
         "resolution": size,
         "color_lock_status": color_lock.status,
@@ -119,17 +119,17 @@ def _generate_one_image(
     template: Template,
     prompt: str,
     size: str,
-    image_gen_adapter: Any,
+    image_adapter: Any,
     output_path: Path,
     brand_color_hex: str,
     color_lock_threshold: float,
     kit_id: str,
 ) -> tuple[Path, dict[str, Any], ColorLockResult]:
     """Generate one PNG and emit the cost-event + color-lock record."""
-    response = image_gen_adapter.generate(prompt, size=size, n=1)
+    response = image_adapter.generate(prompt, size=size, n=1)
     if not response.images:
         raise RuntimeError(
-            f"image_gen returned zero images for section {section_id!r}"
+            f"image provider returned zero images for section {section_id!r}"
         )
     png_bytes = response.images[0]
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -167,7 +167,7 @@ def generate_kit(
     ``compliance.json`` (score=null), and ``cost.json`` to
     ``<output_dir>/kits/{kit_id}/``.
     """
-    image_gen_adapter = registry.get("image_gen")
+    image_adapter = registry.get("image")
 
     kit_root = inputs.output_dir / "kits" / inputs.kit_id
     hero_dir = kit_root / "hero"
@@ -186,7 +186,7 @@ def generate_kit(
             template=template,
             prompt=prompt,
             size=HERO_SIZE,
-            image_gen_adapter=image_gen_adapter,
+            image_adapter=image_adapter,
             output_path=out,
             brand_color_hex=inputs.brand_color_hex,
             color_lock_threshold=color_lock_threshold,
@@ -205,7 +205,7 @@ def generate_kit(
             template=template,
             prompt=prompt,
             size=DETAIL_SIZE,
-            image_gen_adapter=image_gen_adapter,
+            image_adapter=image_adapter,
             output_path=out,
             brand_color_hex=inputs.brand_color_hex,
             color_lock_threshold=color_lock_threshold,

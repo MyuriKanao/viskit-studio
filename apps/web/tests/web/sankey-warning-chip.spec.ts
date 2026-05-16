@@ -37,7 +37,7 @@ test.describe('sankey warning chip', () => {
     // into the SankeyRouting flows list.
     test.skip(
       true,
-      'compliance_screen is not in the ROLES list of SankeyRouting (vision/llm/image_gen/image_edit/embedding). Switching to the api-mock case below.'
+      'compliance_screen is not in the ROLES list of SankeyRouting (vision/llm/image/embedding). Switching to the api-mock case below.'
     );
     void HEALTH_FIXTURE;
   });
@@ -49,8 +49,8 @@ test.describe('sankey warning chip', () => {
       i === 0
         ? {
             ...h,
-            role: 'image_edit',
-            unbound: ['image_edit'],
+            role: 'image',
+            unbound: ['image'],
             status: 'warn',
           }
         : h

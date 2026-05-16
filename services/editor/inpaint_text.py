@@ -30,7 +30,7 @@ def inpaint_region(
 ) -> bytes:
     mask_bytes = _build_mask(image_bytes, mask)
     prompt = f"Replace the text in the masked region with: {new_text}"
-    response = registry.get("image_edit").edit(
+    response = registry.get("image").edit(
         image=image_bytes,
         mask=mask_bytes,
         prompt=prompt,

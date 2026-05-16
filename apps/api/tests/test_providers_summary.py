@@ -23,7 +23,7 @@ def test_summary_minimal_providers_only(tmp_config: Path) -> None:
         "providers:\n"
         "  vision: {protocol: x}\n"
         "  llm: {protocol: y}\n"
-        "  image_gen: {protocol: z}\n"
+        "  image: {protocol: z}\n"
     )
     with TestClient(app) as c:
         response = c.get("/api/providers/summary")
@@ -46,8 +46,7 @@ def test_summary_full_config(tmp_config: Path) -> None:
         "providers:\n"
         "  vision: {protocol: x}\n"
         "  llm: {protocol: y}\n"
-        "  image_gen: {protocol: z}\n"
-        "  image_edit: {protocol: a}\n"
+        "  image: {protocol: z}\n"
         "  embedding: {protocol: b}\n"
         "  compliance_screen: {protocol: c}\n"
     )
@@ -55,7 +54,7 @@ def test_summary_full_config(tmp_config: Path) -> None:
         response = c.get("/api/providers/summary")
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["endpoints_count"] == 6
+    assert body["endpoints_count"] == 5
     assert body["monthly_cap_usd"] == 250.0
     assert body["brand_color"] == "#C4513A"
     assert body["default_locale"] == "zh"

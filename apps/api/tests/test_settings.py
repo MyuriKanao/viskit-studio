@@ -18,8 +18,7 @@ _INITIAL_YAML = (
     "providers:\n"
     "  vision: {protocol: x}\n"
     "  llm: {protocol: y}\n"
-    "  image_gen: {protocol: z}\n"
-    "  image_edit: {protocol: a}\n"
+    "  image: {protocol: z}\n"
     "  embedding: {protocol: b}\n"
     "  compliance_screen: {protocol: c}\n"
 )
@@ -63,8 +62,7 @@ def test_post_settings_full_update(tmp_config: Path) -> None:
     assert set(on_disk["providers"].keys()) == {
         "vision",
         "llm",
-        "image_gen",
-        "image_edit",
+        "image",
         "embedding",
         "compliance_screen",
     }

@@ -51,17 +51,11 @@ def client_with_registry(
                 "api_key_env": "K2",
                 "model": "llm-m",
             },
-            "image_gen": {
+            "image": {
                 "protocol": "openai_compatible",
                 "base_url": "https://z",
                 "api_key_env": "K3",
-                "model": "ig-m",
-            },
-            "image_edit": {
-                "protocol": "openai_compatible",
-                "base_url": "https://z",
-                "api_key_env": "K4",
-                "model": "ie-m",
+                "model": "img-m",
             },
             "embedding": {
                 "protocol": "openai_compatible",
@@ -88,8 +82,7 @@ def test_provider_health_all_bound(client_with_registry: TestClient) -> None:
         [
             "vision",
             "llm",
-            "image_gen",
-            "image_edit",
+            "image",
             "embedding",
             "compliance_screen",
         ]

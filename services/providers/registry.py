@@ -70,8 +70,7 @@ REQUIRED_ROLES: frozenset[str] = frozenset(
     {
         "vision",
         "llm",
-        "image_gen",
-        "image_edit",
+        "image",
         "embedding",
         "compliance_screen",
     }
