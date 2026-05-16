@@ -1,6 +1,5 @@
 import {
   ChartLine,
-  Database,
   FolderOpen,
   Image,
   LayoutDashboard,
@@ -45,13 +44,6 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItem[] = [
     labelKey: 'sidebar.newKit',
     href: '/new-kit',
     icon: Sparkles,
-    enabled: true,
-  },
-  {
-    id: 'vault',
-    labelKey: 'sidebar.vault',
-    href: '/vault',
-    icon: Database,
     enabled: true,
   },
   {

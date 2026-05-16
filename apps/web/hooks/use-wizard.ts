@@ -3,98 +3,9 @@
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type {
-  ProgressEvent,
-  RetrievalFilters,
-  RetrievalHit,
-  WizardLocale,
-} from '@/lib/wizard/store';
+import type { ProgressEvent, WizardLocale } from '@/lib/wizard/store';
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
-
-// ---------------------------------------------------------------------------
-// /api/retrieval/search
-// ---------------------------------------------------------------------------
-
-export interface SearchParams {
-  image: string;
-  filters: RetrievalFilters;
-  top_k?: number;
-}
-
-export interface SearchResponse {
-  hits: RetrievalHit[];
-}
-
-function buildSearchBody(p: SearchParams): Record<string, unknown> {
-  const filters: Record<string, unknown> = {};
-  if (p.filters.category) filters.category = p.filters.category;
-  if (p.filters.season) filters.season = p.filters.season;
-  if (p.filters.min_sales !== null && p.filters.min_sales !== undefined) {
-    filters.min_sales = p.filters.min_sales;
-  }
-  if (p.filters.fallback_locale) filters.fallback_locale = p.filters.fallback_locale;
-  return {
-    image: p.image,
-    filters,
-    top_k: p.top_k ?? 10,
-  };
-}
-
-async function postRetrievalSearch(p: SearchParams): Promise<SearchResponse> {
-  const res = await fetch(`${baseUrl}/api/retrieval/search`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(buildSearchBody(p)),
-  });
-  if (!res.ok) {
-    throw new Error(`/api/retrieval/search failed: ${res.status}`);
-  }
-  return (await res.json()) as SearchResponse;
-}
-
-export function useRetrievalSearch() {
-  return useMutation<SearchResponse, Error, SearchParams>({
-    mutationFn: postRetrievalSearch,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// /api/retrieval/style-prompt
-// ---------------------------------------------------------------------------
-
-export interface StylePromptParams {
-  hits: RetrievalHit[];
-  locale: WizardLocale;
-}
-
-export interface StylePromptResponse {
-  style_prompt: string;
-}
-
-async function postStylePrompt(p: StylePromptParams): Promise<StylePromptResponse> {
-  const hits = p.hits.map((h) => ({
-    image_url: h.image_url,
-    score: h.score,
-    metadata: h.metadata ?? {},
-    image_path: h.image_path ?? '',
-  }));
-  const res = await fetch(`${baseUrl}/api/retrieval/style-prompt`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ hits, locale: p.locale }),
-  });
-  if (!res.ok) {
-    throw new Error(`/api/retrieval/style-prompt failed: ${res.status}`);
-  }
-  return (await res.json()) as StylePromptResponse;
-}
-
-export function useStylePrompt() {
-  return useMutation<StylePromptResponse, Error, StylePromptParams>({
-    mutationFn: postStylePrompt,
-  });
-}
 
 // ---------------------------------------------------------------------------
 // /api/kits/{kit_id}/spec
@@ -124,9 +35,6 @@ export interface SpecParams {
   selling_points: WizardSellingPoint[];
 }
 
-// Pulled from the generated OpenAPI schema (SpecOut). Kept inline to avoid a
-// transitive client import; the wizard only ever forwards the value untouched
-// from /spec into /generate, so structural typing is enough.
 export type SpecOutPayload = unknown;
 
 export interface SpecResponse {
@@ -161,7 +69,7 @@ export function useKitSpec() {
 // /api/kits/{kit_id}/generate + concurrent /events SSE
 // ---------------------------------------------------------------------------
 
-export type GeneratePhase = 'idle' | 'style_prompt' | 'spec' | 'generating' | 'success' | 'error';
+export type GeneratePhase = 'idle' | 'spec' | 'generating' | 'success' | 'error';
 
 export interface GenerateParams {
   kit_id: string;
@@ -169,8 +77,6 @@ export interface GenerateParams {
   locale: WizardLocale;
   spec: SpecOutPayload;
   style_prompt: string;
-  /** EPIC-9 Phase 4a — persisted into kit_meta.json for the Catalog drawer. */
-  retrieved_bestseller_ids?: number[];
 }
 
 export interface GenerateResult {
@@ -188,11 +94,6 @@ interface KitSseEvent {
   [key: string]: unknown;
 }
 
-/**
- * Subscribe to GET /api/kits/{kit_id}/events. The route 404s until the bus
- * has at least one published event, so we retry with a short backoff until
- * the stream is ready or the AbortController fires.
- */
 async function readKitEvents(
   kitId: string,
   signal: AbortSignal,
@@ -300,7 +201,6 @@ export function useGenerateKit(): UseGenerateKitResult {
           locale: params.locale,
           spec: params.spec,
           style_prompt: params.style_prompt,
-          retrieved_bestseller_ids: params.retrieved_bestseller_ids ?? [],
         }),
         signal: ctrl.signal,
       }
@@ -326,7 +226,7 @@ export function useGenerateKit(): UseGenerateKitResult {
         throw new Error(detail);
       }
       const body = (await res.json()) as GenerateResult & { kit_id: string };
-      ctrl.abort(); // close SSE
+      ctrl.abort();
       await eventsPromise;
       setResult(body);
       setPhase('success');

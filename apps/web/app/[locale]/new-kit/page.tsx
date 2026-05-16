@@ -1,7 +1,6 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
 import { Sidebar } from '@/components/shell/sidebar';
@@ -9,24 +8,20 @@ import { Topbar } from '@/components/shell/topbar';
 import { Button } from '@/components/ui/button';
 import { Step1Form } from '@/components/wizard/Step1Form';
 import { Step2Upload } from '@/components/wizard/Step2Upload';
-import { Step3Retrieval } from '@/components/wizard/Step3Retrieval';
-import { Step4Review } from '@/components/wizard/Step4Review';
+import { Step4Review as Step3Review } from '@/components/wizard/Step4Review';
 import { type WizardStep, useWizardStore } from '@/lib/wizard/store';
 
-const TOTAL_STEPS = 4 as const;
+const TOTAL_STEPS = 3 as const;
 
 const STEP_TITLE_KEYS: Record<WizardStep, string> = {
   1: 'step_1_title',
   2: 'step_2_title',
   3: 'step_3_title',
-  4: 'step_4_title',
 };
 
 function useStepValid(step: WizardStep): boolean {
   const skuMeta = useWizardStore((s) => s.skuMeta);
   const image = useWizardStore((s) => s.image);
-  const selectedHits = useWizardStore((s) => s.selectedHits);
-  const sellingPoints = useWizardStore((s) => s.sellingPoints);
 
   if (step === 1) {
     const price = Number.parseFloat(skuMeta.price);
@@ -42,85 +37,19 @@ function useStepValid(step: WizardStep): boolean {
   if (step === 2) {
     return image !== null && image.length > 0;
   }
-  if (step === 3) {
-    return selectedHits.length > 0 && sellingPoints.filter((s) => s.trim().length > 0).length > 0;
-  }
-  return true; // step 4 — Generate button is owned by Step4Review.
-}
-
-function useHighestValidStep(): WizardStep {
-  const skuMeta = useWizardStore((s) => s.skuMeta);
-  const image = useWizardStore((s) => s.image);
-  const selectedHits = useWizardStore((s) => s.selectedHits);
-  const sellingPoints = useWizardStore((s) => s.sellingPoints);
-
-  const price = Number.parseFloat(skuMeta.price);
-  const step1Ok =
-    skuMeta.sku.trim().length > 0 &&
-    skuMeta.name.trim().length > 0 &&
-    skuMeta.brand.trim().length > 0 &&
-    skuMeta.category.trim().length > 0 &&
-    Number.isFinite(price) &&
-    price > 0;
-  if (!step1Ok) return 1;
-  const step2Ok = image !== null && image.length > 0;
-  if (!step2Ok) return 2;
-  const step3Ok =
-    selectedHits.length > 0 && sellingPoints.filter((s) => s.trim().length > 0).length > 0;
-  if (!step3Ok) return 3;
-  return 4;
+  return true;
 }
 
 export default function NewKitPage() {
   const t = useTranslations('wizard');
-  const tNewKit = useTranslations('newKit');
-  const searchParams = useSearchParams();
   const step = useWizardStore((s) => s.step);
   const back = useWizardStore((s) => s.back);
   const next = useWizardStore((s) => s.next);
   const reset = useWizardStore((s) => s.reset);
-  const setStep = useWizardStore((s) => s.setStep);
-  const setPinnedRefAssetId = useWizardStore((s) => s.setPinnedRefAssetId);
-  const pinnedRefAssetId = useWizardStore((s) => s.pinnedRefAssetId);
-
-  // EPIC-9 ADR-EPIC9-002: consume ?ref=<id> on mount → pin in store.
-  // ?step= is advisory: lands at min(requested, highestValid).
-  const highestValidStep = useHighestValidStep();
-  const refParam = searchParams.get('ref');
-  const stepParam = searchParams.get('step');
-
-  React.useEffect(() => {
-    if (refParam === null) return;
-    const parsed = Number.parseInt(refParam, 10);
-    if (Number.isFinite(parsed)) {
-      setPinnedRefAssetId(parsed);
-    }
-  }, [refParam, setPinnedRefAssetId]);
-
-  // ?step= is mount-advisory only — replaying it on every store change
-  // would yank the user backwards while they edit upstream fields.
-  const stepAppliedRef = React.useRef(false);
-  React.useEffect(() => {
-    if (stepAppliedRef.current) return;
-    if (stepParam === null) {
-      stepAppliedRef.current = true;
-      return;
-    }
-    const requested = Number.parseInt(stepParam, 10);
-    if (!Number.isFinite(requested) || requested < 1 || requested > 4) {
-      stepAppliedRef.current = true;
-      return;
-    }
-    const landing = Math.min(requested, highestValidStep) as WizardStep;
-    setStep(landing);
-    stepAppliedRef.current = true;
-  }, [stepParam, highestValidStep, setStep]);
 
   const isFirst = step === 1;
   const isLast = step === TOTAL_STEPS;
   const stepValid = useStepValid(step);
-
-  const showRefBanner = step === 1 && pinnedRefAssetId !== null;
 
   return (
     <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[64px_1fr] bg-ink-base">
@@ -147,7 +76,7 @@ export default function NewKitPage() {
           className="flex items-center gap-s-2 text-xs text-ink-muted"
           data-testid="wizard-stepper"
         >
-          {([1, 2, 3, 4] as WizardStep[]).map((n) => {
+          {([1, 2, 3] as WizardStep[]).map((n) => {
             const active = n === step;
             const done = n < step;
             return (
@@ -170,15 +99,6 @@ export default function NewKitPage() {
           })}
         </ol>
 
-        {showRefBanner && pinnedRefAssetId !== null ? (
-          <output
-            data-testid="new-kit-ref-banner"
-            className="block rounded-card border border-accent/40 bg-accent/10 px-s-3 py-s-2 text-xs text-ink-primary"
-          >
-            {tNewKit('ref_pinned_banner', { id: pinnedRefAssetId })}
-          </output>
-        ) : null}
-
         <section
           aria-labelledby="wizard-step-heading"
           className="rounded-card border border-border-subtle bg-surface-01 p-s-6"
@@ -189,8 +109,7 @@ export default function NewKitPage() {
           </h2>
           {step === 1 ? <Step1Form /> : null}
           {step === 2 ? <Step2Upload /> : null}
-          {step === 3 ? <Step3Retrieval /> : null}
-          {step === 4 ? <Step4Review /> : null}
+          {step === 3 ? <Step3Review /> : null}
         </section>
 
         <footer className="mt-auto flex items-center justify-between">

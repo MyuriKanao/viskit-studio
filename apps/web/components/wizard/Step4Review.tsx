@@ -5,21 +5,18 @@ import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
-import {
-  type WizardProductType,
-  useGenerateKit,
-  useKitSpec,
-  useStylePrompt,
-} from '@/hooks/use-wizard';
+import { type WizardProductType, useGenerateKit, useKitSpec } from '@/hooks/use-wizard';
 import { useWizardStore } from '@/lib/wizard/store';
 
-type Phase = 'idle' | 'style_prompt' | 'spec' | 'generating' | 'success' | 'error';
+type Phase = 'idle' | 'spec' | 'generating' | 'success' | 'error';
 
-function buildSellingPoints(sps: string[]) {
-  return sps
+function parseSellingPoints(raw: string, fallback: string): { title: string; evidence: string; priority: 'high' }[] {
+  const lines = raw
+    .split('\n')
     .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-    .map((s) => ({ title: s, evidence: s, priority: 'high' as const }));
+    .filter((s) => s.length > 0);
+  const source = lines.length > 0 ? lines : [fallback].filter((s) => s.length > 0);
+  return source.map((s) => ({ title: s, evidence: s, priority: 'high' as const }));
 }
 
 export function Step4Review() {
@@ -30,36 +27,30 @@ export function Step4Review() {
   const skuMeta = useWizardStore((s) => s.skuMeta);
   const brandColor = useWizardStore((s) => s.brandColor);
   const locale = useWizardStore((s) => s.locale);
-  const selectedHits = useWizardStore((s) => s.selectedHits);
   const sellingPoints = useWizardStore((s) => s.sellingPoints);
+  const setSellingPoints = useWizardStore((s) => s.setSellingPoints);
   const kitClientId = useWizardStore((s) => s.kitClientId);
-  const setStylePrompt = useWizardStore((s) => s.setStylePrompt);
-  const pinnedRefAssetId = useWizardStore((s) => s.pinnedRefAssetId);
 
-  const stylePromptMut = useStylePrompt();
   const specMut = useKitSpec();
   const gen = useGenerateKit();
 
   const [phase, setPhase] = React.useState<Phase>('idle');
   const [error, setError] = React.useState<string | null>(null);
+  const [sellingPointsDraft, setSellingPointsDraft] = React.useState<string>(
+    () => sellingPoints.join('\n'),
+  );
 
   const start = React.useCallback(async () => {
     if (phase !== 'idle' && phase !== 'error') return;
     setError(null);
 
-    setPhase('style_prompt');
-    let styleRes: { style_prompt: string };
-    try {
-      styleRes = await stylePromptMut.mutateAsync({
-        hits: selectedHits,
-        locale,
-      });
-    } catch (err) {
+    const points = parseSellingPoints(sellingPointsDraft, skuMeta.name.trim());
+    if (points.length === 0) {
       setPhase('error');
-      setError((err as Error).message);
+      setError(t('step_4.no_selling_points'));
       return;
     }
-    setStylePrompt(styleRes.style_prompt);
+    setSellingPoints(points.map((p) => p.title));
 
     setPhase('spec');
     let specRes: { spec: unknown };
@@ -75,7 +66,7 @@ export function Step4Review() {
           product_type: (skuMeta.product_type || 'other') as WizardProductType,
           price: Number.parseFloat(skuMeta.price) || 0,
         },
-        selling_points: buildSellingPoints(sellingPoints),
+        selling_points: points,
       });
     } catch (err) {
       setPhase('error');
@@ -84,29 +75,12 @@ export function Step4Review() {
     }
 
     setPhase('generating');
-    // EPIC-9 Phase 4a + Phase 5: persist the Milvus PKs of the selected
-    // references AND fold in the deep-link pinnedRefAssetId. Hits without
-    // an id (legacy fixtures) are dropped silently; the pinned id is
-    // deduped against the selection.
-    const seen = new Set<number>();
-    const retrievedBestsellerIds: number[] = [];
-    for (const h of selectedHits) {
-      if (typeof h.id === 'number' && !seen.has(h.id)) {
-        seen.add(h.id);
-        retrievedBestsellerIds.push(h.id);
-      }
-    }
-    if (pinnedRefAssetId !== null && !seen.has(pinnedRefAssetId)) {
-      retrievedBestsellerIds.push(pinnedRefAssetId);
-    }
-
     const result = await gen.start({
       kit_id: kitClientId,
       brand_color_hex: brandColor,
       locale,
       spec: specRes.spec,
-      style_prompt: styleRes.style_prompt,
-      retrieved_bestseller_ids: retrievedBestsellerIds,
+      style_prompt: '',
     });
 
     if (!result) {
@@ -116,28 +90,24 @@ export function Step4Review() {
     }
 
     setPhase('success');
-    // Navigate to the persisted kit detail page. uiLocale matches the
-    // URL prefix the user is currently on (zh by default, /en/...).
     const prefix = uiLocale === 'zh' ? '' : `/${uiLocale}`;
     router.push(`${prefix}/kits/${result.db_kit_id}`);
   }, [
     phase,
-    stylePromptMut,
-    selectedHits,
-    locale,
-    setStylePrompt,
+    sellingPointsDraft,
+    skuMeta,
+    setSellingPoints,
     specMut,
     kitClientId,
-    skuMeta,
-    sellingPoints,
+    locale,
     gen,
     brandColor,
     uiLocale,
     router,
-    pinnedRefAssetId,
+    t,
   ]);
 
-  const busy = phase === 'style_prompt' || phase === 'spec' || phase === 'generating';
+  const busy = phase === 'spec' || phase === 'generating';
 
   return (
     <div className="flex flex-col gap-s-5" data-testid="wizard-step4-review">
@@ -167,15 +137,22 @@ export function Step4Review() {
             </dd>
           </div>
         </dl>
-        <div className="flex flex-col gap-s-2 text-sm text-ink-secondary">
-          <p className="text-ink-muted">
-            {t('step_4.review_hits')}: {selectedHits.length}
-          </p>
-          <p className="text-ink-muted">
-            {t('step_4.review_selling_points')}: {sellingPoints.filter((s) => s.trim()).length}
-          </p>
-        </div>
       </section>
+
+      <label className="flex flex-col gap-s-1 text-xs text-ink-muted" htmlFor="wizard-selling-points">
+        <span className="font-mono uppercase tracking-wider text-ink-faint">
+          {t('step_4.selling_points_label')}
+        </span>
+        <textarea
+          id="wizard-selling-points"
+          rows={4}
+          value={sellingPointsDraft}
+          onChange={(e) => setSellingPointsDraft(e.target.value)}
+          placeholder={t('step_4.selling_points_placeholder')}
+          className="rounded-input border border-border-subtle bg-surface-02 px-s-3 py-s-2 text-sm text-ink-primary"
+          data-testid="wizard-step4-selling-points"
+        />
+      </label>
 
       <Button
         type="button"
@@ -192,11 +169,7 @@ export function Step4Review() {
 
       {busy ? (
         <p className="text-xs text-ink-muted" data-testid="wizard-step4-phase">
-          {phase === 'style_prompt'
-            ? t('step_4.phase_style_prompt')
-            : phase === 'spec'
-              ? t('step_4.phase_spec')
-              : t('step_4.phase_generate')}
+          {phase === 'spec' ? t('step_4.phase_spec') : t('step_4.phase_generate')}
         </p>
       ) : null}
 
