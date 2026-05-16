@@ -308,7 +308,7 @@ class AnthropicCompatibleAdapter:
     # Probeable
     # ------------------------------------------------------------------
 
-    def probe(self, *, timeout: float = 5.0) -> ProbeResult:
+    def probe(self, *, timeout: float = 30.0) -> ProbeResult:
         """Hit ``GET {base_url}/v1/models`` to verify reachability + list models.
 
         Never raises — failures are encoded in the returned :class:`ProbeResult`.
