@@ -20,10 +20,8 @@ from apps.api.routes.metrics import router as metrics_router
 from apps.api.routes.onboarding import router as onboarding_router
 from apps.api.routes.providers import router as providers_router
 from apps.api.routes.queue import router as queue_router
-from apps.api.routes.retrieval import router as retrieval_router
 from apps.api.routes.settings import router as settings_router
 from apps.api.routes.templates import router as templates_router
-from apps.api.routes.vault import router as vault_router
 from services.imagegen.orchestrator import KitEventBus
 from apps.api.lib import secrets_store
 from services.providers.registry import ProviderConfigError
@@ -101,7 +99,6 @@ app.add_middleware(
 # Routes
 # ---------------------------------------------------------------------------
 app.include_router(health_router)
-app.include_router(retrieval_router)
 app.include_router(copywriter_router)
 app.include_router(images_router)
 app.include_router(kits_router)
@@ -111,4 +108,3 @@ app.include_router(providers_router)
 app.include_router(onboarding_router)
 app.include_router(settings_router)
 app.include_router(templates_router)
-app.include_router(vault_router)

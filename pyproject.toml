@@ -8,7 +8,6 @@ dependencies = [
     "pydantic[email]>=2.5",
     "sqlalchemy>=2",
     "psycopg[binary]",
-    "pymilvus>=2.4",
     "redis",
     "minio",
     "arq",
@@ -50,7 +49,6 @@ python_version = "3.12"
 
 [[tool.mypy.overrides]]
 module = [
-    "pymilvus.*",
     "minio.*",
     "redis.*",
     "redis.asyncio.*",

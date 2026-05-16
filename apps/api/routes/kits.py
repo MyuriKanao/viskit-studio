@@ -369,13 +369,7 @@ async def post_generate(
     if registry is None:
         raise HTTPException(status_code=503, detail="registry not booted")
 
-    # Principle 2: style_prompt must be non-empty (retrieval must precede generation).
     style_prompt = (payload.style_prompt or "").strip()
-    if not style_prompt:
-        raise HTTPException(
-            status_code=409,
-            detail="style_prompt is empty — retrieval must precede generation (Principle 2)",
-        )
 
     # Locale must match between top-level and embedded spec.
     if payload.spec.locale != payload.locale:

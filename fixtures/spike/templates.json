@@ -1,8 +1,0 @@
-{
-  "templates": [
-    {"id": "H-LIGHT-01",  "kind": "hero",   "background": "light", "zh_text_max_chars": 8},
-    {"id": "H-DARK-01",   "kind": "hero",   "background": "dark",  "zh_text_max_chars": 8},
-    {"id": "M-DETAIL-01", "kind": "detail", "background": "light", "zh_text_max_chars": 10},
-    {"id": "M-DETAIL-02", "kind": "detail", "background": "dark",  "zh_text_max_chars": 10}
-  ]
-}
