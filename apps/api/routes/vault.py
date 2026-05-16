@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -237,6 +238,16 @@ def _build_vault_expr(
     return " && ".join(parts)
 
 
+def _splice_id_in(expr: str, ids: Iterable[int]) -> str:
+    """Compose a Milvus filter by AND-combining `expr` with `id in [...]`.
+
+    Ids are cast via int() to guard against schema drift.
+    """
+    id_list = ", ".join(str(int(i)) for i in ids)
+    id_in = f"id in [{id_list}]"
+    return f"{expr} && {id_in}" if expr else id_in
+
+
 # ---------------------------------------------------------------------------
 # GET /assets
 # ---------------------------------------------------------------------------
@@ -302,7 +313,7 @@ def get_vault_assets(
     inspired_asset_ids: list[int] | None = None
     if inspired:
         inspired_rows = db.execute(
-            select(VaultAssetInspired.asset_id)
+            select(VaultAssetInspired.asset_id).limit(10000)
         ).scalars().all()
         inspired_asset_ids = list(inspired_rows)
         if not inspired_asset_ids:
@@ -327,17 +338,11 @@ def get_vault_assets(
         final_ids = list(set(tag_asset_ids) & set(inspired_asset_ids))
         if not final_ids:
             return VaultListResponse(items=[], total=0, limit=limit, offset=offset)
-        id_list = ", ".join(str(i) for i in final_ids)
-        combined_expr = f"id in [{id_list}]"
-        expr = f"{expr} && {combined_expr}" if expr else combined_expr
+        expr = _splice_id_in(expr, final_ids)
     elif inspired_asset_ids is not None:
-        id_list = ", ".join(str(i) for i in inspired_asset_ids)
-        inspired_expr = f"id in [{id_list}]"
-        expr = f"{expr} && {inspired_expr}" if expr else inspired_expr
+        expr = _splice_id_in(expr, inspired_asset_ids)
     elif tag_asset_ids is not None:
-        id_list = ", ".join(str(i) for i in tag_asset_ids)
-        tag_expr_str = f"id in [{id_list}]"
-        expr = f"{expr} && {tag_expr_str}" if expr else tag_expr_str
+        expr = _splice_id_in(expr, tag_asset_ids)
 
     try:
         rows = client.query(

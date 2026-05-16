@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+import sqlalchemy.exc
 from fastapi.testclient import TestClient
 
 from apps.api.lib.db import get_session
@@ -65,8 +66,10 @@ class SqlSpySession:
     def execute(self, statement: Any, params: dict[str, Any] | None = None) -> _SpyResult:
         try:
             compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
-        except Exception:
-            compiled = str(statement)
+        except (AttributeError, sqlalchemy.exc.CompileError) as exc:
+            # SQLAlchemy compile API drift — preserve type info for debugging
+            # rather than treating any exception as a benign compile miss.
+            compiled = f"<uncompilable: {type(statement).__name__}: {exc}>"
         self.calls.append(compiled)
         if self._plan:
             values = self._plan.pop(0)
