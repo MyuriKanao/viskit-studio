@@ -34,3 +34,5 @@ volumes/
 
 # OMC orchestration state — local-only, never committed
 .omc/
+
+tests/
