@@ -52,6 +52,7 @@ export default function VaultPage() {
   const urlTag = searchParams.get('tag') ?? undefined;
   const [filters, setFilters] = React.useState<VaultFilters>(() => ({
     tag: urlTag,
+    inspired: searchParams.get('inspired') === '1' ? true : undefined,
   }));
   const [offset, setOffset] = React.useState(0);
   const [ingestOpen, setIngestOpen] = React.useState(false);
@@ -74,7 +75,6 @@ export default function VaultPage() {
       return s;
     });
   }, []);
-
 
   // handleBulkApply receives the resolved TagApplyResponse from VaultBulkToolbar
   // (toolbar owns useVaultTagsApply in its lazy chunk to stay within budget).
@@ -168,7 +168,8 @@ export default function VaultPage() {
     // Array tags join as comma-separated for single-param serialization;
     // the hook sends them as repeating params to the backend.
     const nextTag = Array.isArray(next.tag) ? next.tag.join(',') || null : (next.tag ?? null);
-    updateSearchParams({ tag: nextTag });
+    // EPIC-12: ?inspired=1 mirrors the ?tag= pattern. null actively deletes the param.
+    updateSearchParams({ tag: nextTag, inspired: next.inspired ? '1' : null });
   }
 
   return (
@@ -225,8 +226,23 @@ export default function VaultPage() {
                 data-testid="vault-empty"
                 className="flex flex-col items-center gap-s-2 py-s-6 text-center"
               >
-                <span className="font-display text-lg text-ink-primary">{t('empty_title')}</span>
-                <span className="text-sm text-ink-muted">{t('empty_hint')}</span>
+                {filters.inspired === true ? (
+                  <>
+                    <span className="font-display text-lg text-ink-primary">
+                      {t('inspired_filter.empty_title')}
+                    </span>
+                    <span className="text-sm text-ink-muted">
+                      {t('inspired_filter.empty_hint')}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-display text-lg text-ink-primary">
+                      {t('empty_title')}
+                    </span>
+                    <span className="text-sm text-ink-muted">{t('empty_hint')}</span>
+                  </>
+                )}
               </div>
             ) : (
               <VaultGrid

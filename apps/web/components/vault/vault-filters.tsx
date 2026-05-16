@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import * as React from 'react';
 
+import { VaultInspiredChip } from '@/components/vault/vault-inspired-chip';
 import type { VaultFilters } from '@/hooks/use-vault-assets';
 
 // VaultTagChip owns Popover + TagCombobox + useVaultTags — lazy so those
@@ -102,6 +103,14 @@ export function VaultFiltersBar({ value, onChange }: VaultFiltersProps) {
         labelAll={t('filter_tag_all')}
         tooltipAnd={t('filter_tag_tooltip_and')}
         onChange={handleTagChange}
+      />
+
+      {/* EPIC-12: Inspired-only filter chip — static inline (visible on initial paint). */}
+      <VaultInspiredChip
+        pressed={value.inspired ?? false}
+        onChange={(next) => onChange({ ...value, inspired: next || undefined })}
+        label={t('inspired_filter.label')}
+        tooltip={t('inspired_filter.tooltip')}
       />
 
       <button

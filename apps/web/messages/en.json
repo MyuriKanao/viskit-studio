@@ -381,6 +381,12 @@
     "inspired": {
       "toggle_on": "Mark as inspiration reference",
       "toggle_off": "Remove inspiration mark"
+    },
+    "inspired_filter": {
+      "label": "Inspired only",
+      "tooltip": "Show only assets you've marked as inspiration",
+      "empty_title": "No inspired assets yet",
+      "empty_hint": "Mark assets as inspiration by clicking the star icon on cards."
     }
   },
   "newKit": {

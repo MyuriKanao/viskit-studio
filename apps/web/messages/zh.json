@@ -381,6 +381,12 @@
     "inspired": {
       "toggle_on": "标记为灵感参考",
       "toggle_off": "取消灵感参考"
+    },
+    "inspired_filter": {
+      "label": "仅看灵感库",
+      "tooltip": "只显示你标记为灵感的资产",
+      "empty_title": "尚未收藏任何资产",
+      "empty_hint": "先在卡片上点星收藏作为灵感参考。"
     }
   },
   "newKit": {

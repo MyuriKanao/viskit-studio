@@ -44,6 +44,8 @@ export interface VaultFilters {
   /** Single tag or array of tags — AND-filter per ADR-EPIC10-001.
    *  Serialized as repeating `tags=` params (FastAPI list[str]). */
   tag?: string | string[];
+  /** EPIC-12: when true, restrict results to operator-marked inspiration assets. */
+  inspired?: boolean;
 }
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -65,6 +67,8 @@ export function useVaultAssets(
       if (filters.style) qs.set('style', filters.style);
       if (filters.locale) qs.set('locale', filters.locale);
       if (filters.min_sales !== undefined) qs.set('min_sales', String(filters.min_sales));
+      // EPIC-12: inspired=true restricts to operator-marked inspiration assets.
+      if (filters.inspired === true) qs.set('inspired', 'true');
       // Repeating `tags=` params — FastAPI deserializes list[str] per ADR-EPIC10-001.
       if (filters.tag !== undefined) {
         const tags = Array.isArray(filters.tag) ? filters.tag : [filters.tag];
