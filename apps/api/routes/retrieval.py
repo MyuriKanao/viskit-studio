@@ -171,6 +171,10 @@ class StylePromptHitIn(BaseModel):
     can pass selected hits straight through. ``image_path`` is optional —
     the synthesiser only uses ``image_url`` + ``score`` — but we accept it
     when present so round-tripping a search result loses no fields.
+
+    Note: ``inspired`` from :class:`SearchHitOut` is intentionally excluded
+    here — the synthesiser doesn't consume it, and accepting an unused field
+    would only widen the wire surface without benefit.
     """
 
     image_url: str

@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
-import CornerRibbon from '@/components/wizard/CornerRibbon';
+import { CornerRibbon } from '@/components/wizard/CornerRibbon';
 import { useRetrievalSearch } from '@/hooks/use-wizard';
 import { type RetrievalHit, useWizardStore } from '@/lib/wizard/store';
 

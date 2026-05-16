@@ -276,6 +276,34 @@ def test_search_returns_inspired_for_mixed_hits() -> None:
 
 
 # ---------------------------------------------------------------------------
+# AC-6(b): all hits inspired → every hit comes back with inspired=true
+# ---------------------------------------------------------------------------
+
+
+def test_search_returns_inspired_true_when_all_hits_inspired() -> None:
+    """Every hit is in inspired_set → every wire hit must have inspired=true."""
+    spy = SqlSpySession(plan=[[1, 2, 3]])
+    milvus_hits = [
+        _make_milvus_hit(asset_id=1, score=0.95),
+        _make_milvus_hit(asset_id=2, score=0.90),
+        _make_milvus_hit(asset_id=3, score=0.85),
+    ]
+
+    try:
+        with TestClient(app) as c:
+            _install_stubs(spy, milvus_hits)
+            resp = c.post("/api/retrieval/search", json=_payload())
+    finally:
+        _teardown()
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["hits"]) == 3
+    for hit in body["hits"]:
+        assert hit["inspired"] is True
+
+
+# ---------------------------------------------------------------------------
 # AC-3, AC-20: exactly one Postgres SELECT against vault_asset_inspired
 # ---------------------------------------------------------------------------
 

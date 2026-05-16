@@ -56,6 +56,7 @@ async function seedStep1(page: import('@playwright/test').Page): Promise<void> {
   // `useStepValid`) before any caller asserts `wizard-next` enablement.
   // EPIC-13: bump from 5s → 15s to absorb cold-start React hydration on
   // chromium-mobile in CI-like environments where dev server JIT is still warm.
+  // TODO: TD-EPIC10-4 — revert to 5s once the dirty-env hydration flake is fixed.
   await page
     .getByTestId('wizard-root')
     .and(page.locator('[data-debug-step-valid="true"]'))

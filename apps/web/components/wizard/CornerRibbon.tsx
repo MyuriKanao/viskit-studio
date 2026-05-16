@@ -16,9 +16,9 @@ import * as React from 'react';
  * a11y: `aria-label` from `wizard.step_3.inspired_badge_label`, plus a
  * visually-hidden mirror so SR users get the same context as sighted ones.
  */
-export default function CornerRibbon() {
-  const t = useTranslations();
-  const label = t('wizard.step_3.inspired_badge_label');
+export function CornerRibbon() {
+  const t = useTranslations('wizard');
+  const label = t('step_3.inspired_badge_label');
   return (
     <span
       data-testid="hit-inspired-ribbon"

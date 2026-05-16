@@ -171,7 +171,7 @@ def hybrid_search(
     boosted hits actually rise in rank order.
 
     EPIC-13: when ``inspired_ids`` is non-empty, this function also stamps
-    ``SearchHit.inspired = (int(metadata['id']) in inspired_ids)`` on every
+    ``SearchHit.inspired = (metadata.get("id") in inspired_ids)`` on every
     hit (after the boost + sort, before truncation). When ``inspired_ids``
     is empty, ``SearchHit.inspired`` falls through to its dataclass default
     of ``False``.
