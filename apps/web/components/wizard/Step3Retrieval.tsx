@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
+import CornerRibbon from '@/components/wizard/CornerRibbon';
 import { useRetrievalSearch } from '@/hooks/use-wizard';
 import { type RetrievalHit, useWizardStore } from '@/lib/wizard/store';
 
@@ -135,10 +136,11 @@ export function Step3Retrieval() {
                   data-state={selected ? 'on' : 'off'}
                   className={
                     selected
-                      ? 'flex w-full flex-col gap-s-1 rounded-card border-2 border-accent bg-surface-02 p-s-2 text-left'
-                      : 'flex w-full flex-col gap-s-1 rounded-card border border-border-subtle bg-surface-01 p-s-2 text-left hover:border-border-strong'
+                      ? 'relative flex w-full flex-col gap-s-1 rounded-card border-2 border-accent bg-surface-02 p-s-2 text-left'
+                      : 'relative flex w-full flex-col gap-s-1 rounded-card border border-border-subtle bg-surface-01 p-s-2 text-left hover:border-border-strong'
                   }
                 >
+                  {hit.inspired === true ? <CornerRibbon /> : null}
                   <img
                     src={hit.image_url}
                     alt=""

@@ -20,6 +20,12 @@ export interface MockWizardHit {
   image_url: string;
   score: number;
   metadata: Record<string, unknown>;
+  /**
+   * EPIC-13 — optional in mocks; the wire body shim defaults to `false` when
+   * fixtures omit it, so existing helpers (DEFAULT_HITS, FALLBACK_HITS) keep
+   * compiling while new specs can opt-in by setting `inspired: true`.
+   */
+  inspired?: boolean;
 }
 
 export interface MockWizardOptions {
@@ -110,10 +116,14 @@ export async function mockWizardBackend(
       await route.fallback();
       return;
     }
+    // EPIC-13 — mirror the backend default so the wire body always carries
+    // `inspired`. Specs that need the ribbon can override per-hit via the
+    // `hits` option.
+    const wireHits = hits.map((h) => ({ ...h, inspired: h.inspired ?? false }));
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ hits }),
+      body: JSON.stringify({ hits: wireHits }),
     });
   });
 

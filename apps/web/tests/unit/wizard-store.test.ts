@@ -13,6 +13,7 @@ const HIT_A: RetrievalHit = {
   image_url: 'https://example.test/a.png',
   score: 0.9,
   metadata: { from_fallback: false },
+  inspired: false,
 };
 
 beforeEach(() => {

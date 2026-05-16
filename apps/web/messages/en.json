@@ -240,7 +240,8 @@
       "selling_point_remove": "Remove",
       "en_degraded_banner": "Some results are zh-fallback — advisory only",
       "min_selection_hint": "Select at least 1 reference image",
-      "min_selling_points_hint": "Add at least 1 selling point"
+      "min_selling_points_hint": "Add at least 1 selling point",
+      "inspired_badge_label": "From your inspiration set"
     },
     "step_4": {
       "review_title": "Review",

@@ -240,7 +240,8 @@
       "selling_point_remove": "删除",
       "en_degraded_banner": "部分结果来自 zh 库回退，仅供参考",
       "min_selection_hint": "至少选择 1 张参考图",
-      "min_selling_points_hint": "至少填写 1 条卖点"
+      "min_selling_points_hint": "至少填写 1 条卖点",
+      "inspired_badge_label": "来自你的灵感集"
     },
     "step_4": {
       "review_title": "确认信息",

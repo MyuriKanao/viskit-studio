@@ -30,6 +30,12 @@ export interface RetrievalHit {
   image_url: string;
   score: number;
   metadata: RetrievalHitMetadata;
+  /**
+   * EPIC-13 — server-stamped flag indicating the hit's Milvus PK is a member
+   * of the operator's inspired Vault set. Required on the wire (backend
+   * defaults to false), so the frontend renders the corner ribbon iff true.
+   */
+  inspired: boolean;
   image_path?: string;
   /** Milvus PK — EPIC-9 Phase 4a. Optional only to keep older mocks working. */
   id?: number;
