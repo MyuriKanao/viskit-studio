@@ -61,13 +61,40 @@ services:
       "
     restart: "no"
 
-  # ─── Milvus (vector DB, standalone with embedded etcd) ─────────────────────
+  # ─── etcd (Milvus coordination — external, not embedded) ───────────────────
+  # Embedded etcd in milvusdb/milvus:v2.4.13 segfaults at etcd_server.go:49 on
+  # some Linux kernels (zen 7.x). External etcd is Milvus's documented prod
+  # config and bypasses the bug.
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.16
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    command:
+      - etcd
+      - -advertise-client-urls=http://etcd:2379
+      - -listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd
+    volumes:
+      - etcd_data:/etcd
+    healthcheck:
+      # quay.io/coreos/etcd is distroless (no /bin/sh) — must use CMD form.
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ─── Milvus (vector DB, standalone with EXTERNAL etcd) ─────────────────────
   milvus:
     image: milvusdb/milvus:v2.4.13
     command: milvus run standalone
     environment:
-      ETCD_USE_EMBED: "true"
-      ETCD_CONFIG_PATH: /milvus/configs/embedEtcd.yaml
+      ETCD_USE_EMBED: "false"
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
     ports:
       - "19530:19530"  # gRPC SDK
       - "9091:9091"    # metrics / health
@@ -75,6 +102,8 @@ services:
       - milvus_data:/var/lib/milvus
     depends_on:
       minio:
+        condition: service_healthy
+      etcd:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9091/healthz"]
@@ -103,3 +132,4 @@ volumes:
   milvus_data:
   redis_data:
   minio_data:
+  etcd_data:
