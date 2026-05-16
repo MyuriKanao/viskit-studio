@@ -54,10 +54,12 @@ async function seedStep1(page: import('@playwright/test').Page): Promise<void> {
   // synchronously, but React's commit phase lags by a microtask — wait for
   // the `data-debug-step-valid="true"` attribute (gated on page.tsx
   // `useStepValid`) before any caller asserts `wizard-next` enablement.
+  // EPIC-13: bump from 5s → 15s to absorb cold-start React hydration on
+  // chromium-mobile in CI-like environments where dev server JIT is still warm.
   await page
     .getByTestId('wizard-root')
     .and(page.locator('[data-debug-step-valid="true"]'))
-    .waitFor({ timeout: 5_000 });
+    .waitFor({ timeout: 15_000 });
 }
 
 async function uploadHero(page: import('@playwright/test').Page): Promise<void> {
@@ -190,5 +192,53 @@ test.describe('catalog +New Kit CTA (AC#6)', () => {
     await cta.click({ force: true });
     await page.waitForURL(/\/new-kit(\/|$|\?)/);
     await page.getByTestId('wizard-root').waitFor();
+  });
+});
+
+test.describe('new-kit wizard — Step-3 inspired ribbon (EPIC-13)', () => {
+  test('Step-3 inspired hit renders corner ribbon', async ({ page }) => {
+    await mockHealthOk(page);
+    // Two hits: one inspired (curated-vault member), one not. Ribbon must
+    // render on exactly one of them — AC-9 / AC-19.
+    await mockWizardBackend(page, {
+      hits: [
+        {
+          image_url: 'https://example.test/img/inspired.png',
+          score: 0.93,
+          metadata: { from_fallback: false, id: 42 },
+          inspired: true,
+        },
+        {
+          image_url: 'https://example.test/img/plain.png',
+          score: 0.81,
+          metadata: { from_fallback: false, id: 17 },
+          inspired: false,
+        },
+      ],
+    });
+
+    await page.goto('/zh/new-kit');
+    await page.getByTestId('wizard-root').waitFor();
+
+    // Walk Step 1 → 2 → 3 (mirror happy-path setup).
+    await seedStep1(page);
+    await page.getByTestId('wizard-next').click({ force: true });
+    await uploadHero(page);
+    await page.getByTestId('wizard-next').click({ force: true });
+
+    await page.getByTestId('wizard-step3-search').click({ force: true });
+    await page.getByTestId('wizard-step3-hits').waitFor();
+
+    // AC-9 — exactly one ribbon present (only the inspired hit renders it).
+    const ribbon = page.locator('[data-testid="hit-inspired-ribbon"]');
+    await expect(ribbon).toHaveCount(1);
+
+    // AC-19 — aria-label matches the zh translation literal landed in
+    // apps/web/messages/zh.json `wizard.step_3.inspired_badge_label`.
+    await expect(ribbon.first()).toHaveAttribute('aria-label', '来自你的灵感集');
+
+    // AC-10 — ribbon is read-only: not a button, not tab-focusable.
+    await expect(ribbon.first()).not.toHaveAttribute('role', 'button');
+    await expect(ribbon.first()).not.toHaveAttribute('tabindex', /.*/);
   });
 });
