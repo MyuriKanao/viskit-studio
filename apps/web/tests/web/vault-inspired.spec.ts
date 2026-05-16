@@ -72,8 +72,8 @@ test.describe('vault inspired — chip toggle + URL persistence', () => {
 
     // 2. Click chip — URL gains ?inspired=1
     await chip.click({ force: true });
-    await page.waitForURL(/[?&]inspired=1/);
-    expect(page.url()).toMatch(/[?&]inspired=1/);
+    await page.waitForURL(/[?&]inspired=1(?:&|$)/);
+    expect(page.url()).toMatch(/[?&]inspired=1(?:&|$)/);
 
     // 3. Chip is now pressed
     await expect(chip).toHaveAttribute('aria-pressed', 'true');
@@ -85,11 +85,11 @@ test.describe('vault inspired — chip toggle + URL persistence', () => {
     const chipAfterReload = page.locator('[data-testid="vault-inspired-chip"]');
     await expect(chipAfterReload).toBeVisible();
     await expect(chipAfterReload).toHaveAttribute('aria-pressed', 'true');
-    expect(page.url()).toMatch(/[?&]inspired=1/);
+    expect(page.url()).toMatch(/[?&]inspired=1(?:&|$)/);
 
     // 5. Click chip again — ?inspired=1 is removed from URL
     await chipAfterReload.click({ force: true });
     await page.waitForURL((url) => !url.toString().includes('inspired=1'));
-    expect(page.url()).not.toMatch(/inspired=1/);
+    expect(page.url()).not.toMatch(/[?&]inspired=1(?:&|$)/);
   });
 });
