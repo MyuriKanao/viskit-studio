@@ -205,6 +205,9 @@ export async function mockVaultTagsApply(
  * Backs the toggle with an in-memory Set so the same asset can be flipped
  * across reloads (within a single page session). The assets-list response
  * is re-derived on each request so `inspired:bool` reflects the live set.
+ *
+ * EPIC-12: when the request carries `?inspired=true`, only items whose id is
+ * in the inspired set are returned — mirrors the backend pre-filter behaviour.
  */
 export async function mockVaultInspired(
   page: Page,
@@ -213,10 +216,13 @@ export async function mockVaultInspired(
   const state = new Set<number>(initialInspired);
 
   await page.route('**/api/vault/assets**', async (route) => {
-    const items = VAULT_FIXTURE_ITEMS.map((item) => ({
+    const url = new URL(route.request().url());
+    const filterInspired = url.searchParams.get('inspired') === 'true';
+    const allItems = VAULT_FIXTURE_ITEMS.map((item) => ({
       ...item,
       inspired: state.has(item.id),
     }));
+    const items = filterInspired ? allItems.filter((item) => item.inspired) : allItems;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
