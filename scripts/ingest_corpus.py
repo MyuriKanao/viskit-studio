@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 
+from apps.api.lib.secrets_store import load_into_env
 from services.providers.registry import boot
 from services.retrieval.ingest import ingest
 
@@ -50,6 +51,7 @@ def _print_banner(en_count: int) -> None:
 
 def main() -> int:
     args = _parse_args()
+    load_into_env()
     if os.environ.get("INGEST_FAKE_CLIENT") == "1":
         from tests.retrieval._fake_runtime import build_fake_milvus_factory, build_fake_registry
 

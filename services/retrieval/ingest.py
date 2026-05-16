@@ -341,10 +341,25 @@ def ingest(
         if hasattr(client, "has_collection") and client.has_collection(COLLECTION_NAME):
             client.drop_collection(COLLECTION_NAME)
         schema = build_schema(embedding_dim or 1)
+        # pymilvus 2.4 MilvusClient.create_collection wants an IndexParams
+        # object built via client.prepare_index_params(); tests use lightweight
+        # fakes that accept the raw list, so we only convert when available.
+        index_params: Any = INDEX_PARAMS
+        prep = getattr(client, "prepare_index_params", None)
+        if callable(prep):
+            built = prep()
+            for entry in INDEX_PARAMS:
+                built.add_index(
+                    field_name=entry["field_name"],
+                    index_type=entry["index_type"],
+                    metric_type=entry["metric_type"],
+                    params=entry.get("params", {}),
+                )
+            index_params = built
         client.create_collection(
             COLLECTION_NAME,
             schema=schema,
-            index_params=INDEX_PARAMS,
+            index_params=index_params,
         )
         if coerced_rows:
             client.insert(COLLECTION_NAME, coerced_rows)
