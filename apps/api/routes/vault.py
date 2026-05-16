@@ -254,6 +254,7 @@ def get_vault_assets(
     locale: Annotated[str | None, Query(max_length=8)] = None,
     min_sales: Annotated[int | None, Query(ge=0)] = None,
     tags: Annotated[list[str] | None, Query()] = None,
+    inspired: bool = Query(False, description="filter to operator-curated inspired set"),
     db: Session = Depends(get_session),  # noqa: B008
 ) -> VaultListResponse:
     """List bestseller assets from Milvus with optional filters + offset pagination.
@@ -297,6 +298,16 @@ def get_vault_assets(
             # Short-circuit: no assets carry ALL requested tags
             return VaultListResponse(items=[], total=0, limit=limit, offset=offset)
 
+    # --- EPIC-12: inspired pre-filter (fires AFTER tag short-circuit) ---
+    inspired_asset_ids: list[int] | None = None
+    if inspired:
+        inspired_rows = db.execute(
+            select(VaultAssetInspired.asset_id)
+        ).scalars().all()
+        inspired_asset_ids = list(inspired_rows)
+        if not inspired_asset_ids:
+            return VaultListResponse(items=[], total=0, limit=limit, offset=offset)
+
     client = _get_milvus_client(req)
 
     try:
@@ -311,11 +322,22 @@ def get_vault_assets(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # Splice tag-AND constraint into the Milvus filter expression
-    if tag_asset_ids is not None:
+    # Splice tag/inspired constraints into the Milvus filter expression (A3)
+    if tag_asset_ids is not None and inspired_asset_ids is not None:
+        final_ids = list(set(tag_asset_ids) & set(inspired_asset_ids))
+        if not final_ids:
+            return VaultListResponse(items=[], total=0, limit=limit, offset=offset)
+        id_list = ", ".join(str(i) for i in final_ids)
+        combined_expr = f"id in [{id_list}]"
+        expr = f"{expr} && {combined_expr}" if expr else combined_expr
+    elif inspired_asset_ids is not None:
+        id_list = ", ".join(str(i) for i in inspired_asset_ids)
+        inspired_expr = f"id in [{id_list}]"
+        expr = f"{expr} && {inspired_expr}" if expr else inspired_expr
+    elif tag_asset_ids is not None:
         id_list = ", ".join(str(i) for i in tag_asset_ids)
-        tag_expr = f"id in [{id_list}]"
-        expr = f"{expr} && {tag_expr}" if expr else tag_expr
+        tag_expr_str = f"id in [{id_list}]"
+        expr = f"{expr} && {tag_expr_str}" if expr else tag_expr_str
 
     try:
         rows = client.query(
@@ -340,20 +362,25 @@ def get_vault_assets(
 
     total = int(count_rows[0]["count(*)"] if count_rows else 0)
 
-    # EPIC-11: join Postgres inspired flags into the page response.
+    # EPIC-11/12: join Postgres inspired flags into the page response.
+    # A2.5: when inspired=true the full set was already fetched; reuse it
+    # (set intersection) instead of issuing a second Postgres SELECT.
     # Set membership is O(1); important because limit can reach 100.
     page_ids = [int(row["id"]) for row in rows]
-    inspired_ids: set[int] = set()
+    inspired_id_set: set[int] = set()
     if page_ids:
-        inspired_ids = set(
-            db.execute(
-                select(VaultAssetInspired.asset_id).where(
-                    VaultAssetInspired.asset_id.in_(page_ids)
-                )
-            ).scalars().all()
-        )
+        if inspired_asset_ids is not None:
+            inspired_id_set = set(inspired_asset_ids) & set(page_ids)
+        else:
+            inspired_id_set = set(
+                db.execute(
+                    select(VaultAssetInspired.asset_id).where(
+                        VaultAssetInspired.asset_id.in_(page_ids)
+                    )
+                ).scalars().all()
+            )
 
-    items = [VaultAsset(**row, inspired=(int(row["id"]) in inspired_ids)) for row in rows]
+    items = [VaultAsset(**row, inspired=(int(row["id"]) in inspired_id_set)) for row in rows]
 
     return VaultListResponse(items=items, total=total, limit=limit, offset=offset)
 
