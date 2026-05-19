@@ -152,7 +152,7 @@ export default function SettingsPage() {
                     <button
                       key={loc}
                       type="button"
-                      // biome-ignore lint/a11y/useSemanticElements: styled toggle group with radio semantics, mirroring Step1Form locale picker
+                      // biome-ignore lint/a11y/useSemanticElements: styled toggle group with radio semantics
                       role="radio"
                       aria-checked={form.default_locale === loc}
                       onClick={() => setForm((f) => ({ ...f, default_locale: loc }))}

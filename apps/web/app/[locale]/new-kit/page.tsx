@@ -1,55 +1,50 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
 import * as React from 'react';
 
+import { MessageInput } from '@/components/chat/MessageInput';
+import { MessageList } from '@/components/chat/MessageList';
+import { ImageGrid, type ImageMeta } from '@/components/kit-detail/image-grid';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
-import { Button } from '@/components/ui/button';
-import { Step1Form } from '@/components/wizard/Step1Form';
-import { Step2Upload } from '@/components/wizard/Step2Upload';
-import { Step4Review as Step3Review } from '@/components/wizard/Step4Review';
-import { type WizardStep, useWizardStore } from '@/lib/wizard/store';
+import { useChatStartFlow } from '@/hooks/use-chat-flow';
+import { useChatStore } from '@/lib/chat/store';
 
-const TOTAL_STEPS = 3 as const;
-
-const STEP_TITLE_KEYS: Record<WizardStep, string> = {
-  1: 'step_1_title',
-  2: 'step_2_title',
-  3: 'step_3_title',
-};
-
-function useStepValid(step: WizardStep): boolean {
-  const skuMeta = useWizardStore((s) => s.skuMeta);
-  const image = useWizardStore((s) => s.image);
-
-  if (step === 1) {
-    const price = Number.parseFloat(skuMeta.price);
-    return (
-      skuMeta.sku.trim().length > 0 &&
-      skuMeta.name.trim().length > 0 &&
-      skuMeta.brand.trim().length > 0 &&
-      skuMeta.category.trim().length > 0 &&
-      Number.isFinite(price) &&
-      price > 0
-    );
-  }
-  if (step === 2) {
-    return image !== null && image.length > 0;
-  }
-  return true;
-}
+const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
 export default function NewKitPage() {
-  const t = useTranslations('wizard');
-  const step = useWizardStore((s) => s.step);
-  const back = useWizardStore((s) => s.back);
-  const next = useWizardStore((s) => s.next);
-  const reset = useWizardStore((s) => s.reset);
+  const [images, setImages] = React.useState<ImageMeta[]>([]);
+  const resetChat = useChatStore((s) => s.reset);
 
-  const isFirst = step === 1;
-  const isLast = step === TOTAL_STEPS;
-  const stepValid = useStepValid(step);
+  const handleProgress = React.useCallback(
+    (event: { slot: string; status: ImageMeta['status']; png_path?: string | null }) => {
+      setImages((current) => {
+        const idx = current.findIndex((img) => img.image_id === event.slot);
+        const next: ImageMeta = {
+          image_id: event.slot,
+          status: event.status,
+          png_path: event.png_path ?? (idx >= 0 ? current[idx].png_path : null),
+        };
+        if (idx < 0) return [...current, next];
+        const copy = [...current];
+        copy[idx] = next;
+        return copy;
+      });
+    },
+    []
+  );
+
+  // D3: wire /spec → /generate → redirect
+  const { handleStart } = useChatStartFlow(handleProgress);
+
+  React.useEffect(() => {
+    resetChat();
+  }, [resetChat]);
+
+  // Warmup ping to mitigate cold-start latency (B3.5); failures are non-fatal
+  React.useEffect(() => {
+    fetch(`${apiBase}/api/kits/_warmup/extract`).catch(() => {});
+  }, []);
 
   return (
     <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[64px_1fr] bg-ink-base">
@@ -59,86 +54,23 @@ export default function NewKitPage() {
       <div className="col-start-2">
         <Topbar />
       </div>
-      <main
-        className="col-start-2 row-start-2 flex flex-col gap-s-6 overflow-auto p-s-6"
-        data-testid="wizard-root"
-        data-debug-step-valid={String(stepValid)}
-      >
-        <header className="flex items-center justify-between">
-          <h1 className="font-display text-xl text-ink-primary">{t('page_title')}</h1>
-          <span className="text-xs text-ink-muted" data-testid="wizard-step-label">
-            {t('step_label', { current: step, total: TOTAL_STEPS })}
-          </span>
-        </header>
-
-        <ol
-          aria-label={t('page_title')}
-          className="flex items-center gap-s-2 text-xs text-ink-muted"
-          data-testid="wizard-stepper"
-        >
-          {([1, 2, 3] as WizardStep[]).map((n) => {
-            const active = n === step;
-            const done = n < step;
-            return (
-              <li
-                key={n}
-                aria-current={active ? 'step' : undefined}
-                data-step={n}
-                data-state={active ? 'active' : done ? 'done' : 'pending'}
-                className={
-                  active
-                    ? 'rounded-input bg-surface-02 px-s-2 py-s-1 text-accent'
-                    : done
-                      ? 'rounded-input px-s-2 py-s-1 text-ink-secondary'
-                      : 'rounded-input px-s-2 py-s-1 text-ink-faint'
-                }
-              >
-                {n}. {t(STEP_TITLE_KEYS[n])}
-              </li>
-            );
-          })}
-        </ol>
-
+      <main className="col-start-2 row-start-2 grid min-h-0 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(520px,3fr)_minmax(320px,2fr)]">
         <section
-          aria-labelledby="wizard-step-heading"
-          className="rounded-card border border-border-subtle bg-surface-01 p-s-6"
-          data-testid={`wizard-step-${step}`}
+          data-testid="chat-pane"
+          aria-label="套包生成对话"
+          className="flex min-h-0 flex-col border-r border-border-subtle bg-surface-01"
         >
-          <h2 id="wizard-step-heading" className="mb-s-4 font-display text-lg text-ink-primary">
-            {t(STEP_TITLE_KEYS[step])}
-          </h2>
-          {step === 1 ? <Step1Form /> : null}
-          {step === 2 ? <Step2Upload /> : null}
-          {step === 3 ? <Step3Review /> : null}
+          <MessageList onStart={(spec) => void handleStart(spec)} />
+          <MessageInput />
         </section>
 
-        <footer className="mt-auto flex items-center justify-between">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={back}
-            disabled={isFirst}
-            data-testid="wizard-back"
-          >
-            {t('back_button')}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={reset} data-testid="wizard-reset">
-            {t('reset_button')}
-          </Button>
-          {isLast ? (
-            <span aria-hidden className="w-[88px]" />
-          ) : (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={next}
-              disabled={!stepValid}
-              data-testid="wizard-next"
-            >
-              {t('next_button')}
-            </Button>
-          )}
-        </footer>
+        <section
+          data-testid="grid-pane"
+          aria-label="生成图片预览"
+          className="min-h-0 overflow-auto p-s-4"
+        >
+          <ImageGrid images={images} />
+        </section>
       </main>
     </div>
   );

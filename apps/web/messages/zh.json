@@ -230,7 +230,7 @@
       "progress_running": "处理中",
       "progress_success": "完成",
       "progress_failed": "失败",
-      "phase_spec": "生成规格说明…",
+      "phase_spec": "正在规划图片内容…",
       "phase_generate": "生成 14 张图像…",
       "generate_error": "生成失败：{message}",
       "idle_hint": "点击「开始生成」启动整套流程"

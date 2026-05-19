@@ -159,16 +159,17 @@ def test_kits_list_seeded(
     assert item["score"] == 92
     assert item["locale"] == "zh"
     assert len(item["thumbs"]) == 14
-    # First five thumbs are hero — slots 1,2,4 populated, 3 and 5 None
-    assert item["thumbs"][0] == "kits/42/hero/1.png"
-    assert item["thumbs"][1] == "kits/42/hero/2.png"
+    # Legacy disk paths outside IMAGEGEN_OUTPUT_DIR are not browser-fetchable,
+    # so they are hidden rather than returned as broken image src values.
+    assert item["thumbs"][0] is None
+    assert item["thumbs"][1] is None
     assert item["thumbs"][2] is None
-    assert item["thumbs"][3] == "kits/42/hero/4.png"
+    assert item["thumbs"][3] is None
     assert item["thumbs"][4] is None
-    # Detail thumbs — M1 and M5 populated, others None
-    assert item["thumbs"][5] == "kits/42/detail/M1.png"
+    # Detail thumbs — legacy local paths are hidden too.
+    assert item["thumbs"][5] is None
     assert item["thumbs"][6] is None
-    assert item["thumbs"][9] == "kits/42/detail/M5.png"
+    assert item["thumbs"][9] is None
 
 
 def test_kits_list_drops_dangling_png_paths(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -210,9 +211,35 @@ def test_kits_list_drops_dangling_png_paths(tmp_path: Any, monkeypatch: pytest.M
         app.dependency_overrides.pop(get_session, None)
 
     thumbs = body["items"][0]["thumbs"]
-    assert thumbs[0] == "kits/42/hero/1.png"
+    assert thumbs[0] is None
     assert thumbs[1] is None  # dangling row → null
     assert all(t is None for t in thumbs[2:])
+
+
+def test_kits_list_converts_generated_paths_to_image_api_urls(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Generated kit paths must be returned as API image URLs, not disk paths."""
+    from apps.api.routes import kits as kits_route
+
+    monkeypatch.setattr(kits_route, "_thumb_base", lambda: tmp_path)
+    monkeypatch.setenv("IMAGEGEN_OUTPUT_DIR", "data/imagegen")
+    real = (
+        tmp_path
+        / "data"
+        / "imagegen"
+        / "kits"
+        / "kit-public-123"
+        / "detail"
+        / "M4.png"
+    )
+    real.parent.mkdir(parents=True, exist_ok=True)
+    real.write_bytes(b"png")
+
+    thumb = kits_route._thumb_if_exists("data/imagegen/kits/kit-public-123/detail/M4.png")
+    assert thumb is not None
+    assert thumb.startswith("/api/kits/kit-public-123/images/M4?v=")
+    assert "data/imagegen" not in thumb
 
 
 def test_kits_list_limit_validation() -> None:

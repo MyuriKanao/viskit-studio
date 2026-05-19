@@ -1,22 +1,12 @@
 import type { Page, Route } from '@playwright/test';
 
 /**
- * Stubs the 5 wizard endpoints so Playwright specs can drive
- * `/[locale]/new-kit` Step 1 → 4 → /kits/{db_kit_id} without a live FastAPI
- * server.
- *
- *   POST /api/retrieval/search        — returns `hits` (fixture-driven)
- *   POST /api/retrieval/style-prompt  — returns a canned style_prompt
- *   POST /api/kits/*\/spec            — returns spec_markdown + SpecOut + compliance
- *   POST /api/kits/*\/generate        — returns db_kit_id (+ png_paths)
- *   GET  /api/kits/*\/events          — streams a few `data:` SSE frames
- *
- * The kit-events route mimics the production wire format used by
- * `apps/api/routes/kits.py:get_kit_events` — `data: <json>\n\n` only, no
- * `event:` lines.
+ * Stubs the chat creation pipeline so Playwright specs can drive
+ * `/[locale]/new-kit` → extract → spec → generate → /kits/{db_kit_id}
+ * without a live FastAPI server.
  */
 
-export interface MockWizardHit {
+export interface MockKitPipelineHit {
   image_url: string;
   score: number;
   metadata: Record<string, unknown>;
@@ -28,8 +18,8 @@ export interface MockWizardHit {
   inspired?: boolean;
 }
 
-export interface MockWizardOptions {
-  hits?: MockWizardHit[];
+export interface MockKitPipelineOptions {
+  hits?: MockKitPipelineHit[];
   /** Optional override; defaults to a placeholder zh prompt. */
   stylePrompt?: string;
   /** db_kit_id returned by /generate; tests assert post-success navigation. */
@@ -38,9 +28,11 @@ export interface MockWizardOptions {
   specLocale?: 'zh' | 'en';
   /** SSE event stream emitted by /events. Each frame is one `data:` line. */
   sseEvents?: Array<Record<string, unknown>>;
+  extract?: Record<string, unknown>;
+  specMarkdown?: string;
 }
 
-export const DEFAULT_HITS: MockWizardHit[] = [
+export const DEFAULT_HITS: MockKitPipelineHit[] = [
   {
     image_url: 'https://example.test/img/a.png',
     score: 0.92,
@@ -58,7 +50,7 @@ export const DEFAULT_HITS: MockWizardHit[] = [
   },
 ];
 
-export const FALLBACK_HITS: MockWizardHit[] = [
+export const FALLBACK_HITS: MockKitPipelineHit[] = [
   {
     image_url: 'https://example.test/img/a-fb.png',
     score: 0.7,
@@ -72,10 +64,44 @@ export const FALLBACK_HITS: MockWizardHit[] = [
 ];
 
 const DEFAULT_SSE_EVENTS: Array<Record<string, unknown>> = [
-  { image_id: 'H1', status: 'success', progress: 7, brand_color_locked: true },
-  { image_id: 'H2', status: 'success', progress: 14, brand_color_locked: true },
-  { image_id: 'M1', status: 'success', progress: 36, brand_color_locked: true },
+  {
+    image_id: 'H1',
+    status: 'success',
+    png_path: '/mock/h1.png',
+    progress: 7,
+    brand_color_locked: true,
+  },
+  {
+    image_id: 'H2',
+    status: 'success',
+    png_path: '/mock/h2.png',
+    progress: 14,
+    brand_color_locked: true,
+  },
+  {
+    image_id: 'M1',
+    status: 'success',
+    png_path: '/mock/m1.png',
+    progress: 36,
+    brand_color_locked: true,
+  },
 ];
+
+const DEFAULT_EXTRACT = {
+  name: { value: 'Mock Kit', confidence: 0.9, reasoning: 'mock product name' },
+  brand: { value: 'MockBrand', confidence: 0.9, reasoning: 'mock logo' },
+  category: { value: '零食', confidence: 0.9, reasoning: 'mock category' },
+  product_type: { value: 'general_food', confidence: 0.9, reasoning: 'mock type' },
+  price: { value: 29.9, confidence: 0.7, reasoning: 'mock price' },
+  brand_color_hex: { value: '#C4513A', confidence: 0.9, reasoning: 'mock color' },
+  selling_points: [
+    {
+      value: { title: '天然配料', evidence: 'mock evidence', priority: 'high' },
+      confidence: 0.8,
+      reasoning: 'mock selling point',
+    },
+  ],
+};
 
 function buildSpecOut(locale: 'zh' | 'en'): unknown {
   // Minimal valid SpecOut: 5 hero + 9 detail + sku_meta + selling_points.
@@ -101,15 +127,33 @@ function buildSpecOut(locale: 'zh' | 'en'): unknown {
   };
 }
 
-export async function mockWizardBackend(
+export async function mockKitPipeline(
   page: Page,
-  options: MockWizardOptions = {}
+  options: MockKitPipelineOptions = {}
 ): Promise<void> {
   const hits = options.hits ?? DEFAULT_HITS;
   const stylePrompt = options.stylePrompt ?? 'mock style prompt';
   const dbKitId = options.dbKitId ?? 123;
   const specLocale = options.specLocale ?? 'zh';
   const sseEvents = options.sseEvents ?? DEFAULT_SSE_EVENTS;
+  const extract = options.extract ?? DEFAULT_EXTRACT;
+  const specMarkdown = options.specMarkdown ?? '# Mock Spec\n\n真实文案：天然配料卖点';
+
+  await page.route('**/api/kits/_warmup/extract', async (route: Route) => {
+    await route.fulfill({ status: 204, body: '' });
+  });
+
+  await page.route('**/api/kits/*/extract', async (route: Route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(extract),
+    });
+  });
 
   await page.route('**/api/retrieval/search', async (route: Route) => {
     if (route.request().method() !== 'POST') {
@@ -149,7 +193,7 @@ export async function mockWizardBackend(
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        spec_markdown: '# Mock Spec\n\nmock',
+        spec_markdown: specMarkdown,
         compliance,
         spec: buildSpecOut(specLocale),
       }),
@@ -176,6 +220,26 @@ export async function mockWizardBackend(
         color_lock_summary: { H1: 1 },
         needs_review: false,
         abort_reason: null,
+      }),
+    });
+  });
+
+  await page.route(`**/api/kits/${dbKitId}/meta`, async (route: Route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        db_kit_id: dbKitId,
+        kit_id: 'mock-kit-client-id',
+        retrieved_bestseller_ids: [],
+        spec_markdown: specMarkdown,
+        spec: buildSpecOut(specLocale),
+        compliance: { score: 95, violations: [] },
+        cost: { total: 0.12, byRole: [{ role: 'image_generation', usd: 0.12 }] },
       }),
     });
   });

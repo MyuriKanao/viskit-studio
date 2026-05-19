@@ -4,6 +4,7 @@ import * as React from 'react';
 
 import { StatusChip } from '@/components/atoms/status-chip';
 import type { KitListItem } from '@/hooks/use-recent-kits';
+import { resolveApiImageSrc } from '@/lib/api/images';
 import { cn } from '@/lib/utils';
 
 import { AdvisoryBadge } from './AdvisoryBadge';
@@ -105,7 +106,7 @@ export function CatalogTable({ kits, labels, onRowClick }: CatalogTableProps) {
                   <td className="px-s-3 py-s-2">
                     {thumb ? (
                       <img
-                        src={thumb}
+                        src={resolveApiImageSrc(thumb)}
                         alt=""
                         className="h-8 w-8 rounded-input object-cover"
                         loading="lazy"

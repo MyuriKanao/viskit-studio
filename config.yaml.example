@@ -18,23 +18,11 @@ providers:
     api_key_env: ANTHROPIC_API_KEY
     model: claude-opus-4-7
 
-  image_gen:        # used by orchestrator
+  image:            # used by generation and text touch-up
     protocol: openai_compatible
     base_url: https://api.apimart.ai/v1
     api_key_env: APIMART_API_KEY
     model: gpt-image-2
-
-  image_edit:       # used by text touch-up
-    protocol: openai_compatible
-    base_url: https://api.apimart.ai/v1
-    api_key_env: APIMART_API_KEY
-    model: gpt-image-2-edit
-
-  embedding:        # used by retrieval
-    protocol: openai_compatible
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY
-    model: nvidia/llama-nemotron-embed-vl-1b-v2
 
   # ─── REQUIRED ROLE — see ADR-005 v2 ──────────────────────────────────────
   # REQUIRED ROLE — do not remove without acknowledging $0.04→$2 per-kit

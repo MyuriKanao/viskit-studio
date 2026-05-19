@@ -9,6 +9,7 @@ import { CostDock } from '@/components/kit-detail/cost-dock';
 import { ImageGrid, type ImageMeta } from '@/components/kit-detail/image-grid';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
+import { useKitMeta } from '@/hooks/use-kit-meta';
 import { useRecentKits } from '@/hooks/use-recent-kits';
 
 // `SpecMarkdown` pulls in react-markdown + remark-gfm (~40 kB gz). Split it
@@ -27,6 +28,53 @@ const SpecMarkdown = dynamic(
 
 type Params = { id: string };
 
+type CostSummary = {
+  total: number | null;
+  byRole: Array<{ role: string; usd: number }> | null;
+};
+
+function readScore(compliance: Record<string, unknown> | null | undefined): number | null {
+  const score = compliance?.score;
+  return typeof score === 'number' ? score : null;
+}
+
+function readCost(cost: Record<string, unknown> | null | undefined): CostSummary {
+  if (!cost) return { total: null, byRole: null };
+  const total = typeof cost.total === 'number' ? cost.total : null;
+  const rawRows = Array.isArray(cost.byRole)
+    ? cost.byRole
+    : Array.isArray(cost.by_role)
+      ? cost.by_role
+      : null;
+  const byRoleFromRows =
+    rawRows
+      ?.map((row) => {
+        if (!row || typeof row !== 'object') return null;
+        const item = row as Record<string, unknown>;
+        const role = typeof item.role === 'string' ? item.role : null;
+        const usd = typeof item.usd === 'number' ? item.usd : null;
+        return role && usd !== null ? { role, usd } : null;
+      })
+      .filter((row): row is { role: string; usd: number } => row !== null) ?? null;
+  if (byRoleFromRows) return { total, byRole: byRoleFromRows };
+
+  const events = Array.isArray(cost.events) ? cost.events : null;
+  if (!events) return { total, byRole: null };
+  const byRoleMap = new Map<string, number>();
+  let eventTotal = 0;
+  for (const row of events) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as Record<string, unknown>;
+    const role = typeof item.role === 'string' ? item.role : null;
+    const usd = typeof item.cost_usd === 'number' ? item.cost_usd : null;
+    if (!role || usd === null) continue;
+    eventTotal += usd;
+    byRoleMap.set(role, (byRoleMap.get(role) ?? 0) + usd);
+  }
+  const byRole = Array.from(byRoleMap, ([role, usd]) => ({ role, usd }));
+  return { total: total ?? eventTotal, byRole };
+}
+
 /**
  * Kit Detail page — 14-image collage + spec column + compliance + cost dock.
  *
@@ -38,8 +86,10 @@ export default function KitDetailPage({ params }: { params: Params }) {
   const t = useTranslations('kitDetail');
   const kits = useRecentKits({ limit: 50 });
   const kitIdNumeric = Number(params.id);
+  const kitMeta = useKitMeta(Number.isFinite(kitIdNumeric) ? kitIdNumeric : null);
   const kit = kits.data?.items.find((k) => k.id === kitIdNumeric);
   const kitId = String(params.id);
+  const publicKitId = kitMeta.data?.kit_id ?? undefined;
 
   const images: ImageMeta[] = React.useMemo(() => {
     const thumbs = kit?.thumbs ?? [];
@@ -56,6 +106,9 @@ export default function KitDetailPage({ params }: { params: Params }) {
   }, [kit]);
 
   const fallbackSpec = `# ${kit?.name ?? t('title')}\n\n${kit ? `**SKU**: \`${kit.sku}\`` : ''}\n\n${t('spec_column_title')} — pending backend wiring.`;
+  const specMarkdown = kitMeta.data?.spec_markdown ?? fallbackSpec;
+  const complianceScore = readScore(kitMeta.data?.compliance) ?? kit?.score ?? null;
+  const cost = readCost(kitMeta.data?.cost);
 
   return (
     <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[64px_1fr] bg-ink-base">
@@ -73,14 +126,14 @@ export default function KitDetailPage({ params }: { params: Params }) {
           </header>
           <div className="grid grid-cols-1 gap-s-4 lg:grid-cols-[1fr_360px]">
             {/* Image grid column */}
-            <ImageGrid images={images} kitId={kitId} />
+            <ImageGrid images={images} kitId={publicKitId} />
             {/* Spec column */}
             <aside aria-label={t('spec_column_title')} className="flex flex-col gap-s-4">
               <section className="rounded-card border border-border-subtle bg-surface-01 p-s-4">
-                <SpecMarkdown src={fallbackSpec} />
+                <SpecMarkdown src={specMarkdown} />
               </section>
-              <CompliancePanel score={kit?.score ?? null} />
-              <CostDock kitId={kitId} total={null} byRole={null} />
+              <CompliancePanel score={complianceScore} />
+              <CostDock kitId={kitId} total={cost.total} byRole={cost.byRole} />
             </aside>
           </div>
         </div>

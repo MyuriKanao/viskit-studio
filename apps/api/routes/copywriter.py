@@ -13,6 +13,7 @@ ADR-009 bilingual contract:
 
 from __future__ import annotations
 
+import time
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -36,8 +37,8 @@ router = APIRouter(prefix="/api/kits", tags=["copywriter"])
 
 
 class SkuMetaIn(BaseModel):
-    sku: str
-    name: str
+    sku: str | None = None
+    name: str | None = None
     brand: str
     category: str
     product_type: Literal["blue_hat", "sports", "general_food", "other"]
@@ -129,9 +130,14 @@ async def create_spec(kit_id: str, req: Request, payload: SpecRequest) -> SpecRe
     if registry is None:
         raise HTTPException(status_code=503, detail="registry not booted")
 
+    # Fill sku/name defaults at the /spec boundary.
+    # name: "未命名草稿" placeholder is acceptable here — /spec does NOT write
+    # to product_catalogs, so it never surfaces in Dashboard.
+    effective_sku = payload.sku_meta.sku or f"KIT-{int(time.time())}"
+    effective_name = payload.sku_meta.name or "未命名草稿"
     sku_meta = SkuMeta(
-        sku=payload.sku_meta.sku,
-        name=payload.sku_meta.name,
+        sku=effective_sku,
+        name=effective_name,
         brand=payload.sku_meta.brand,
         category=payload.sku_meta.category,
         product_type=payload.sku_meta.product_type,

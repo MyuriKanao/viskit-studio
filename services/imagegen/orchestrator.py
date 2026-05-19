@@ -9,8 +9,8 @@ loop with an async orchestrator that:
   before any image-gen call (ADR-005 v2 — no skipped path).
 * Builds 14 prompts via the EPIC-4B prompt_builder + per-kit
   :class:`services.imagegen.campaign_lock.CampaignLock`.
-* Fans out the 14 image jobs subject to a per-provider concurrency cap
-  (asyncio.Semaphore + per-provider in-flight counter).
+* Runs the 14 image jobs in slot order (H1-H5, then M1-M9) so progress is
+  streamed one image at a time.
 * Resolves the API key from ``os.environ`` at worker task-start (ERR-PROV-003
   on missing or empty).
 * Retries any image whose color-lock fails ONCE; on second failure marks the
@@ -31,6 +31,7 @@ import logging
 import os
 import re
 import threading
+import time
 from collections.abc import AsyncIterator, Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -38,6 +39,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from services.copywriter.compliance.preflight import run_preflight
+from services.copywriter.compliance.scorer import ScoreResult, score_spec
 from services.copywriter.sop import DetailSection, HeroSection
 from services.imagegen._slot_map import load_template_for_section
 from services.imagegen.campaign_lock import apply_lock, build_lock
@@ -410,7 +412,12 @@ def _output_path_for_section(
 
 
 def _call_generate(
-    adapter: Any, prompt: str, size: str, image_id: str, kit_id: str
+    adapter: Any,
+    prompt: str,
+    size: str,
+    image_id: str,
+    kit_id: str,
+    on_partial_image: Any | None = None,
 ) -> Any:
     """Sync helper used by ``asyncio.to_thread`` so the kwargs are explicit.
 
@@ -418,8 +425,18 @@ def _call_generate(
     real adapters ignore unknown kwargs (the Protocol allows ``**kwargs``).
     """
     return adapter.generate(
-        prompt, size=size, n=1, image_id=image_id, kit_id=kit_id
+        prompt,
+        size=size,
+        n=1,
+        image_id=image_id,
+        kit_id=kit_id,
+        on_partial_image=on_partial_image,
     )
+
+
+def _public_image_path(kit_id: str, image_id: str, path: Path) -> str:
+    version = path.stat().st_mtime_ns if path.exists() else time.time_ns()
+    return f"/api/kits/{kit_id}/images/{image_id}?v={version}"
 
 
 async def _publish(bus: KitEventBus | None, kit_id: str, event: dict[str, Any]) -> None:
@@ -432,7 +449,6 @@ async def _run_one_image_with_retry(
     *,
     output_dir: Path,
     adapter_factory: AdapterFactory,
-    sem: asyncio.Semaphore,
     counter: _ConcurrencyCounter,
     bus: KitEventBus | None,
 ) -> JobOutcome:
@@ -493,9 +509,22 @@ async def _run_one_image_with_retry(
     retried = False
     color_lock: ColorLockResult | None = None
     cost_event: dict[str, Any] | None = None
+    loop = asyncio.get_running_loop()
+
+    def on_partial_image(image_bytes: bytes) -> None:
+        event = {
+            "image_id": payload.image_id,
+            "status": "in_progress",
+            "progress": 50,
+            "brand_color_locked": False,
+            "png_path": None,
+        }
+        loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(_publish(bus, payload.kit_id, event))
+        )
 
     for attempt in range(2):
-        async with sem:
+        try:
             counter.enter()
             try:
                 response = await asyncio.to_thread(
@@ -505,9 +534,30 @@ async def _run_one_image_with_retry(
                     payload.size,
                     payload.image_id,
                     payload.kit_id,
+                    on_partial_image,
                 )
             finally:
                 counter.exit()
+        except Exception as exc:
+            color_lock = ColorLockResult(
+                locked=False,
+                delta_e=None,
+                target_hex=payload.brand_color_hex,
+                dominant_hex=None,
+                status="error",
+                error_message=str(exc),
+            )
+            cost_event = _build_cost_event(
+                kit_id=payload.kit_id,
+                image_id=payload.image_id,
+                template_id=payload.template_id,
+                role=payload.role,
+                provider_model=binding.model,
+                size=payload.size,
+                color_lock=color_lock,
+                cost_usd=0.0,
+            )
+            break
 
         if not response.images:
             color_lock = ColorLockResult(
@@ -568,12 +618,17 @@ async def _run_one_image_with_retry(
             "status": status_event,
             "progress": 0,
             "brand_color_locked": color_lock.status == "ok",
+            "png_path": (
+                _public_image_path(payload.kit_id, payload.image_id, output_path)
+                if color_lock.status == "ok" and output_path.exists()
+                else None
+            ),
         },
     )
 
     return JobOutcome(
         image_id=payload.image_id,
-        png_path=output_path if output_path.exists() else None,
+        png_path=output_path if color_lock.status == "ok" and output_path.exists() else None,
         color_lock_status=color_lock.status,
         retried=retried,
         needs_review=needs_review,
@@ -635,11 +690,12 @@ def _write_compliance_json(
     kit_root: Path,
     preflight_passed: bool,
     violations: Iterable[Any],
+    scorecard: ScoreResult | None,
     key_resolution: dict[str, Any] | None,
 ) -> Path:
     kit_root.mkdir(parents=True, exist_ok=True)
     data: dict[str, Any] = {
-        "score": None,
+        "score": scorecard.score if scorecard is not None else None,
         "version": 1,
         "preflight": {
             "passed": preflight_passed,
@@ -653,6 +709,19 @@ def _write_compliance_json(
             ],
         },
     }
+    if scorecard is not None:
+        data["violations"] = [
+            {
+                "rule_id": v.rule_id,
+                "severity": v.severity,
+                "location": v.location,
+                "matched_text": v.matched_text,
+                "suggestion": v.suggestion,
+            }
+            for v in scorecard.violations
+        ]
+        data["advisory"] = scorecard.advisory
+        data["locale"] = scorecard.locale
     if key_resolution is not None:
         data["key_resolution"] = key_resolution
     path = kit_root / "compliance.json"
@@ -662,12 +731,45 @@ def _write_compliance_json(
     return path
 
 
+def _score_generated_spec(inputs: KitGenerationInputs) -> ScoreResult:
+    sections: dict[str, str] = {}
+    for idx, sp in enumerate(inputs.spec.selling_points):
+        sections[f"selling_point.{idx}"] = f"{sp.title} {sp.evidence}"
+    for h in inputs.spec.hero_sections:
+        sections[f"hero.{h.id}"] = (
+            f"{h.three_piece.visual}\n{h.three_piece.copy}\n{h.three_piece.design_note}"
+        )
+    for m in inputs.spec.detail_sections:
+        sections[f"detail.{m.id}"] = (
+            f"{m.three_piece.visual}\n{m.three_piece.copy}\n{m.three_piece.design_note}"
+        )
+    return score_spec(sections, locale=inputs.locale)
+
+
 def _write_cost_json(*, kit_root: Path, events: list[dict[str, Any]]) -> Path:
     kit_root.mkdir(parents=True, exist_ok=True)
+    by_role: dict[str, float] = {}
+    total = 0.0
+    for event in events:
+        role = event.get("role")
+        raw_cost = event.get("cost_usd", 0.0)
+        if not isinstance(role, str) or not isinstance(raw_cost, (int, float)):
+            continue
+        cost = float(raw_cost)
+        total += cost
+        by_role[role] = by_role.get(role, 0.0) + cost
     path = kit_root / "cost.json"
     path.write_text(
         json.dumps(
-            {"events": events, "version": 1, "written_at": _now_iso()},
+            {
+                "events": events,
+                "total": total,
+                "by_role": [
+                    {"role": role, "usd": usd} for role, usd in sorted(by_role.items())
+                ],
+                "version": 1,
+                "written_at": _now_iso(),
+            },
             ensure_ascii=False,
             indent=2,
         )
@@ -720,6 +822,7 @@ async def orchestrate_kit(
             kit_root=kit_root,
             preflight_passed=False,
             violations=preflight_result.violations,
+            scorecard=_score_generated_spec(inputs),
             key_resolution=None,
         )
         cost_path = _write_cost_json(
@@ -753,17 +856,16 @@ async def orchestrate_kit(
             max_concurrent_observed=0,
         )
 
-    # ----- 3. Fan out 14 image jobs ---------------------------------------
-    image_role = "image"
+    # ----- 3. Run 14 image jobs ------------------------------------------
+    image_role = "image" if "image" in snapshot.providers else "image_gen"
     image_binding = snapshot.providers.get(image_role)
     if image_binding is None:
         raise ProviderConfigError(
             "ERR-PROV-001",
-            f"snapshot missing role {image_role!r}",
-            role=image_role,
+            "snapshot missing role 'image' or legacy role 'image_gen'",
+            role="image",
         )
 
-    sem = asyncio.Semaphore(image_binding.cap)
     counter = _ConcurrencyCounter()
 
     payloads: list[JobPayload] = []
@@ -782,31 +884,24 @@ async def orchestrate_kit(
             )
         )
 
-    for p in payloads:
-        await _publish(
-            event_bus,
-            inputs.kit_id,
-            {
-                "image_id": p.image_id,
-                "status": "enqueued",
-                "progress": 0,
-                "brand_color_locked": False,
-            },
-        )
-
-    outcomes = await asyncio.gather(
-        *(
-            _run_one_image_with_retry(
-                p,
-                output_dir=inputs.output_dir,
-                adapter_factory=factory,
-                sem=sem,
-                counter=counter,
-                bus=event_bus,
+    outcomes: list[JobOutcome] = []
+    batch_size = max(1, image_binding.cap)
+    for start in range(0, len(payloads), batch_size):
+        batch = payloads[start : start + batch_size]
+        outcomes.extend(
+            await asyncio.gather(
+                *(
+                    _run_one_image_with_retry(
+                        p,
+                        output_dir=inputs.output_dir,
+                        adapter_factory=factory,
+                        counter=counter,
+                        bus=event_bus,
+                    )
+                    for p in batch
+                )
             )
-            for p in payloads
         )
-    )
 
     # ----- 4. Aggregate -----------------------------------------------------
     outcomes_by_id = {o.image_id: o for o in outcomes}
@@ -851,6 +946,7 @@ async def orchestrate_kit(
         kit_root=kit_root,
         preflight_passed=True,
         violations=preflight_result.violations,
+        scorecard=_score_generated_spec(inputs),
         key_resolution=key_resolution,
     )
     cost_path = _write_cost_json(kit_root=kit_root, events=cost_events)

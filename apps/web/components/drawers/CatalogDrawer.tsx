@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useKitMeta } from '@/hooks/use-kit-meta';
 import type { KitListItem } from '@/hooks/use-recent-kits';
 import { useSkuKits } from '@/hooks/use-sku-kits';
+import { resolveApiImageSrc } from '@/lib/api/images';
 
 export interface CatalogDrawerSku {
   sku: string;
@@ -89,7 +90,7 @@ function KitHistoryRow({
       <div className="flex items-start gap-s-3">
         {firstThumb !== null ? (
           <img
-            src={firstThumb}
+            src={resolveApiImageSrc(firstThumb)}
             alt={kit.name}
             loading="lazy"
             className="h-16 w-16 flex-shrink-0 rounded-input bg-surface-01 object-cover"

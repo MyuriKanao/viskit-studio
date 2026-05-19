@@ -11,7 +11,12 @@ import { type UseQueryResult, useQuery } from '@tanstack/react-query';
  */
 export interface KitMeta {
   db_kit_id: number;
+  kit_id: string | null;
   retrieved_bestseller_ids: number[];
+  spec_markdown: string | null;
+  spec: Record<string, unknown> | null;
+  compliance: Record<string, unknown> | null;
+  cost: Record<string, unknown> | null;
 }
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';

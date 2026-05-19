@@ -12,19 +12,16 @@ import json
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from apps.api.routes.kits import (
+    DetailSectionIn,
     GenerateRequest,
     HeroSectionIn,
-    DetailSectionIn,
+    SellingPointIn,
     SkuMetaIn,
     SpecIn,
     ThreePieceIn,
-    SellingPointIn,
     _persist_kit,
 )
-
 
 # ---------------------------------------------------------------------------
 # Stubs
@@ -34,8 +31,8 @@ from apps.api.routes.kits import (
 class _StubResult:
     """Minimal stand-in for OrchestratorResult.
 
-    _persist_kit reads only ``needs_review``, ``image_paths_by_id``, and
-    ``compliance_path``.  Everything else is irrelevant to the sidecar.
+    _persist_kit reads ``needs_review``, ``image_paths_by_id``,
+    ``compliance_path``, ``png_paths``, and optional result sidecar fields.
     """
 
     def __init__(self, compliance_path: Path) -> None:
@@ -157,7 +154,11 @@ def test_persist_kit_writes_kit_meta_with_retrieved_bestseller_ids(
     data = json.loads(meta_path.read_text(encoding="utf-8"))
     assert data["db_kit_id"] == 4242
     assert data["retrieved_bestseller_ids"] == [42, 17, 88]
-    assert data["version"] == 1
+    assert data["kit_id"] == "abc-uuid"
+    assert data["version"] == 2
+    assert (kit_root / "spec.json").is_file()
+    assert (kit_root / "spec.md").is_file()
+    assert "高保湿" in (kit_root / "spec.md").read_text(encoding="utf-8")
 
 
 def test_persist_kit_empty_ids_still_writes_sidecar(tmp_path: Path) -> None:

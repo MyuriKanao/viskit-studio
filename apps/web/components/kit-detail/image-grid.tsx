@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 
+import { resolveApiImageSrc } from '@/lib/api/images';
 import { cn } from '@/lib/utils';
 
 export interface ImageMeta {
@@ -12,7 +13,7 @@ export interface ImageMeta {
 
 export interface ImageGridProps {
   images: ImageMeta[];
-  kitId: string;
+  kitId?: string;
   className?: string;
 }
 
@@ -91,11 +92,11 @@ export function ImageGrid({ images, kitId, className }: ImageGridProps) {
       </section>
       <section aria-label="Detail images" className="flex flex-col gap-s-2">
         <span className="font-mono text-xs uppercase tracking-wider text-ink-faint">
-          M1–M9 · Detail · 2:3
+          M1–M9 · Detail · 3:4
         </span>
-        <div className="grid grid-cols-3 gap-s-2">
+        <div className="grid grid-cols-4 gap-s-2">
           {details.map((img, i) => (
-            <Tile key={img.image_id} img={img} index={i + 5} aspect="aspect-[2/3]" />
+            <Tile key={img.image_id} img={img} index={i + 5} aspect="aspect-[3/4]" />
           ))}
         </div>
       </section>
@@ -105,28 +106,63 @@ export function ImageGrid({ images, kitId, className }: ImageGridProps) {
 
 function Tile({ img, index, aspect }: { img: ImageMeta; index: number; aspect: string }) {
   const hasImage = !!img.png_path;
+  const imageSrc = resolveImageSrc(img.png_path);
+  const status = img.status;
+  const isActive = status === 'running' || status === 'in_progress';
+  const isDone = status === 'success' || status === 'color_locked' || status === 'ready';
+  const isFailed = status === 'failed' || status === 'needs_review' || status === 'error';
+  const label = isActive ? '生成中' : isDone ? '完成' : isFailed ? '待处理' : null;
   return (
     <div
       aria-label={`${img.image_id}${img.status ? ` · ${img.status}` : ''}`}
       className={cn(
-        'relative overflow-hidden rounded-input border border-border-subtle bg-surface-02 opacity-0 animate-fade-in-stagger',
+        'relative overflow-hidden rounded-input border bg-surface-02 opacity-0 animate-fade-in-stagger',
+        isActive
+          ? 'border-accent shadow-[0_0_0_1px_var(--accent),0_0_24px_rgba(221,87,60,0.24)]'
+          : 'border-border-subtle',
         aspect
       )}
       style={{ ['--i' as string]: index } as React.CSSProperties}
     >
       {hasImage ? (
         <img
-          src={img.png_path ?? ''}
+          src={imageSrc}
           alt={`${img.image_id} preview`}
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover"
         />
       ) : (
-        <span aria-hidden="true" className="absolute inset-0 animate-pulse bg-surface-03" />
+        <span
+          aria-hidden="true"
+          className={cn('absolute inset-0 bg-surface-03', isActive && 'animate-pulse')}
+        />
       )}
+      {isActive ? (
+        <span className="absolute inset-x-s-2 top-s-2 h-1 overflow-hidden rounded-full bg-surface-01/80">
+          <span className="block h-full w-1/2 animate-pulse rounded-full bg-accent" />
+        </span>
+      ) : null}
       <span className="absolute bottom-s-1 left-s-1 rounded-input bg-ink-base/70 px-s-2 py-0.5 font-mono text-xs text-ink-secondary backdrop-blur-sm">
         {img.image_id}
       </span>
+      {label ? (
+        <span
+          className={cn(
+            'absolute bottom-s-1 right-s-1 rounded-input px-s-2 py-0.5 text-xs backdrop-blur-sm',
+            isActive
+              ? 'bg-accent text-ink-base-l'
+              : isFailed
+                ? 'bg-warning/90 text-ink-base'
+                : 'bg-ink-base/70 text-ink-secondary'
+          )}
+        >
+          {label}
+        </span>
+      ) : null}
     </div>
   );
+}
+
+function resolveImageSrc(src: string | null): string {
+  return resolveApiImageSrc(src);
 }

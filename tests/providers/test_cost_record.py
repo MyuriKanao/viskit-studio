@@ -119,6 +119,30 @@ def test_record_kit_id_none(monkeypatch: pytest.MonkeyPatch) -> None:
     assert params["kit_id"] is None
 
 
+def test_record_public_uuid_kit_id_as_null(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(stmt: str, params: dict) -> _FakeResult:  # type: ignore[type-arg]
+        captured["params"] = params
+        return _FakeResult(100)
+
+    monkeypatch.setattr("apps.api.lib.db._get_engine", lambda: _FakeEngine(handler))
+    import importlib
+
+    importlib.reload(cost)
+
+    cost.record(
+        kit_id="52891c15-a986-40d2-9198-f15502b5a6f8",
+        role="image",
+        provider_name="openai_compatible@default",
+        cost_usd=0.04,
+    )
+
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert params["kit_id"] is None
+
+
 # ---------------------------------------------------------------------------
 # Test 3 — returned row id matches fake scalar
 # ---------------------------------------------------------------------------

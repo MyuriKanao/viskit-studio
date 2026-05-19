@@ -6,6 +6,7 @@ import { ComplianceRing } from '@/components/atoms/compliance-ring';
 import { LocaleFlag } from '@/components/atoms/locale-flag';
 import { StatusChip } from '@/components/atoms/status-chip';
 import type { KitListItem } from '@/hooks/use-recent-kits';
+import { resolveApiImageSrc } from '@/lib/api/images';
 import { cn } from '@/lib/utils';
 
 export interface KitCardProps {
@@ -44,7 +45,7 @@ function Cell({ src }: { src: string | null | undefined }) {
   }
   return (
     <img
-      src={src}
+      src={resolveApiImageSrc(src)}
       alt="kit thumbnail"
       loading="lazy"
       className="block h-full w-full object-cover"

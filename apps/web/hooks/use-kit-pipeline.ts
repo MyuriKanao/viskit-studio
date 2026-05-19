@@ -3,7 +3,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { ProgressEvent, WizardLocale } from '@/lib/wizard/store';
+import type { Locale, ProgressEvent } from '@/lib/chat/types';
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -11,18 +11,18 @@ const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 // /api/kits/{kit_id}/spec
 // ---------------------------------------------------------------------------
 
-export type WizardProductType = 'blue_hat' | 'sports' | 'general_food' | 'other';
+export type KitProductType = 'blue_hat' | 'sports' | 'general_food' | 'other';
 
-export interface WizardSkuMetaPayload {
+export interface KitSkuMetaPayload {
   sku: string;
   name: string;
   brand: string;
   category: string;
-  product_type: WizardProductType;
+  product_type: KitProductType;
   price: number;
 }
 
-export interface WizardSellingPoint {
+export interface KitSellingPoint {
   title: string;
   evidence: string;
   priority: 'high' | 'medium' | 'low';
@@ -30,9 +30,9 @@ export interface WizardSellingPoint {
 
 export interface SpecParams {
   kit_id: string;
-  locale: WizardLocale;
-  sku_meta: WizardSkuMetaPayload;
-  selling_points: WizardSellingPoint[];
+  locale: Locale;
+  sku_meta: KitSkuMetaPayload;
+  selling_points: KitSellingPoint[];
 }
 
 export type SpecOutPayload = unknown;
@@ -74,9 +74,12 @@ export type GeneratePhase = 'idle' | 'spec' | 'generating' | 'success' | 'error'
 export interface GenerateParams {
   kit_id: string;
   brand_color_hex: string;
-  locale: WizardLocale;
+  locale: Locale;
   spec: SpecOutPayload;
   style_prompt: string;
+  /** Optional callback fanned out from the single SSE consumer. Chat-store MUST NOT
+   *  open a second EventSource — progress arrives here instead (R10 / MED-3). */
+  onProgress?: (e: ProgressEvent) => void;
 }
 
 export interface GenerateResult {
@@ -153,10 +156,16 @@ function mapKitEventToProgress(e: KitSseEvent): ProgressEvent | null {
   if (!slot) return null;
   const raw = typeof e.status === 'string' ? e.status : '';
   let status: ProgressEvent['status'] = 'running';
-  if (raw === 'queued' || raw === 'pending') status = 'pending';
-  else if (raw === 'failed' || raw === 'error') status = 'failed';
-  else if (raw === 'success' || raw === 'ready' || raw === 'done') status = 'success';
-  return { slot, status, message: raw };
+  if (raw === 'queued' || raw === 'pending' || raw === 'enqueued') status = 'pending';
+  else if (raw === 'failed' || raw === 'error' || raw === 'needs_review') status = 'failed';
+  else if (raw === 'success' || raw === 'ready' || raw === 'done' || raw === 'color_locked')
+    status = 'success';
+  return {
+    slot,
+    status,
+    message: raw,
+    png_path: typeof e.png_path === 'string' ? e.png_path : null,
+  };
 }
 
 export function useGenerateKit(): UseGenerateKitResult {
@@ -208,7 +217,12 @@ export function useGenerateKit(): UseGenerateKitResult {
 
     const eventsPromise = readKitEvents(params.kit_id, ctrl.signal, (e) => {
       const mapped = mapKitEventToProgress(e);
-      if (mapped) setEvents((prev) => [...prev, mapped]);
+      if (mapped) {
+        setEvents((prev) => [...prev, mapped]);
+        // Polish Queue #4: fan out to caller via callback — chat-store MUST NOT open
+        // a second EventSource (R10). Single consumer; chat receives progress here.
+        params.onProgress?.(mapped);
+      }
     }).catch(() => {
       // SSE errors don't fail the whole flow — generate is the source of truth.
     });

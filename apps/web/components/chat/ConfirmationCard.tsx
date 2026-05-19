@@ -1,0 +1,381 @@
+'use client';
+
+import * as React from 'react';
+
+import { cn } from '@/lib/utils';
+import { useChatStore } from '@/lib/chat/store';
+import { LOW_CONF_THRESHOLD } from '@/lib/chat/constants';
+import type { ConfirmationMode, FieldInference, InferredSpec } from '@/lib/chat/types';
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+export interface ConfirmationCardProps {
+  inferred: InferredSpec;
+  onStart: (spec: InferredSpec) => void;
+  onModeChange: (mode: ConfirmationMode) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const FIELD_INPUT_CLS =
+  'rounded-input border border-border-subtle bg-surface-02 px-s-2 py-s-1 text-sm text-ink-primary w-full focus:outline-none focus:ring-1 focus:ring-accent';
+
+const PRODUCT_TYPE_OPTIONS = [
+  { value: 'blue_hat', label: '蓝帽/保健' },
+  { value: 'sports', label: '运动' },
+  { value: 'general_food', label: '普通食品' },
+  { value: 'other', label: '其他' },
+] as const;
+
+function normalizeProductType(value: string): string {
+  if (PRODUCT_TYPE_OPTIONS.some((option) => option.value === value)) return value;
+  if (/(蓝帽|保健|health|supplement)/i.test(value)) return 'blue_hat';
+  if (/(运动|健身|sports?|fitness)/i.test(value)) return 'sports';
+  if (/(食品|零食|饮品|茶|咖啡|food|snack|drink|beverage)/i.test(value)) {
+    return 'general_food';
+  }
+  return 'other';
+}
+
+function ConfidenceBadge({ field }: { field: FieldInference<unknown> }) {
+  if (field.confidence >= LOW_CONF_THRESHOLD) return null;
+  return (
+    <span
+      title={field.reasoning}
+      className="ml-s-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-400 text-[9px] font-bold text-black cursor-help"
+    >
+      ?
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Per-field editable cell
+// ---------------------------------------------------------------------------
+interface EditableCellProps {
+  label: string;
+  field: FieldInference<string>;
+  fieldName: string;
+  onChange: (val: string) => void;
+  isColor?: boolean;
+  isProductType?: boolean;
+}
+
+function EditableCell({
+  label,
+  field,
+  fieldName,
+  onChange,
+  isColor,
+  isProductType,
+}: EditableCellProps) {
+  return (
+    <label
+      data-testid={`field-${fieldName}`}
+      className="flex flex-col gap-s-1 text-xs"
+    >
+      <span className="flex items-center font-mono uppercase tracking-wider text-ink-faint">
+        {label}
+        <ConfidenceBadge field={field} />
+      </span>
+      {isColor ? (
+        <span className="flex items-center gap-s-2">
+          <input
+            type="color"
+            value={field.value}
+            onChange={(e) => onChange(e.target.value)}
+            className="h-8 w-10 cursor-pointer rounded-input border border-border-subtle bg-surface-02 p-s-1"
+          />
+          <span className="font-mono text-sm text-ink-secondary">{field.value}</span>
+        </span>
+      ) : isProductType ? (
+        <select
+          value={normalizeProductType(field.value)}
+          onChange={(e) => onChange(e.target.value)}
+          className={FIELD_INPUT_CLS}
+        >
+          {PRODUCT_TYPE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="text"
+          value={field.value}
+          onChange={(e) => onChange(e.target.value)}
+          className={FIELD_INPUT_CLS}
+        />
+      )}
+    </label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Color swatch (read-only, minimal mode)
+// ---------------------------------------------------------------------------
+function ColorSwatch({ hex }: { hex: string }) {
+  return (
+    <span className="inline-flex items-center gap-s-2">
+      <span
+        className="inline-block h-5 w-5 rounded-sm border border-border-subtle"
+        style={{ backgroundColor: hex }}
+      />
+      <span className="font-mono text-sm text-ink-secondary">{hex}</span>
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+export function ConfirmationCard({ inferred, onStart, onModeChange }: ConfirmationCardProps) {
+  const confirmation_mode = useChatStore((s) => s.confirmation_mode);
+  const setConfirmationMode = useChatStore((s) => s.setConfirmationMode);
+
+  // Local editable copy of spec fields
+  const [spec, setSpec] = React.useState<InferredSpec>(() => inferred);
+  const [guardNote, setGuardNote] = React.useState<string | null>(null);
+
+  // Determine effective mode — default to minimal when store is null
+  const mode: ConfirmationMode = confirmation_mode ?? 'minimal';
+
+  // Low-confidence fields for "asking" mode
+  const lowConfFields = React.useMemo(() => {
+    const fields: Array<{ key: keyof InferredSpec; label: string }> = [];
+    if (spec.brand.confidence < LOW_CONF_THRESHOLD) fields.push({ key: 'brand', label: '品牌' });
+    if (spec.category.confidence < LOW_CONF_THRESHOLD) fields.push({ key: 'category', label: '品类' });
+    if (spec.product_type.confidence < LOW_CONF_THRESHOLD) fields.push({ key: 'product_type', label: '风格' });
+    if (spec.brand_color_hex.confidence < LOW_CONF_THRESHOLD) fields.push({ key: 'brand_color_hex', label: '品牌色' });
+    return fields;
+  }, [spec]);
+
+  // Auto-activate asking mode when low-conf fields exist
+  React.useEffect(() => {
+    if (lowConfFields.length > 0 && mode === 'minimal') {
+      setConfirmationMode('asking');
+      onModeChange('asking');
+    }
+  }, []); // only on mount — don't re-trigger on every render
+
+  function handleSetMode(m: ConfirmationMode) {
+    setConfirmationMode(m);
+    onModeChange(m);
+  }
+
+  function updateField(key: keyof InferredSpec, value: string) {
+    setGuardNote(null);
+    setSpec((prev) => {
+      const current = prev[key];
+      if (current === null || Array.isArray(current)) return prev;
+      return {
+        ...prev,
+        [key]: { ...(current as FieldInference<unknown>), value, confidence: 1 },
+      };
+    });
+  }
+
+  // Polish Queue #1 — onStart guard
+  function handleStart() {
+    if (
+      spec.brand.confidence < LOW_CONF_THRESHOLD ||
+      spec.category.confidence < LOW_CONF_THRESHOLD
+    ) {
+      handleSetMode('asking');
+      setGuardNote('请先确认品牌或品类');
+      return;
+    }
+    onStart(spec);
+  }
+
+  // Check if asking mode still has unresolved low-conf fields
+  const askingBlocked =
+    mode === 'asking' &&
+    (spec.brand.confidence < LOW_CONF_THRESHOLD ||
+      spec.category.confidence < LOW_CONF_THRESHOLD ||
+      spec.product_type.confidence < LOW_CONF_THRESHOLD ||
+      spec.brand_color_hex.confidence < LOW_CONF_THRESHOLD);
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+  return (
+    <div
+      data-testid="confirmation-card"
+      data-testid-mode={`card-mode-${mode}`}
+      className="rounded-xl border border-border-subtle bg-surface-01 p-s-4 flex flex-col gap-s-4"
+    >
+      {/* Hidden testid element for mode */}
+      <span data-testid={`card-mode-${mode}`} className="sr-only" />
+
+      {guardNote && (
+        <div className="rounded-input bg-amber-400/10 px-s-3 py-s-2 text-xs text-amber-600">
+          {guardNote}
+        </div>
+      )}
+
+      {/* ── MINIMAL / ASKING shared preview ── */}
+      {(mode === 'minimal' || mode === 'asking') && (
+        <div className="flex flex-col gap-s-2 text-sm">
+          <div data-testid="field-category" className="flex items-center gap-s-2">
+            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">品类</span>
+            <span className="text-ink-primary">{spec.category.value}</span>
+            <ConfidenceBadge field={spec.category} />
+          </div>
+          <div data-testid="field-product_type" className="flex items-center gap-s-2">
+            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">风格</span>
+            <span className="text-ink-primary">{spec.product_type.value}</span>
+            <ConfidenceBadge field={spec.product_type} />
+          </div>
+          <div data-testid="field-brand_color_hex" className="flex items-center gap-s-2">
+            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">品牌色</span>
+            <ColorSwatch hex={spec.brand_color_hex.value} />
+            <ConfidenceBadge field={spec.brand_color_hex} />
+          </div>
+        </div>
+      )}
+
+      {/* ── ASKING mode — low-conf editable cells ── */}
+      {mode === 'asking' && lowConfFields.length > 0 && (
+        <div className="flex flex-col gap-s-3 border-t border-border-subtle pt-s-3">
+          <p className="text-xs text-ink-muted">以下字段置信度较低，请确认：</p>
+          {lowConfFields.map(({ key, label }) => {
+            const f = spec[key] as FieldInference<string>;
+            return (
+              <EditableCell
+                key={key}
+                label={label}
+                field={f}
+                fieldName={key}
+                onChange={(val) => updateField(key, val)}
+                isColor={key === 'brand_color_hex'}
+                isProductType={key === 'product_type'}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── EXPANDED mode — all fields ── */}
+      {mode === 'expanded' && (
+        <div className="flex flex-col gap-s-3">
+          {spec.name && (
+            <EditableCell
+              label="产品名"
+              field={spec.name}
+              fieldName="name"
+              onChange={(val) => updateField('name', val)}
+            />
+          )}
+          <EditableCell
+            label="品牌"
+            field={spec.brand}
+            fieldName="brand"
+            onChange={(val) => updateField('brand', val)}
+          />
+          <EditableCell
+            label="品类"
+            field={spec.category}
+            fieldName="category"
+            onChange={(val) => updateField('category', val)}
+          />
+          <EditableCell
+            label="风格"
+            field={spec.product_type}
+            fieldName="product_type"
+            onChange={(val) => updateField('product_type', val)}
+            isProductType
+          />
+          <EditableCell
+            label="品牌色"
+            field={spec.brand_color_hex}
+            fieldName="brand_color_hex"
+            onChange={(val) => updateField('brand_color_hex', val)}
+            isColor
+          />
+          {spec.price && (
+            <label data-testid="field-price" className="flex flex-col gap-s-1 text-xs">
+              <span className="font-mono uppercase tracking-wider text-ink-faint">
+                价格
+                <ConfidenceBadge field={spec.price} />
+              </span>
+              <input
+                type="number"
+                value={spec.price.value}
+                onChange={(e) =>
+                  setSpec((prev) => ({
+                    ...prev,
+                    price: prev.price
+                      ? { ...prev.price, value: parseFloat(e.target.value) || 0, confidence: 1 }
+                      : null,
+                  }))
+                }
+                className={FIELD_INPUT_CLS}
+              />
+            </label>
+          )}
+          {spec.selling_points.length > 0 && (
+            <div data-testid="field-selling_points" className="flex flex-col gap-s-1 text-xs">
+              <span className="font-mono uppercase tracking-wider text-ink-faint">卖点</span>
+              {spec.selling_points.map((sp, i) => (
+                <input
+                  key={i}
+                  type="text"
+                  value={sp.value}
+                  onChange={(e) =>
+                    setSpec((prev) => ({
+                      ...prev,
+                      selling_points: prev.selling_points.map((s, j) =>
+                        j === i ? { ...s, value: e.target.value, confidence: 1 } : s
+                      ),
+                    }))
+                  }
+                  className={FIELD_INPUT_CLS}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Action row ── */}
+      <div className="flex items-center gap-s-3 pt-s-2">
+        <button
+          data-testid="start-button"
+          type="button"
+          onClick={handleStart}
+          disabled={askingBlocked}
+          className={cn(
+            'inline-flex items-center justify-center rounded-input bg-accent px-s-4 py-s-2 text-sm font-medium text-ink-base-l',
+            'transition-colors duration-fast hover:bg-accent-soft',
+            'disabled:opacity-50 disabled:pointer-events-none'
+          )}
+        >
+          开始生成
+        </button>
+
+        {mode === 'expanded' ? (
+          <button
+            type="button"
+            onClick={() => handleSetMode('minimal')}
+            className="text-sm text-accent underline-offset-4 hover:underline"
+          >
+            收起
+          </button>
+        ) : (
+          <button
+            data-testid="expand-link"
+            type="button"
+            onClick={() => handleSetMode('expanded')}
+            className="text-sm text-accent underline-offset-4 hover:underline"
+          >
+            展开详情
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

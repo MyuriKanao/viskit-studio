@@ -17,8 +17,18 @@ from sqlalchemy import text
 from apps.api.lib.db import _get_engine
 
 
+def _db_kit_id(kit_id: int | str | None) -> int | None:
+    """Return the database marketing_kits.id, or NULL for public/pre-DB ids."""
+    if kit_id is None:
+        return None
+    if isinstance(kit_id, int):
+        return kit_id
+    stripped = kit_id.strip()
+    return int(stripped) if stripped.isdecimal() else None
+
+
 def record(
-    kit_id: int | None,
+    kit_id: int | str | None,
     role: str,
     provider_name: str,
     *,
@@ -42,7 +52,7 @@ def record(
         """
     )
     params = {
-        "kit_id": kit_id,
+        "kit_id": _db_kit_id(kit_id),
         "role": role,
         "provider_name": provider_name,
         "tokens_in": tokens_in,

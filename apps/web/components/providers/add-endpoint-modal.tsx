@@ -40,7 +40,7 @@ const EMPTY: FormState = {
   model: '',
 };
 
-const ROLES = ['vision', 'llm', 'image', 'embedding', 'compliance_screen'];
+const ROLES = ['vision', 'llm', 'image', 'compliance_screen'];
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 

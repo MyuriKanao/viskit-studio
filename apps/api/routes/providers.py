@@ -296,7 +296,6 @@ _KNOWN_ROLES: tuple[str, ...] = (
     "vision",
     "llm",
     "image",
-    "embedding",
     "compliance_screen",
 )
 

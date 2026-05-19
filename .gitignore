@@ -38,3 +38,5 @@ volumes/
 .omc/
 
 tests/
+.omc
+data/

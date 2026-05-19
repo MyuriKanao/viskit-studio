@@ -12,6 +12,7 @@ adapter accepts ``clock`` and ``sleep_fn`` injection points.
 from __future__ import annotations
 
 import base64
+import json
 from typing import Any
 
 import httpx
@@ -143,6 +144,71 @@ def test_sync_response_returned_immediately(
     assert len(_stub_cost_record) == 1
     assert _stub_cost_record[0]["image_count"] == 1
     assert _stub_cost_record[0]["resolution"] == "1024x1024"
+
+
+@respx.mock
+def test_cli_proxy_stream_response_decoded(
+    _stub_cost_record: list[dict[str, Any]],
+) -> None:
+    raw_bytes = b"\x89PNG streamed-payload"
+    b64 = base64.b64encode(raw_bytes).decode("ascii")
+    route = respx.post("https://gw.example/v1/images/generations").mock(
+        return_value=httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=(
+                'event: image_generation.completed\n'
+                f'data: {{"type":"image_generation.completed","b64_json":"{b64}"}}\n\n'
+            ),
+        )
+    )
+
+    adapter = _adapter()
+    out = adapter.generate("a red apple", size="1024x1024", n=1)
+
+    assert route.call_count == 1
+    sent = json.loads(route.calls[0].request.read().decode("utf-8"))
+    assert sent["stream"] is True
+    assert sent["response_format"] == "b64_json"
+    assert sent["output_format"] == "png"
+    assert out.images == [raw_bytes]
+    assert out.task_id is None
+    assert len(_stub_cost_record) == 1
+
+
+@respx.mock
+def test_cli_proxy_partial_image_callback(
+    _stub_cost_record: list[dict[str, Any]],
+) -> None:
+    partial_bytes = b"\x89PNG partial-payload"
+    final_bytes = b"\x89PNG final-payload"
+    partial_b64 = base64.b64encode(partial_bytes).decode("ascii")
+    final_b64 = base64.b64encode(final_bytes).decode("ascii")
+    respx.post("https://gw.example/v1/images/generations").mock(
+        return_value=httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=(
+                'event: image_generation.partial_image\n'
+                f'data: {{"type":"image_generation.partial_image","b64_json":"{partial_b64}"}}\n\n'
+                'event: image_generation.completed\n'
+                f'data: {{"type":"image_generation.completed","b64_json":"{final_b64}"}}\n\n'
+            ),
+        )
+    )
+
+    partials: list[bytes] = []
+    adapter = _adapter()
+    out = adapter.generate(
+        "a red apple",
+        size="1024x1024",
+        n=1,
+        on_partial_image=partials.append,
+    )
+
+    assert partials == [partial_bytes]
+    assert out.images == [final_bytes]
+    assert len(_stub_cost_record) == 1
 
 
 # ---------------------------------------------------------------------------

@@ -175,6 +175,8 @@ def boot(config_path: Path) -> Registry:
     content, _checksum = config_io.read(config_path)
     data = yaml.safe_load(content) or {}
     providers = data.get("providers", {}) or {}
+    if "image" not in providers and "image_gen" in providers:
+        providers = {**providers, "image": providers["image_gen"]}
 
     if "compliance_screen" not in providers:
         raise ProviderConfigError(

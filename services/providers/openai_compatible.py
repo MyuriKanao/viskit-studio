@@ -24,6 +24,7 @@ names never leak into the database.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import time
 from collections.abc import Callable
@@ -96,6 +97,13 @@ def _token_cost(model: str, tokens_in: int, tokens_out: int) -> float:
 def _image_cost(size: str, n: int) -> float:
     per_image = _IMAGE_RATES.get(size, _DEFAULT_IMAGE_RATE_USD)
     return per_image * n
+
+
+def _decode_data_url(url: str) -> bytes | None:
+    prefix, sep, payload = url.partition(",")
+    if not sep or ";base64" not in prefix:
+        return None
+    return base64.b64decode(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -258,15 +266,23 @@ class OpenAICompatibleAdapter:
         model = kwargs.pop("model", self.model)
 
         if isinstance(image, bytes):
-            encoded = base64.b64encode(image).decode("ascii")
-            uri = f"data:image/png;base64,{encoded}"
+            if image:
+                encoded = base64.b64encode(image).decode("ascii")
+                uri = f"data:image/png;base64,{encoded}"
+            else:
+                uri = ""
         else:
             uri = image
 
-        message_content: list[dict[str, Any]] = [
-            {"type": "image_url", "image_url": {"url": uri}},
-            {"type": "text", "text": prompt},
-        ]
+        message_content: str | list[dict[str, Any]]
+        if uri:
+            message_content = [
+                {"type": "image_url", "image_url": {"url": uri}},
+                {"type": "text", "text": prompt},
+            ]
+        else:
+            message_content = prompt
+
         body: dict[str, Any] = {
             "model": model,
             "messages": [{"role": "user", "content": message_content}],
@@ -280,6 +296,7 @@ class OpenAICompatibleAdapter:
                     "type": "function",
                     "function": {
                         "name": "analyze_image",
+                        "description": "Return structured analysis for the supplied content.",
                         "parameters": {"type": "object"},
                     },
                 }
@@ -301,10 +318,16 @@ class OpenAICompatibleAdapter:
         tool_calls = choice.get("tool_calls")
         if tool_calls:
             first = tool_calls[0]
-            structured = {
-                "name": first.get("function", {}).get("name"),
-                "arguments": first.get("function", {}).get("arguments"),
-            }
+            arguments = first.get("function", {}).get("arguments")
+            if isinstance(arguments, str):
+                try:
+                    parsed = json.loads(arguments)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    structured = parsed
+            elif isinstance(arguments, dict):
+                structured = arguments
 
         usage: dict[str, Any] = data.get("usage", {})
         tokens_in = int(usage.get("prompt_tokens", 0))
@@ -340,34 +363,21 @@ class OpenAICompatibleAdapter:
         **kwargs: Any,
     ) -> ImageGenResponse:
         kit_id = kwargs.pop("kit_id", None)
+        on_partial_image = kwargs.pop("on_partial_image", None)
         body: dict[str, Any] = {
             "model": self.model,
             "prompt": prompt,
             "size": size,
             "n": n,
+            "response_format": "b64_json",
+            "output_format": "png",
         }
         body.update(kwargs)
 
         with make_session(timeout=self.timeout) as client:
-            submit_response = client.post(
-                f"{self.base_url}/images/generations",
-                json=body,
-                headers=self._headers(),
+            images, task_id, submit_data = self._request_image_generation(
+                client, body, on_partial_image=on_partial_image
             )
-            submit_response.raise_for_status()
-            submit_data: dict[str, Any] = submit_response.json()
-
-            sync_images = self._extract_sync_images(submit_data, client)
-            if sync_images is not None:
-                images, task_id = sync_images, None
-            else:
-                task_id = self._extract_task_id(submit_data)
-                if task_id is None:
-                    raise ImageGenError(
-                        "image-generation response had neither inline images "
-                        "nor a task_id"
-                    )
-                images = self._poll_task(task_id, client)
 
         record_cost(
             kit_id=kit_id,
@@ -384,6 +394,110 @@ class OpenAICompatibleAdapter:
             raw=submit_data,
             task_id=task_id,
         )
+
+    def _request_image_generation(
+        self,
+        client: httpx.Client,
+        body: dict[str, Any],
+        *,
+        on_partial_image: Callable[[bytes], None] | None = None,
+    ) -> tuple[list[bytes], str | None, dict[str, Any]]:
+        url = f"{self.base_url}/images/generations"
+        stream_body = {**body, "stream": True, "partial_images": 1}
+        try:
+            with client.stream(
+                "POST",
+                url,
+                json=stream_body,
+                headers=self._headers(),
+                timeout=httpx.Timeout(self.timeout, read=None),
+            ) as response:
+                if response.status_code == 400:
+                    return self._request_image_generation_json(client, body)
+                response.raise_for_status()
+                content_type = response.headers.get("content-type", "")
+                if "text/event-stream" not in content_type:
+                    response.read()
+                    payload = response.json()
+                    return self._images_from_json_payload(client, payload)
+                return self._images_from_sse(response, on_partial_image=on_partial_image)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400:
+                return self._request_image_generation_json(client, body)
+            raise
+
+    def _request_image_generation_json(
+        self, client: httpx.Client, body: dict[str, Any]
+    ) -> tuple[list[bytes], str | None, dict[str, Any]]:
+        submit_response = client.post(
+            f"{self.base_url}/images/generations",
+            json=body,
+            headers=self._headers(),
+        )
+        submit_response.raise_for_status()
+        payload: dict[str, Any] = submit_response.json()
+        return self._images_from_json_payload(client, payload)
+
+    def _images_from_json_payload(
+        self, client: httpx.Client, payload: dict[str, Any]
+    ) -> tuple[list[bytes], str | None, dict[str, Any]]:
+        sync_images = self._extract_sync_images(payload, client)
+        if sync_images is not None:
+            return sync_images, None, payload
+        task_id = self._extract_task_id(payload)
+        if task_id is None:
+            raise ImageGenError(
+                "image-generation response had neither inline images nor a task_id"
+            )
+        return self._poll_task(task_id, client), task_id, payload
+
+    def _images_from_sse(
+        self,
+        response: httpx.Response,
+        *,
+        on_partial_image: Callable[[bytes], None] | None = None,
+    ) -> tuple[list[bytes], str | None, dict[str, Any]]:
+        last_partial: bytes | None = None
+        raw_events: list[dict[str, Any]] = []
+        try:
+            lines = response.iter_lines()
+            for line in lines:
+                line = line.strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if not payload or payload == "[DONE]":
+                    continue
+                try:
+                    event = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                raw_events.append(event)
+                event_type = str(event.get("type") or "")
+                b64 = event.get("b64_json")
+                if not isinstance(b64, str) or not b64:
+                    url = event.get("url")
+                    if isinstance(url, str) and url.startswith("data:"):
+                        decoded = _decode_data_url(url)
+                        if decoded is not None:
+                            b64 = base64.b64encode(decoded).decode("ascii")
+                if isinstance(b64, str) and b64:
+                    image_bytes = base64.b64decode(b64)
+                    if event_type.endswith(".partial_image"):
+                        last_partial = image_bytes
+                        if on_partial_image is not None:
+                            try:
+                                on_partial_image(image_bytes)
+                            except Exception:
+                                pass
+                        continue
+                    if event_type.endswith(".completed"):
+                        return [image_bytes], None, {"events": raw_events}
+        except httpx.ReadTimeout as exc:
+            raise ImageGenTimeoutError(
+                "image-generation stream timed out before image output"
+            ) from exc
+        raise ImageGenError("image-generation stream ended without image output")
 
     # ------------------------------------------------------------------
     # ImageEdit
@@ -465,6 +579,8 @@ class OpenAICompatibleAdapter:
             return base64.b64decode(b64)
         url = item.get("url")
         if isinstance(url, str) and url:
+            if url.startswith("data:"):
+                return _decode_data_url(url)
             resp = client.get(url)
             resp.raise_for_status()
             return resp.content

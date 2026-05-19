@@ -11,18 +11,22 @@ channel backed by :class:`services.imagegen.orchestrator.KitEventBus`.
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from apps.api.lib.db import get_session
+from services.copywriter.compliance.scorer import score_spec
 from services.copywriter.sop import (
     DetailSection,
     HeroSection,
@@ -30,11 +34,13 @@ from services.copywriter.sop import (
     SkuMeta,
     Spec,
     ThreePiece,
+    render_markdown,
 )
 from services.imagegen.orchestrator import orchestrate_kit
 from services.imagegen.single_gen import KitGenerationInputs
 
 router = APIRouter(prefix="/api/kits", tags=["imagegen"])
+logger = logging.getLogger(__name__)
 
 
 def _output_dir() -> Path:
@@ -54,7 +60,7 @@ def _thumb_base() -> Path:
 
 
 def _thumb_if_exists(png_path: str | None) -> str | None:
-    """Return png_path verbatim when the file actually exists, else None.
+    """Return a browser-fetchable thumbnail URL when the file exists, else None.
 
     The catalog list endpoint advertises ``thumbs`` as URLs the browser can
     fetch; dangling DB rows (seed placeholders, half-completed generates)
@@ -65,7 +71,78 @@ def _thumb_if_exists(png_path: str | None) -> str | None:
     candidate = Path(png_path)
     if not candidate.is_absolute():
         candidate = _thumb_base() / candidate
-    return png_path if candidate.exists() else None
+    if not candidate.exists():
+        return None
+
+    output_root = _output_dir()
+    if not output_root.is_absolute():
+        output_root = _thumb_base() / output_root
+    kits_root = (output_root / "kits").resolve()
+    try:
+        rel = candidate.resolve().relative_to(kits_root)
+    except ValueError:
+        return None
+
+    parts = rel.parts
+    if len(parts) != 3:
+        return None
+    kit_id, subdir, filename = parts
+    image_id = Path(filename).stem
+    if subdir not in {"hero", "detail"} or not re.fullmatch(r"[HM][1-9]", image_id):
+        return None
+    version = candidate.stat().st_mtime_ns
+    return f"/api/kits/{kit_id}/images/{image_id}?v={version}"
+
+
+def _score_from_spec_payload(spec: dict[str, Any]) -> int | None:
+    locale = spec.get("locale")
+    if locale not in {"zh", "en"}:
+        return None
+
+    sections: dict[str, str] = {}
+    selling_points = spec.get("selling_points")
+    if isinstance(selling_points, list):
+        for idx, sp in enumerate(selling_points):
+            if not isinstance(sp, dict):
+                continue
+            title = sp.get("title")
+            evidence = sp.get("evidence")
+            sections[f"selling_point.{idx}"] = (
+                f"{title if isinstance(title, str) else ''} "
+                f"{evidence if isinstance(evidence, str) else ''}"
+            )
+
+    for group_name in ("hero_sections", "detail_sections"):
+        rows = spec.get(group_name)
+        if not isinstance(rows, list):
+            continue
+        prefix = "hero" if group_name == "hero_sections" else "detail"
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            section_id = row.get("id")
+            three_piece = row.get("three_piece")
+            if not isinstance(section_id, str) or not isinstance(three_piece, dict):
+                continue
+            chunks = [
+                three_piece.get("visual"),
+                three_piece.get("copy"),
+                three_piece.get("design_note"),
+            ]
+            sections[f"{prefix}.{section_id}"] = "\n".join(
+                chunk for chunk in chunks if isinstance(chunk, str)
+            )
+
+    return score_spec(sections, locale=locale).score
+
+
+def _read_compliance_score(path: Path) -> int | None:
+    try:
+        data = _read_json_file(path)
+    except (OSError, ValueError):
+        return None
+    score = data.get("score") if data else None
+    return int(score) if isinstance(score, (int, float)) and not isinstance(score, bool) else None
 
 
 # ---------------------------------------------------------------------------
@@ -74,12 +151,28 @@ def _thumb_if_exists(png_path: str | None) -> str | None:
 
 
 class SkuMetaIn(BaseModel):
-    sku: str
-    name: str
+    sku: str | None = None
+    name: str | None = None
     brand: str
     category: str
     product_type: Literal["blue_hat", "sports", "general_food", "other"]
     price: float
+
+
+# ON CONFLICT (sku) DO NOTHING means an existing catalog row's name wins —
+# _synthesize_name only runs when name is absent from the incoming payload.
+def _synthesize_name(brand: str, category: str, sku: str) -> str:
+    """Synthesize a meaningful product name from brand/category/sku.
+
+    Priority: ``f"{brand} {category}"`` → ``f"{category}"`` → ``f"KIT-{sku[-6:]}"``.
+    The name is NEVER the literal "未命名套包" — that string must not reach
+    product_catalogs.name because Dashboard/Catalog list surfaces it directly.
+    """
+    if brand and category:
+        return f"{brand} {category}".strip()
+    if category:
+        return category
+    return f"KIT-{sku[-6:]}"
 
 
 class SellingPointIn(BaseModel):
@@ -211,6 +304,48 @@ def _resolve_default_workbench_id(session: Session) -> int:
     return int(row)
 
 
+def _write_result_sidecars(
+    *,
+    kit_root: Path,
+    db_kit_id: int,
+    payload: GenerateRequest,
+    result: Any,
+) -> None:
+    kit_root.mkdir(parents=True, exist_ok=True)
+    spec = payload.spec.model_dump(mode="json", by_alias=True)
+    spec_json_path = kit_root / "spec.json"
+    spec_markdown_path = kit_root / "spec.md"
+    spec_json_path.write_text(
+        json.dumps(spec, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    spec_markdown_path.write_text(
+        render_markdown(_to_dataclass_spec(payload.spec)) + "\n",
+        encoding="utf-8",
+    )
+
+    meta_path = kit_root / "kit_meta.json"
+    meta_path.write_text(
+        json.dumps(
+            {
+                "db_kit_id": db_kit_id,
+                "kit_id": getattr(result, "kit_id", kit_root.name),
+                "retrieved_bestseller_ids": list(payload.retrieved_bestseller_ids),
+                "spec_path": str(spec_json_path),
+                "spec_markdown_path": str(spec_markdown_path),
+                "compliance_path": str(result.compliance_path),
+                "cost_path": str(getattr(result, "cost_path", kit_root / "cost.json")),
+                "png_paths": [str(path) for path in result.png_paths],
+                "version": 2,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def _persist_kit(
     session: Session,
     *,
@@ -262,18 +397,20 @@ def _persist_kit(
     product_catalog_id = int(pc_id_row)
 
     status = "needs_review" if result.needs_review else "ready"
+    compliance_score = _read_compliance_score(Path(str(result.compliance_path)))
     kit_id_row = session.execute(
         text(
             "INSERT INTO marketing_kits"
             " (product_catalog_id, status, score, locale,"
             "  brand_color_hex, style_prompt)"
-            " VALUES (:pc_id, :status, NULL, :locale,"
+            " VALUES (:pc_id, :status, :score, :locale,"
             "         :brand_color_hex, :style_prompt)"
             " RETURNING id"
         ),
         {
             "pc_id": product_catalog_id,
             "status": status,
+            "score": compliance_score,
             "locale": payload.locale,
             "brand_color_hex": payload.brand_color_hex,
             "style_prompt": style_prompt,
@@ -324,31 +461,16 @@ def _persist_kit(
                 "brand_color_hex": payload.brand_color_hex,
             },
         )
-    # EPIC-9 Phase 4a sidecar — mirrors compliance/cost convention in
-    # services/imagegen/orchestrator.py:633-677. Written best-effort: a
-    # filesystem hiccup here must not poison the DB write (which has
-    # already committed via SQLAlchemy autoflush).
+    kit_root = Path(str(result.compliance_path)).parent
     try:
-        kit_root = Path(str(result.compliance_path)).parent
-        kit_root.mkdir(parents=True, exist_ok=True)
-        meta_path = kit_root / "kit_meta.json"
-        meta_path.write_text(
-            json.dumps(
-                {
-                    "db_kit_id": db_kit_id,
-                    "retrieved_bestseller_ids": list(payload.retrieved_bestseller_ids),
-                    "version": 1,
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
-            + "\n",
-            encoding="utf-8",
+        _write_result_sidecars(
+            kit_root=kit_root,
+            db_kit_id=db_kit_id,
+            payload=payload,
+            result=result,
         )
-    except OSError:
-        # Sidecar is advisory; legacy Catalog drawer still renders the
-        # empty-state copy if this file is missing.
-        pass
+    except OSError as exc:
+        logger.warning("failed to write kit result sidecars for db_kit_id=%s: %s", db_kit_id, exc)
 
     # Commit is owned by the ``get_session`` FastAPI dependency
     # (apps/api/lib/db.py:30-34): committing here would shadow the
@@ -380,6 +502,24 @@ async def post_generate(
                 f"spec.locale={payload.spec.locale!r}"
             ),
         )
+
+    # Resolve sku/name at the /generate boundary BEFORE _to_dataclass_spec.
+    # sku: default to KIT-{ts} when absent.
+    # name: synthesize from brand+category — NEVER allow literal "未命名套包"
+    # into product_catalogs.name (HIGH-3); raises 422 if brand+category both
+    # missing so the caller must supply at least one of them.
+    sm = payload.spec.sku_meta
+    effective_sku = sm.sku or f"KIT-{int(time.time())}"
+    if not sm.name and not sm.brand and not sm.category:
+        raise HTTPException(
+            status_code=422,
+            detail="name required for catalog persistence (brand+category both missing)",
+        )
+    effective_name = sm.name or _synthesize_name(sm.brand, sm.category, effective_sku)
+    # Patch sku_meta in-place so _to_dataclass_spec and _persist_kit both see
+    # the resolved values without changing the SkuMetaIn field types.
+    sm.sku = effective_sku
+    sm.name = effective_name
 
     spec = _to_dataclass_spec(payload.spec)
     inputs = KitGenerationInputs(
@@ -439,6 +579,32 @@ async def get_kit_events(kit_id: str, req: Request) -> StreamingResponse:
             yield f"data: {payload}\n\n".encode()
 
     return StreamingResponse(_event_stream(), media_type="text/event-stream")
+
+
+@router.get("/{kit_id}/images/{image_id}")
+def get_generated_image(kit_id: str, image_id: str) -> FileResponse:
+    """Serve a generated kit image by public kit id and slot id."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", kit_id):
+        raise HTTPException(status_code=404, detail="unknown kit_id")
+    if not re.fullmatch(r"[HM][1-9]", image_id):
+        raise HTTPException(status_code=404, detail="unknown image_id")
+    sub = "hero" if image_id.startswith("H") else "detail"
+    output_root = _output_dir()
+    if not output_root.is_absolute():
+        output_root = _thumb_base() / output_root
+    kits_root = (output_root / "kits").resolve()
+    path = (kits_root / kit_id / sub / f"{image_id}.png").resolve()
+    try:
+        path.relative_to(kits_root)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="image not found") from None
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="image not found")
+    return FileResponse(
+        path,
+        media_type="image/png",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -601,14 +767,22 @@ def list_kits(
 
 
 class KitMetaResponse(BaseModel):
-    """Side-car payload for the EPIC-9 Catalog drawer.
-
-    Legacy Kits generated before Phase 4a will surface as HTTP 404 here, and
-    the drawer renders an empty-state copy ("本 Kit 未记录检索快照").
-    """
+    """Side-car payload for kit detail and the EPIC-9 Catalog drawer."""
 
     db_kit_id: int
+    kit_id: str | None = None
     retrieved_bestseller_ids: list[int]
+    spec_markdown: str | None = None
+    spec: dict[str, Any] | None = None
+    compliance: dict[str, Any] | None = None
+    cost: dict[str, Any] | None = None
+
+
+def _read_json_file(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else None
 
 
 @router.get("/{db_kit_id}/meta", response_model=KitMetaResponse)
@@ -616,48 +790,61 @@ def get_kit_meta(
     db_kit_id: int,
     session: Annotated[Session, Depends(get_session)],
 ) -> KitMetaResponse:
-    """Read ``kit_meta.json`` for *db_kit_id*; 404 if the sidecar doesn't exist.
-
-    The sidecar is keyed by the kit UUID (``data/imagegen/kits/{uuid}/``), so
-    we recover the kit_root by walking up from any persisted ``png_path``.
-    """
+    """Read result sidecars for *db_kit_id*; 404 if the kit root is unknown."""
     row = session.execute(
         text(
-            "SELECT png_path FROM hero_images"
+            "SELECT png_path FROM ("
+            " SELECT png_path, 0 AS sort_key FROM hero_images"
             " WHERE marketing_kit_id = :id AND png_path IS NOT NULL"
+            " UNION ALL"
+            " SELECT png_path, 1 AS sort_key FROM detail_images"
+            " WHERE marketing_kit_id = :id AND png_path IS NOT NULL"
+            ") paths"
+            " ORDER BY sort_key ASC"
             " LIMIT 1"
         ),
         {"id": db_kit_id},
     ).first()
     if row is None or row.png_path is None:
-        raise HTTPException(
-            status_code=404, detail={"code": "KIT_META_NOT_FOUND"}
-        )
+        raise HTTPException(status_code=404, detail={"code": "KIT_META_NOT_FOUND"})
 
-    # png_path: data/imagegen/kits/{uuid}/hero/H1.png → kit_root two levels up.
     kit_root = Path(str(row.png_path)).parent.parent
     meta_path = kit_root / "kit_meta.json"
     if not meta_path.is_file():
-        raise HTTPException(
-            status_code=404, detail={"code": "KIT_META_NOT_FOUND"}
-        )
+        raise HTTPException(status_code=404, detail={"code": "KIT_META_NOT_FOUND"})
 
     try:
-        data = json.loads(meta_path.read_text(encoding="utf-8"))
+        data = _read_json_file(meta_path) or {}
+        spec_markdown_path = kit_root / "spec.md"
+        spec_markdown = (
+            spec_markdown_path.read_text(encoding="utf-8") if spec_markdown_path.is_file() else None
+        )
+        spec = _read_json_file(kit_root / "spec.json")
+        compliance = _read_json_file(kit_root / "compliance.json")
+        cost = _read_json_file(kit_root / "cost.json")
     except (OSError, ValueError) as exc:
-        raise HTTPException(
-            status_code=500, detail={"code": "KIT_META_READ_FAILED"}
-        ) from exc
+        raise HTTPException(status_code=500, detail={"code": "KIT_META_READ_FAILED"}) from exc
+
+    if compliance is not None and not isinstance(compliance.get("score"), (int, float)) and spec:
+        score = _score_from_spec_payload(spec)
+        if score is not None:
+            compliance = {**compliance, "score": score, "score_source": "spec_fallback"}
 
     ids = data.get("retrieved_bestseller_ids", [])
     if not isinstance(ids, list):
         ids = []
-    # Defensive: coerce to int and drop non-numeric entries. Booleans subclass
-    # int in Python; reject them explicitly so a hand-edited ``true`` in the
-    # sidecar doesn't coerce to ``1``.
     cleaned = [
         int(x)
         for x in ids
         if isinstance(x, (int, float)) and not isinstance(x, bool)
     ]
-    return KitMetaResponse(db_kit_id=db_kit_id, retrieved_bestseller_ids=cleaned)
+    kit_id = data.get("kit_id")
+    return KitMetaResponse(
+        db_kit_id=db_kit_id,
+        kit_id=kit_id if isinstance(kit_id, str) else kit_root.name,
+        retrieved_bestseller_ids=cleaned,
+        spec_markdown=spec_markdown,
+        spec=spec,
+        compliance=compliance,
+        cost=cost,
+    )

@@ -12,7 +12,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.lib import secrets_store
 from apps.api.routes.copywriter import router as copywriter_router
+from apps.api.routes.extract import router as extract_router
 from apps.api.routes.health import router as health_router
 from apps.api.routes.images import router as images_router
 from apps.api.routes.kits import router as kits_router
@@ -23,11 +25,29 @@ from apps.api.routes.queue import router as queue_router
 from apps.api.routes.settings import router as settings_router
 from apps.api.routes.templates import router as templates_router
 from services.imagegen.orchestrator import KitEventBus
-from apps.api.lib import secrets_store
 from services.providers.registry import ProviderConfigError
 from services.providers.registry import boot as boot_registry
 
 logger = logging.getLogger(__name__)
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _load_local_env(path: Path = _REPO_ROOT / ".env") -> None:
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        os.environ[key] = value.strip().strip('"').strip("'")
+
+
+_load_local_env()
 
 # ---------------------------------------------------------------------------
 # Lifespan
@@ -102,6 +122,10 @@ app.include_router(health_router)
 app.include_router(copywriter_router)
 app.include_router(images_router)
 app.include_router(kits_router)
+# extract_router shares the /api/kits prefix (intentional — see extract.py).
+# Registered AFTER kits_router and copywriter_router; FastAPI disambiguates
+# GET /_warmup/extract vs POST /{kit_id}/extract by HTTP method, not ordering.
+app.include_router(extract_router)
 app.include_router(metrics_router)
 app.include_router(queue_router)
 app.include_router(providers_router)

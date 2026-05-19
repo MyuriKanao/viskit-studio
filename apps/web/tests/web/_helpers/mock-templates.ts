@@ -55,7 +55,7 @@ export async function mockTemplatesError(page: Page, status = 500): Promise<void
     await route.fulfill({
       status,
       contentType: 'application/json',
-      body: JSON.stringify({ code: 'TEMPLATES_FIXTURE_INVALID' }),
+      body: JSON.stringify({ code: 'TEMPLATES_LOAD_INVALID' }),
     });
   });
 }

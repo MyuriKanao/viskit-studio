@@ -17,7 +17,6 @@ const REQUIRED_ROLES = new Set([
   'vision',
   'llm',
   'image',
-  'embedding',
   'compliance_screen',
 ]);
 
