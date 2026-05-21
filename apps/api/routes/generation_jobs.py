@@ -56,13 +56,23 @@ OutputKind = Literal[
 ]
 DestinationType = Literal["kit_slot", "asset"]
 
+_ALL_JOB_STATUSES = {
+    "planned",
+    "queued",
+    "running",
+    "stopping",
+    "stopped",
+    "succeeded",
+    "failed",
+    "partial",
+    "interrupted",
+}
 _TERMINAL_JOB_STATUSES = {"stopped", "succeeded", "failed", "partial", "interrupted"}
 _SAFE_OUTPUT_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
 
 
 def _as_job_status(value: str) -> JobStatus:
-    valid = set(JobStatus.__args__)  # type: ignore[attr-defined]
-    if value not in valid:
+    if value not in _ALL_JOB_STATUSES:
         raise RuntimeError(f"unknown generation job status: {value!r}")
     return cast(JobStatus, value)
 
