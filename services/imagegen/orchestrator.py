@@ -40,7 +40,7 @@ from typing import Any, Literal, cast
 
 from services.copywriter.compliance.preflight import run_preflight
 from services.copywriter.compliance.scorer import ScoreResult, score_spec
-from services.copywriter.sop import DetailSection, HeroSection
+from services.copywriter.sop import DetailSection, HeroSection, SkuMeta
 from services.imagegen._slot_map import load_template_for_section
 from services.imagegen.campaign_lock import apply_lock, build_lock
 from services.imagegen.color_lock import (
@@ -48,12 +48,19 @@ from services.imagegen.color_lock import (
     ColorLockResult,
     verify,
 )
+from services.imagegen.output_plan import (
+    OutputPlan,
+    OutputPlanItem,
+    build_full_kit_output_plan,
+    resolve_plan_templates,
+)
 from services.imagegen.prompt_builder import PromptInputs, build_prompt
 from services.imagegen.single_gen import (
     DETAIL_SIZE,
     HERO_SIZE,
     KitGenerationInputs,
 )
+from services.imagegen.template_library import parse_template_ref
 from services.imagegen.template_loader import Template
 from services.providers.registry import ProviderConfigError
 
@@ -63,11 +70,15 @@ __all__ = [
     "JobPayload",
     "KitEventBus",
     "OrchestratorResult",
+    "PlannedGenerationInputs",
+    "PlannedOrchestratorResult",
     "ProviderBinding",
     "RoutingSnapshot",
     "capture_snapshot",
     "default_adapter_factory",
+    "orchestrate_full_kit_plan",
     "orchestrate_kit",
+    "orchestrate_output_plan",
     "resolve_api_key",
 ]
 
@@ -116,6 +127,8 @@ class JobPayload:
     brand_color_hex: str
     snapshot: RoutingSnapshot
     color_lock_threshold: float
+    output_path: Path | None = None
+    public_path: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,9 +161,45 @@ class OrchestratorResult:
     template_snapshot: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class PlannedGenerationInputs:
+    """Execution inputs for a confirmed variable-output plan.
+
+    ``job_id`` is the durable generation-job identity. ``kit_id`` is optional
+    and only used when a plan output writes to existing kit slots.
+    """
+
+    job_id: str
+    output_items: tuple[OutputPlanItem, ...]
+    sku_meta: SkuMeta
+    brand_color_hex: str
+    style_prompt: str
+    output_dir: Path
+    locale: Literal["zh", "en"]
+    kit_id: str | None = None
+    template_by_output_id: dict[str, Template] | None = None
+    template_snapshot: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PlannedOrchestratorResult:
+    job_id: str
+    png_paths: tuple[Path, ...]
+    image_paths_by_id: dict[str, Path | None]
+    skipped_output_ids: tuple[str, ...]
+    compliance_path: Path
+    cost_path: Path
+    color_lock_summary: dict[str, int]
+    needs_review: bool
+    abort_reason: str | None
+    max_concurrent_observed: int
+    template_snapshot: dict[str, Any] | None = None
+
+
 # ``(binding, role) -> adapter_instance`` — adapter must satisfy the ImageGen
 # Protocol from :mod:`services.providers.base`.
 AdapterFactory = Callable[[ProviderBinding, str], Any]
+StopChecker = Callable[[], bool]
 
 
 # ---------------------------------------------------------------------------
