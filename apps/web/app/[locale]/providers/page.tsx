@@ -18,15 +18,13 @@ interface ConflictEventDetail {
 }
 
 /**
- * Providers hero page — Sankey + endpoint table + Add modal + conflict dialog
- * + YAML toggle.  Listens for `'provider-conflict'` window events dispatched
- * by `AddEndpointModal` on 409 and opens the resolution dialog.
+ * Providers page — endpoint table + Add modal + conflict dialog. Listens for
+ * `'provider-conflict'` window events dispatched by `AddEndpointModal` on 409
+ * and opens the resolution dialog.
  */
 export default function ProvidersPage() {
   const t = useTranslations('providers');
-  const tab = useTranslations('providersDialog');
   const health = useProvidersHealth();
-  const [view, setView] = React.useState<'visual' | 'yaml'>('visual');
   const [modalOpen, setModalOpen] = React.useState(false);
   const [editingRole, setEditingRole] = React.useState<string | null>(null);
   const [conflict, setConflict] = React.useState<ConflictEventDetail | null>(null);
@@ -48,17 +46,6 @@ export default function ProvidersPage() {
     }));
   }, [health.data]);
 
-  // Live YAML view — sourced from /api/providers/summary fetch on demand.
-  const [yamlText, setYamlText] = React.useState<string>('');
-  React.useEffect(() => {
-    if (view !== 'yaml') return;
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
-    fetch(`${baseUrl}/api/providers/summary`, { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => setYamlText(JSON.stringify(data, null, 2)))
-      .catch(() => setYamlText('# unable to load config.yaml'));
-  }, [view]);
-
   return (
     <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[64px_1fr] bg-ink-base">
       <div className="row-span-2">
@@ -70,34 +57,11 @@ export default function ProvidersPage() {
       <main className="col-start-2 row-start-2 overflow-auto p-s-6">
         <div className="flex flex-col gap-s-5">
           <header className="flex items-center justify-between gap-s-3">
-            <h1 className="font-display text-2xl text-ink-primary">{t('page_title')}</h1>
+            <div className="flex max-w-3xl flex-col gap-s-1">
+              <h1 className="font-display text-2xl text-ink-primary">{t('page_title')}</h1>
+              <p className="text-sm leading-relaxed text-ink-muted">{t('role_routing_note')}</p>
+            </div>
             <div className="flex items-center gap-s-2">
-              <div
-                role="tablist"
-                aria-label={t('view_yaml_toggle')}
-                className="inline-flex rounded-input border border-border-subtle bg-surface-02"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={view === 'visual'}
-                  aria-label="Visual view"
-                  onClick={() => setView('visual')}
-                  className={`px-s-3 py-s-1 text-xs ${view === 'visual' ? 'bg-surface-03 text-ink-primary' : 'text-ink-muted'}`}
-                >
-                  Visual
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={view === 'yaml'}
-                  aria-label={t('view_yaml_toggle')}
-                  onClick={() => setView('yaml')}
-                  className={`px-s-3 py-s-1 text-xs ${view === 'yaml' ? 'bg-surface-03 text-ink-primary' : 'text-ink-muted'}`}
-                >
-                  YAML
-                </button>
-              </div>
               <Button
                 type="button"
                 variant="default"
@@ -111,28 +75,19 @@ export default function ProvidersPage() {
             </div>
           </header>
 
-          {view === 'visual' ? (
-            <section
-              aria-label="Endpoints"
-              className="rounded-card border border-border-subtle bg-surface-01 p-s-4"
-            >
-              <EndpointTable
-                endpoints={endpoints}
-                health={health.data ?? []}
-                onEdit={(role) => {
-                  setEditingRole(role);
-                  setModalOpen(true);
-                }}
-              />
-            </section>
-          ) : (
-            <pre
-              aria-label={tab('on_disk_label')}
-              className="max-h-[640px] overflow-auto rounded-card border border-border-subtle bg-ink-base p-s-4 font-mono text-xs text-ink-secondary"
-            >
-              {yamlText || '…'}
-            </pre>
-          )}
+          <section
+            aria-label="Endpoints"
+            className="rounded-card border border-border-subtle bg-surface-01 p-s-4"
+          >
+            <EndpointTable
+              endpoints={endpoints}
+              health={health.data ?? []}
+              onEdit={(role) => {
+                setEditingRole(role);
+                setModalOpen(true);
+              }}
+            />
+          </section>
         </div>
       </main>
 
@@ -143,8 +98,6 @@ export default function ProvidersPage() {
           setModalOpen(false);
           setEditingRole(null);
         }}
-        currentYaml={yamlText}
-        currentSha=""
       />
       <ConflictResolutionDialog
         open={conflict !== null}

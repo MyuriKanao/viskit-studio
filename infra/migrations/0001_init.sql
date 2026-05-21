@@ -1,6 +1,6 @@
--- AIShop Image Studio — initial schema
+-- Viskit Studio — initial schema
 -- Migration: 0001_init.sql
--- Run via: uv run python scripts/migrate.py
+-- Apply in filename order with your database client or migration runner.
 --
 -- Table order respects FK dependencies.
 -- All FK columns have dedicated indexes (suffix _idx).

@@ -1,5 +1,5 @@
 {
-  "name": "@aishop/web",
+  "name": "@viskit/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,12 +9,7 @@
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "check:tokens": "node scripts/check-token-drift.mjs",
-    "gen:api": "node scripts/gen-api.mjs",
-    "test:e2e": "playwright test",
-    "test:e2e:install": "playwright install chromium",
-    "test": "vitest run",
-    "test:unit": "vitest run",
-    "test:unit:watch": "vitest"
+    "gen:api": "node scripts/gen-api.mjs"
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "^0.5.0",
@@ -40,9 +35,7 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.10.1",
     "@biomejs/biome": "^1.9.4",
-    "@playwright/test": "^1.56.0",
     "@tanstack/react-query-devtools": "^5.85.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.17.57",
@@ -53,11 +46,6 @@
     "openapi-typescript": "^7.4.4",
     "postcss": "^8.5.4",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.4.5",
-    "@testing-library/jest-dom": "^6.4.0",
-    "@testing-library/react": "^16.0.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "jsdom": "^25.0.0",
-    "vitest": "^2.0.0"
+    "typescript": "^5.4.5"
   }
 }

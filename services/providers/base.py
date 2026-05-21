@@ -1,4 +1,4 @@
-"""Provider protocol base classes for AIShop Studio.
+"""Provider protocol base classes for Viskit Studio.
 
 Architecture references:
   - ADR-001: Two-protocol abstraction — all LLM/image backends are normalised

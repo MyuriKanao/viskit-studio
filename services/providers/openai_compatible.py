@@ -457,7 +457,6 @@ class OpenAICompatibleAdapter:
         *,
         on_partial_image: Callable[[bytes], None] | None = None,
     ) -> tuple[list[bytes], str | None, dict[str, Any]]:
-        last_partial: bytes | None = None
         raw_events: list[dict[str, Any]] = []
         try:
             lines = response.iter_lines()
@@ -484,7 +483,6 @@ class OpenAICompatibleAdapter:
                 if isinstance(b64, str) and b64:
                     image_bytes = base64.b64decode(b64)
                     if event_type.endswith(".partial_image"):
-                        last_partial = image_bytes
                         if on_partial_image is not None:
                             try:
                                 on_partial_image(image_bytes)

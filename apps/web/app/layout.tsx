@@ -1,8 +1,12 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'AIShop Studio',
+  title: 'Viskit Studio',
   description: 'AI-powered product image studio',
+  icons: {
+    icon: [{ url: '/brand/viskit-favicon.svg', type: 'image/svg+xml' }],
+    shortcut: [{ url: '/brand/viskit-favicon.svg', type: 'image/svg+xml' }],
+  },
 };
 
 /**

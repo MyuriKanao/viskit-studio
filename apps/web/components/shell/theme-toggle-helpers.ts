@@ -1,6 +1,6 @@
 'use client';
 
-const THEME_STORAGE_KEY = 'aishop:theme';
+const THEME_STORAGE_KEY = 'viskit:theme';
 type Theme = 'dark' | 'light';
 
 export function readStoredTheme(): Theme {

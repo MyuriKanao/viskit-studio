@@ -32,7 +32,6 @@
       "hooks/**",
       "lib/**",
       "scripts/**",
-      "tests/**",
       "middleware.ts",
       "*.ts",
       "*.mjs"

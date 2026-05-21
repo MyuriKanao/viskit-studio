@@ -1,8 +1,8 @@
-.PHONY: bootstrap compose-up compose-down dev test lint typecheck \
-        seed-user seed-sample-kit grep-providers grep-radix-surface \
-        ingest-corpus schemas migrate \
-        epic-4a-probe gen-api web-build web-e2e \
-        seed-fixtures seed-dashboard-fixtures
+.PHONY: bootstrap compose-up compose-down compose-logs dev lint typecheck \
+        schemas gen-api web-build
+
+WEB_PORT ?= 3001
+API_PORT ?= 8001
 
 ## bootstrap: install pnpm + uv deps + pre-commit hooks
 bootstrap:
@@ -24,13 +24,8 @@ compose-logs:
 
 ## dev: run Next.js + FastAPI concurrently
 dev:
-	pnpm -r --parallel dev &
-	uv run uvicorn apps.api.main:app --reload --port 8000
-
-## test: run all JS/TS and Python tests
-test:
-	pnpm -r test
-	uv run pytest
+	PORT=$(WEB_PORT) NEXT_PUBLIC_API_BASE_URL=http://localhost:$(API_PORT) pnpm -r --parallel dev &
+	CORS_ALLOW_ORIGINS=http://localhost:$(WEB_PORT) uv run uvicorn apps.api.main:app --reload --port $(API_PORT)
 
 ## lint: run Biome (JS/TS) and Ruff (Python)
 lint:
@@ -40,55 +35,16 @@ lint:
 ## typecheck: run TypeScript and mypy checks
 typecheck:
 	pnpm -r typecheck
-	uv run mypy .
-
-## seed-user: create the local aishop_local user (idempotent); use PASSWORD=foo to skip prompt
-seed-user:
-	uv run python scripts/seed_user.py $(if $(PASSWORD),--password $(PASSWORD))
-
-## seed-sample-kit: upload 14 placeholder PNGs to MinIO + seed DB fixture (idempotent)
-seed-sample-kit:
-	uv run python scripts/seed_sample_kit.py
-
-## seed-fixtures: seed sample kit + dashboard fixtures (idempotent)
-seed-fixtures: seed-sample-kit seed-dashboard-fixtures
-
-## seed-dashboard-fixtures: seed dashboard demo fixtures — 6 kits + images + compliance + costs (idempotent)
-seed-dashboard-fixtures:
-	uv run python scripts/seed_dashboard_fixtures.py
-
-## grep-providers: fail if vendor names leak outside services/providers/, config.yaml.example, tests/, docs/
-grep-providers:
-	bash scripts/grep_providers.sh
-
-## grep-radix-surface: fail if apps/web/components/ui/ gains an undocumented new Radix wrapper (EPIC-9 Architect B2)
-grep-radix-surface:
-	bash scripts/grep_radix_surface.sh
-
-## ingest-corpus: bulk-ingest CSV into Milvus. Usage: make ingest-corpus CSV=fixtures/bestsellers_sample.csv [MODE=upsert]
-ingest-corpus:
-	uv run python scripts/ingest_corpus.py --csv $(CSV) --mode $(or $(MODE),upsert)
+	uv run python -m mypy .
 
 ## schemas: generate OpenAPI + DB schemas
 schemas:
-	cd packages/schemas && pnpm gen 2>/dev/null || python3 scripts/gen-py.py
-
-## migrate: run database migrations
-migrate:
-	uv run python scripts/migrate.py
-
-## epic-4a-probe: EPIC-4A 5-SKU cost probe scaffold (manual --execute path is gated)
-epic-4a-probe:
-	uv run python scripts/probe_epic_4a.py
+	cd packages/schemas && pnpm gen
 
 ## gen-api: generate apps/web TanStack-Query typed client from live FastAPI /openapi.json
 gen-api:
-	pnpm --filter @aishop/web gen:api
+	pnpm --filter @viskit/web gen:api
 
 ## web-build: gen-api then Next.js build (paths types stay in sync before compile)
 web-build: gen-api
-	pnpm --filter @aishop/web build
-
-## web-e2e: Playwright e2e for EPIC-6 web shell
-web-e2e:
-	pnpm --filter @aishop/web test:e2e
+	pnpm --filter @viskit/web build

@@ -84,6 +84,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/kits/_warmup/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Warmup Extract
+         * @description Prime the vision provider connection so the first /extract call is warm.
+         *
+         *     Deliberately uses probe(timeout=5) — a 5s deviation from the 30s default
+         *     because this is a best-effort fire-and-forget warmup; we swallow all
+         *     failures and always return 204 so the frontend never sees an error.
+         */
+        get: operations["warmup_extract_api_kits__warmup_extract_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kits/{db_kit_id}/images/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Generated Image
+         * @description Remove a generated image from a catalog kit slot and delete its PNG.
+         */
+        delete: operations["delete_generated_image_api_kits__db_kit_id__images__image_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kits/{db_kit_id}/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Kit Meta
+         * @description Read result sidecars for *db_kit_id*; 404 if the kit root is unknown.
+         */
+        get: operations["get_kit_meta_api_kits__db_kit_id__meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/kits/{kit_id}/events": {
         parameters: {
             query?: never;
@@ -111,6 +175,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/kits/{kit_id}/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract
+         * @description Extract per-field inferences from a product image.
+         *
+         *     Uses the vision provider (registry role "vision"); falls back to "llm" if
+         *     the vision role is unavailable (R2 mitigation).
+         *
+         *     Reserved-prefix guard: POST to kit_id='_warmup' returns 404 — defensive
+         *     against POST collision with the GET /_warmup/extract warmup endpoint.
+         */
+        post: operations["extract_api_kits__kit_id__extract_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/kits/{kit_id}/generate": {
         parameters: {
             query?: never;
@@ -125,6 +215,26 @@ export interface paths {
          * @description Generate the 14-image kit for *kit_id*.
          */
         post: operations["post_generate_api_kits__kit_id__generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/kits/{kit_id}/images/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Generated Image
+         * @description Serve a generated kit image by public kit id and slot id.
+         */
+        get: operations["get_generated_image_api_kits__kit_id__images__image_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -191,6 +301,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/providers/config-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Config State
+         * @description Return the on-disk YAML body and its SHA-256 checksum.
+         *
+         *     Kept for legacy/admin tools that need an explicit config-body save path.
+         *     Bootstrapping the live config file is a lifespan concern
+         *     (``apps.api.main._bootstrap_config_if_missing``), so this route is
+         *     side-effect-free; if the file truly doesn't exist, 404.
+         */
+        get: operations["get_config_state_api_providers_config_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/providers/endpoints": {
         parameters: {
             query?: never;
@@ -206,6 +341,48 @@ export interface paths {
          */
         post: operations["save_endpoints_api_providers_endpoints_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers/endpoints/{role}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Endpoint
+         * @description Return the structured stanza for *role* so the UI can prefill the edit modal.
+         */
+        get: operations["get_endpoint_api_providers_endpoints__role__get"];
+        /**
+         * Update Endpoint
+         * @description Replace a single role's stanza.
+         *
+         *     ``api_key`` semantics: ``None``, empty string, and whitespace-only all
+         *     mean "preserve the existing env-var binding on disk".  Any other value
+         *     is persisted to the secrets store and the YAML's ``api_key_env`` is
+         *     rewritten to the derived env name.  To explicitly unbind, DELETE the
+         *     role and re-POST.
+         */
+        put: operations["update_endpoint_api_providers_endpoints__role__put"];
+        /**
+         * Create Endpoint
+         * @description Create a single role stanza without exposing YAML editing to the UI.
+         */
+        post: operations["create_endpoint_api_providers_endpoints__role__post"];
+        /**
+         * Delete Endpoint
+         * @description Remove a role's stanza from config.yaml and re-boot the registry.
+         *
+         *     Read-modify-write under the same lock+checksum protocol as POST.  Missing
+         *     role → 404.  Required roles (``REQUIRED_ROLES``) → 409; deleting them
+         *     would crash the next startup with ERR-PROV-001.  Use PUT to swap settings.
+         */
+        delete: operations["delete_endpoint_api_providers_endpoints__role__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -229,6 +406,83 @@ export interface paths {
         get: operations["get_provider_health_api_providers_health_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Provider Models
+         * @description Probe registry-bound adapter model catalogs.
+         *
+         *     Each adapter hits its own ``/models`` endpoint (OpenAI: ``{base_url}/models``,
+         *     Anthropic: ``{base_url}/v1/models``). Passing ``?role=llm`` probes just one
+         *     role so the UI can test a row without waiting for every configured backend.
+         */
+        get: operations["list_provider_models_api_providers_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe Candidate
+         * @description Probe a candidate (un-registered) endpoint and return its model catalog.
+         *
+         *     Accepts either an existing ``api_key_env`` name (looked up via
+         *     ``os.environ``) or an inline ``api_key`` (used directly for the probe but
+         *     never persisted).  The inline path lets the AddEndpointModal probe a
+         *     freshly-pasted key before the operator commits to saving it.
+         *
+         *     Adapter contract: ``probe()`` never raises — failures surface as
+         *     ``ok=False`` with an ``error`` string.
+         */
+        post: operations["probe_candidate_api_providers_probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/providers/secrets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Store Secret
+         * @description Persist an API key to the gitignored secrets store + inject into env.
+         *
+         *     Derives a deterministic env-var name from ``role`` + ``name`` so the
+         *     operator never has to invent one.  The plaintext key lives only in
+         *     ``data/secrets.json`` (gitignored); ``config.yaml`` continues to store
+         *     only the env-var name per ADR-011.
+         */
+        post: operations["store_secret_api_providers_secrets_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -275,7 +529,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/retrieval/search": {
+    "/api/settings": {
         parameters: {
             query?: never;
             header?: never;
@@ -285,17 +539,39 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Search
-         * @description POST /api/retrieval/search — embed query image + hybrid retrieve.
+         * Post Settings
+         * @description Read-modify-write the 4 workspace-level options into config.yaml.
+         *
+         *     Retries up to ``_MAX_CHECKSUM_RETRIES`` times if the config drifted
+         *     underneath us (concurrent provider save).  Inode-changed is treated
+         *     identically to checksum-mismatch.
          */
-        post: operations["search_api_retrieval_search_post"];
+        post: operations["post_settings_api_settings_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/retrieval/style-prompt": {
+    "/api/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Templates */
+        get: operations["get_templates_api_templates_get"];
+        put?: never;
+        /** Create Template */
+        post: operations["create_template_api_templates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/templates/copy": {
         parameters: {
             query?: never;
             header?: never;
@@ -304,24 +580,82 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Style Prompt
-         * @description Synthesise a ≤100-word ``style_prompt`` from selected retrieval hits.
-         *
-         *     Calls :func:`services.imagegen.style_synthesizer.synthesize_style` via the
-         *     ``vision`` provider role.  The result is non-empty (the synthesiser raises
-         *     on empty adapter responses) and capped at 100 words.
-         *
-         *     Errors:
-         *         - 503 when ``app.state.registry`` is not booted.
-         *         - 502 when the vision adapter returns an empty prompt
-         *           (:class:`StyleSynthesisError`).
-         */
-        post: operations["style_prompt_api_retrieval_style_prompt_post"];
+        /** Copy Template */
+        post: operations["copy_template_api_templates_copy_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/templates/managed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Managed Templates */
+        get: operations["get_managed_templates_api_templates_managed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/templates/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Template */
+        post: operations["preview_template_api_templates_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/templates/schemes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Schemes */
+        get: operations["list_schemes_api_templates_schemes_get"];
+        put?: never;
+        /** Create Scheme */
+        post: operations["create_scheme_api_templates_schemes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/templates/{template_ref}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Template */
+        delete: operations["delete_template_api_templates__template_ref__delete"];
+        options?: never;
+        head?: never;
+        /** Update Template */
+        patch: operations["update_template_api_templates__template_ref__patch"];
         trace?: never;
     };
     "/health": {
@@ -333,8 +667,7 @@ export interface paths {
         };
         /**
          * Health
-         * @description Probe Postgres, Milvus, Redis, MinIO concurrently with a 2s timeout each.
-         *     Returns overall status 'ok' if all four connected, else 'degraded'.
+         * @description Probe Postgres, Redis, MinIO concurrently with a 2s timeout each.
          */
         get: operations["health_health_get"];
         put?: never;
@@ -359,6 +692,47 @@ export interface components {
             score: number;
             /** Violations */
             violations: components["schemas"]["ViolationOut"][];
+        };
+        /** ConfigStateResponse */
+        ConfigStateResponse: {
+            /** Sha256 */
+            sha256: string;
+            /** Yaml */
+            yaml: string;
+        };
+        /** CopyTemplateRequest */
+        CopyTemplateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Source Ref */
+            source_ref: string;
+        };
+        /** CreateEndpointRequest */
+        CreateEndpointRequest: {
+            /** Api Key */
+            api_key: string;
+            /** Base Url */
+            base_url: string;
+            /** Model */
+            model: string;
+            /** Name */
+            name: string;
+            /**
+             * Protocol
+             * @enum {string}
+             */
+            protocol: "openai_compatible" | "anthropic_compatible";
+        };
+        /** DeleteKitImageResponse */
+        DeleteKitImageResponse: {
+            /** Deleted */
+            deleted: boolean;
+            /** File Deleted */
+            file_deleted: boolean;
+            /** Image Id */
+            image_id: string;
+            /** Kit Id */
+            kit_id: number;
         };
         /** DetailSectionIn */
         DetailSectionIn: {
@@ -400,6 +774,44 @@ export interface components {
             /** New Text */
             new_text: string;
         };
+        /** EndpointStanza */
+        EndpointStanza: {
+            /** Api Key Env */
+            api_key_env: string;
+            /** Base Url */
+            base_url: string;
+            /** Model */
+            model: string;
+            /** Protocol */
+            protocol: string;
+        };
+        /** ExtractRequest */
+        ExtractRequest: {
+            /** Description */
+            description?: string | null;
+            /** Image Url */
+            image_url: string;
+        };
+        /** ExtractResponse */
+        ExtractResponse: {
+            brand: components["schemas"]["FieldInference"];
+            brand_color_hex: components["schemas"]["FieldInference"];
+            category: components["schemas"]["FieldInference"];
+            name: components["schemas"]["FieldInference"] | null;
+            price: components["schemas"]["FieldInference"] | null;
+            product_type: components["schemas"]["FieldInference"];
+            /** Selling Points */
+            selling_points: components["schemas"]["FieldInference"][];
+        };
+        /** FieldInference */
+        FieldInference: {
+            /** Confidence */
+            confidence: number;
+            /** Reasoning */
+            reasoning: string;
+            /** Value */
+            value: unknown;
+        };
         /** GenerateRequest */
         GenerateRequest: {
             /** Brand Color Hex */
@@ -409,9 +821,17 @@ export interface components {
              * @enum {string}
              */
             locale: "zh" | "en";
+            /** Retrieved Bestseller Ids */
+            retrieved_bestseller_ids?: number[];
             spec: components["schemas"]["SpecIn"];
             /** Style Prompt */
             style_prompt?: string | null;
+            /** Template Scheme Ref */
+            template_scheme_ref?: string | null;
+            /** Template Slot Overrides */
+            template_slot_overrides?: {
+                [key: string]: string;
+            };
         };
         /** GenerateResponse */
         GenerateResponse: {
@@ -487,6 +907,32 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * KitMetaResponse
+         * @description Side-car payload for kit detail and the EPIC-9 Catalog drawer.
+         */
+        KitMetaResponse: {
+            /** Compliance */
+            compliance?: {
+                [key: string]: unknown;
+            } | null;
+            /** Cost */
+            cost?: {
+                [key: string]: unknown;
+            } | null;
+            /** Db Kit Id */
+            db_kit_id: number;
+            /** Kit Id */
+            kit_id?: string | null;
+            /** Retrieved Bestseller Ids */
+            retrieved_bestseller_ids: number[];
+            /** Spec */
+            spec?: {
+                [key: string]: unknown;
+            } | null;
+            /** Spec Markdown */
+            spec_markdown?: string | null;
+        };
         /** OcrResponse */
         OcrResponse: {
             /** Boxes */
@@ -501,8 +947,94 @@ export interface components {
             /** Needs Onboarding */
             needs_onboarding: boolean;
         };
+        /** PreviewRequest */
+        PreviewRequest: {
+            /**
+             * Brand Color Hex
+             * @default #C4513A
+             */
+            brand_color_hex: string;
+            /**
+             * Copy
+             * @default 新品上市
+             */
+            copy: string;
+            /**
+             * Design Note
+             * @default keep product centered with premium spacing
+             */
+            design_note: string;
+            /**
+             * Locale
+             * @enum {string}
+             */
+            locale: "zh" | "en";
+            /**
+             * Sample Brand
+             * @default 示例品牌
+             */
+            sample_brand: string;
+            /**
+             * Sample Category
+             * @default 服饰
+             */
+            sample_category: string;
+            /**
+             * Sample Name
+             * @default 示例商品
+             */
+            sample_name: string;
+            /**
+             * Style Prompt
+             * @default warm minimalist studio, soft daylight
+             */
+            style_prompt: string;
+            /** Template Ref */
+            template_ref: string;
+            /**
+             * Visual
+             * @default single product hero image, clean ecommerce composition
+             */
+            visual: string;
+        };
+        /** PreviewResponse */
+        PreviewResponse: {
+            /** Cost Usd */
+            cost_usd: number;
+            /** Png Path */
+            png_path: string | null;
+            /** Prompt */
+            prompt: string;
+        };
+        /** ProbeCandidateRequest */
+        ProbeCandidateRequest: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Api Key Env */
+            api_key_env?: string | null;
+            /** Base Url */
+            base_url: string;
+            /**
+             * Protocol
+             * @enum {string}
+             */
+            protocol: "openai_compatible" | "anthropic_compatible";
+        };
+        /** ProbeCandidateResponse */
+        ProbeCandidateResponse: {
+            /** Error */
+            error?: string | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Models */
+            models: string[];
+            /** Ok */
+            ok: boolean;
+        };
         /** ProviderHealthRow */
         ProviderHealthRow: {
+            /** Base Url */
+            base_url: string | null;
             /** Endpoint Id */
             endpoint_id: string;
             /** Last Check */
@@ -515,6 +1047,24 @@ export interface components {
             status: ("ok" | "warn" | "error") | null;
             /** Unbound */
             unbound?: string[] | null;
+        };
+        /** ProviderProbeResponse */
+        ProviderProbeResponse: {
+            /** Rows */
+            rows: components["schemas"]["ProviderProbeRow"][];
+        };
+        /** ProviderProbeRow */
+        ProviderProbeRow: {
+            /** Error */
+            error?: string | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Models */
+            models: string[];
+            /** Ok */
+            ok: boolean;
+            /** Role */
+            role: string;
         };
         /** ProvidersSummaryResponse */
         ProvidersSummaryResponse: {
@@ -557,34 +1107,74 @@ export interface components {
         SaveEndpointsResponse: {
             /** New Sha256 */
             new_sha256: string;
-        };
-        /** SearchHitOut */
-        SearchHitOut: {
-            /** Image Url */
-            image_url: string;
-            /** Metadata */
-            metadata: {
-                [key: string]: unknown;
-            };
-            /** Score */
-            score: number;
-        };
-        /** SearchRequest */
-        SearchRequest: {
-            /** @default {} */
-            filters: components["schemas"]["_Filters"];
-            /** Image */
-            image: string;
             /**
-             * Top K
-             * @default 10
+             * Registry Rebooted
+             * @default true
              */
-            top_k: number;
+            registry_rebooted: boolean;
+            /** Warning */
+            warning?: string | null;
         };
-        /** SearchResponse */
-        SearchResponse: {
-            /** Hits */
-            hits: components["schemas"]["SearchHitOut"][];
+        /** SchemePayload */
+        SchemePayload: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Locale
+             * @enum {string}
+             */
+            locale: "zh" | "en";
+            /** Name */
+            name: string;
+            /** Slots */
+            slots: components["schemas"]["SchemeSlot"][];
+        };
+        /** SchemeSlot */
+        SchemeSlot: {
+            /**
+             * Slot Id
+             * @enum {string}
+             */
+            slot_id: "H1" | "H2" | "H3" | "H4" | "H5" | "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8" | "M9";
+            /** Template Ref */
+            template_ref: string;
+        };
+        /** SchemeSummary */
+        SchemeSummary: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Editable
+             * @default true
+             */
+            editable: boolean;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Locale
+             * @enum {string}
+             */
+            locale: "zh" | "en";
+            /** Name */
+            name: string;
+            /** Slots */
+            slots: components["schemas"]["SchemeSlot"][];
+            /**
+             * Source
+             * @default custom
+             * @enum {string}
+             */
+            source: "built_in" | "custom";
         };
         /** SellingPointIn */
         SellingPointIn: {
@@ -598,6 +1188,34 @@ export interface components {
             /** Title */
             title: string;
         };
+        /**
+         * SettingsResponse
+         * @description Post-write snapshot of the 4 workspace-level fields.
+         */
+        SettingsResponse: {
+            /** Brand Color */
+            brand_color: string | null;
+            /** Default Locale */
+            default_locale: string | null;
+            /** Export Preset */
+            export_preset: string | null;
+            /** Monthly Cap Usd */
+            monthly_cap_usd: number | null;
+        };
+        /**
+         * SettingsUpdate
+         * @description All four fields optional — only the provided keys get merged.
+         */
+        SettingsUpdate: {
+            /** Brand Color */
+            brand_color?: string | null;
+            /** Default Locale */
+            default_locale?: ("zh" | "en") | null;
+            /** Export Preset */
+            export_preset?: string | null;
+            /** Monthly Cap Usd */
+            monthly_cap_usd?: number | null;
+        };
         /** SkuMetaIn */
         SkuMetaIn: {
             /** Brand */
@@ -605,7 +1223,7 @@ export interface components {
             /** Category */
             category: string;
             /** Name */
-            name: string;
+            name?: string | null;
             /** Price */
             price: number;
             /**
@@ -614,7 +1232,7 @@ export interface components {
              */
             product_type: "blue_hat" | "sports" | "general_food" | "other";
             /** Sku */
-            sku: string;
+            sku?: string | null;
         };
         /** Sparks */
         Sparks: {
@@ -673,44 +1291,156 @@ export interface components {
             /** Spec Markdown */
             spec_markdown: string;
         };
-        /**
-         * StylePromptHitIn
-         * @description A single retrieval hit accepted by ``POST /api/retrieval/style-prompt``.
-         *
-         *     Mirrors :class:`SearchHitOut` from the ``/search`` response so the wizard
-         *     can pass selected hits straight through. ``image_path`` is optional —
-         *     the synthesiser only uses ``image_url`` + ``score`` — but we accept it
-         *     when present so round-tripping a search result loses no fields.
-         */
-        StylePromptHitIn: {
-            /**
-             * Image Path
-             * @default
-             */
-            image_path: string;
-            /** Image Url */
-            image_url: string;
-            /** Metadata */
-            metadata?: {
-                [key: string]: unknown;
-            };
-            /** Score */
-            score: number;
+        /** StoreSecretRequest */
+        StoreSecretRequest: {
+            /** Api Key */
+            api_key: string;
+            /** Name */
+            name: string;
+            /** Role */
+            role: string;
         };
-        /** StylePromptRequest */
-        StylePromptRequest: {
-            /** Hits */
-            hits: components["schemas"]["StylePromptHitIn"][];
+        /** StoreSecretResponse */
+        StoreSecretResponse: {
+            /** Api Key Env */
+            api_key_env: string;
+        };
+        /** TemplatePayload */
+        TemplatePayload: {
+            /**
+             * Category
+             * @default lifestyle
+             * @enum {string}
+             */
+            category: "hero" | "detail_m3" | "lifestyle" | "short_video" | "amazon_hero";
+            /** Category Tips */
+            category_tips?: {
+                [key: string]: string;
+            };
+            /** Defaults */
+            defaults?: {
+                [key: string]: string;
+            };
+            /** Description */
+            description?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Examples */
+            examples?: string[];
             /**
              * Locale
              * @enum {string}
              */
             locale: "zh" | "en";
+            /** Name */
+            name: string;
+            /** Prompt Template */
+            prompt_template: {
+                [key: string]: string;
+            };
+            /**
+             * Supports Image Reference
+             * @default false
+             */
+            supports_image_reference: boolean;
+            /** Tags */
+            tags?: string[];
+            /** Variants */
+            variants?: {
+                [key: string]: unknown;
+            };
         };
-        /** StylePromptResponse */
-        StylePromptResponse: {
-            /** Style Prompt */
-            style_prompt: string;
+        /** TemplateSummary */
+        TemplateSummary: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "hero" | "detail_m3" | "lifestyle" | "short_video" | "amazon_hero";
+            /**
+             * Copyable
+             * @default true
+             */
+            copyable: boolean;
+            /** Defaults */
+            defaults?: {
+                [key: string]: string;
+            } | null;
+            /** Description */
+            description: string | null;
+            /**
+             * Editable
+             * @default false
+             */
+            editable: boolean;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Examples */
+            examples?: string[];
+            /** Id */
+            id: string;
+            /**
+             * Locale
+             * @enum {string}
+             */
+            locale: "zh" | "en";
+            /** Name */
+            name: string;
+            /** Name En */
+            name_en?: string | null;
+            /** Prompt Template */
+            prompt_template?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Source
+             * @default built_in
+             * @enum {string}
+             */
+            source: "built_in" | "custom";
+            /** Tags */
+            tags: string[];
+            /** Thumbnail Url */
+            thumbnail_url: string | null;
+        };
+        /** TemplateUpdate */
+        TemplateUpdate: {
+            /** Category */
+            category?: ("hero" | "detail_m3" | "lifestyle" | "short_video" | "amazon_hero") | null;
+            /** Category Tips */
+            category_tips?: {
+                [key: string]: string;
+            } | null;
+            /** Defaults */
+            defaults?: {
+                [key: string]: string;
+            } | null;
+            /** Description */
+            description?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Examples */
+            examples?: string[] | null;
+            /** Name */
+            name?: string | null;
+            /** Prompt Template */
+            prompt_template?: {
+                [key: string]: string;
+            } | null;
+            /** Supports Image Reference */
+            supports_image_reference?: boolean | null;
+            /** Tags */
+            tags?: string[] | null;
+            /** Variants */
+            variants?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** TextBoxOut */
         TextBoxOut: {
@@ -752,6 +1482,22 @@ export interface components {
             /** Visual */
             visual: string;
         };
+        /** UpdateEndpointRequest */
+        UpdateEndpointRequest: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Base Url */
+            base_url: string;
+            /** Model */
+            model: string;
+            /** Name */
+            name: string;
+            /**
+             * Protocol
+             * @enum {string}
+             */
+            protocol: "openai_compatible" | "anthropic_compatible";
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -792,19 +1538,6 @@ export interface components {
             /** Kits This Week */
             kits_this_week: number;
             sparks: components["schemas"]["Sparks"];
-        };
-        /** _Filters */
-        _Filters: {
-            /** Category */
-            category?: string | null;
-            /** Fallback Locale */
-            fallback_locale?: string | null;
-            /** Locale */
-            locale?: string | null;
-            /** Min Sales */
-            min_sales?: number | null;
-            /** Season */
-            season?: string | null;
         };
     };
     responses: never;
@@ -924,6 +1657,7 @@ export interface operations {
                 locale?: string | null;
                 min_score?: number | null;
                 category?: string | null;
+                sku?: string | null;
                 sort?: "created_at" | "updated_at" | "score";
                 order?: "asc" | "desc";
             };
@@ -940,6 +1674,87 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KitListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    warmup_extract_api_kits__warmup_extract_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_generated_image_api_kits__db_kit_id__images__image_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                db_kit_id: number;
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteKitImageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_kit_meta_api_kits__db_kit_id__meta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                db_kit_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KitMetaResponse"];
                 };
             };
             /** @description Validation Error */
@@ -984,6 +1799,41 @@ export interface operations {
             };
         };
     };
+    extract_api_kits__kit_id__extract_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtractRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_generate_api_kits__kit_id__generate_post: {
         parameters: {
             query?: never;
@@ -1006,6 +1856,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GenerateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_generated_image_api_kits__kit_id__images__image_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kit_id: string;
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -1094,6 +1976,26 @@ export interface operations {
             };
         };
     };
+    get_config_state_api_providers_config_state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigStateResponse"];
+                };
+            };
+        };
+    };
     save_endpoints_api_providers_endpoints_post: {
         parameters: {
             query?: never;
@@ -1106,6 +2008,138 @@ export interface operations {
                 "application/json": components["schemas"]["SaveEndpointsRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveEndpointsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_endpoint_api_providers_endpoints__role__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndpointStanza"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_endpoint_api_providers_endpoints__role__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEndpointRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveEndpointsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_endpoint_api_providers_endpoints__role__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEndpointRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveEndpointsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_endpoint_api_providers_endpoints__role__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -1143,6 +2177,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderHealthRow"][];
+                };
+            };
+        };
+    };
+    list_provider_models_api_providers_models_get: {
+        parameters: {
+            query?: {
+                role?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_candidate_api_providers_probe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProbeCandidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProbeCandidateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    store_secret_api_providers_secrets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreSecretRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreSecretResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1187,7 +2318,7 @@ export interface operations {
             };
         };
     };
-    search_api_retrieval_search_post: {
+    post_settings_api_settings_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1196,7 +2327,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SearchRequest"];
+                "application/json": components["schemas"]["SettingsUpdate"];
             };
         };
         responses: {
@@ -1206,7 +2337,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchResponse"];
+                    "application/json": components["schemas"]["SettingsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1220,7 +2351,27 @@ export interface operations {
             };
         };
     };
-    style_prompt_api_retrieval_style_prompt_post: {
+    get_templates_api_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSummary"][];
+                };
+            };
+        };
+    };
+    create_template_api_templates_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1229,7 +2380,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StylePromptRequest"];
+                "application/json": components["schemas"]["TemplatePayload"];
             };
         };
         responses: {
@@ -1239,7 +2390,225 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StylePromptResponse"];
+                    "application/json": components["schemas"]["TemplateSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_template_api_templates_copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopyTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_managed_templates_api_templates_managed_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSummary"][];
+                };
+            };
+        };
+    };
+    preview_template_api_templates_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_schemes_api_templates_schemes_get: {
+        parameters: {
+            query?: {
+                locale?: "zh" | "en";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchemeSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_scheme_api_templates_schemes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SchemePayload"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchemeSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_template_api_templates__template_ref__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_template_api_templates__template_ref__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateSummary"];
                 };
             };
             /** @description Validation Error */

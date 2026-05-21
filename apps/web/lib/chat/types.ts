@@ -27,6 +27,8 @@ export interface InferredSpec {
   brand_color_hex: FieldInference<string>;
   price: FieldInference<number> | null;
   selling_points: FieldInference<string>[];
+  template_scheme_ref?: string | null;
+  template_slot_overrides?: Record<string, string>;
 }
 
 /** Controls which view the ConfirmationCard renders (Phase C). */

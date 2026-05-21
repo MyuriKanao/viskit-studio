@@ -1,130 +1,41 @@
-# AIShop Studio
+# Viskit Studio
 
-AIShop Studio is a single-tenant, self-hosted platform for generating complete marketing kits
-(hero images, detail shots, copy, and compliance checks) from a product brief. It is designed
-for a single operator account (`aishop_local`) and runs entirely on your own infrastructure —
-no vendor lock-in, swappable AI providers via a unified config file.
+Viskit Studio 是一个自托管商品视觉套包生产工作台，面向单运营账号生成商品营销图、详情图、文案规格与服务商配置。
 
----
+## 项目内容
 
-## Architecture
-
-```
-aishop-img-studio/
-├── apps/
-│   ├── web/          # Next.js storefront + editor UI
-│   ├── marketing/    # Next.js marketing / landing pages
-│   └── api/          # FastAPI async backend
-├── services/
-│   ├── providers/    # Vendor abstraction layer (OpenAI, Anthropic, etc.)
-│   ├── retrieval/    # Milvus vector search — top-K reference retrieval
-│   ├── style/        # Style extraction + brand-consistency scoring
-│   ├── copywriter/   # LLM copy generation (headline, body, CTA)
-│   ├── imagegen/     # Image generation orchestration + color lock
-│   └── editor/       # Non-destructive image editing pipeline
-├── packages/
-│   └── schemas/      # Shared Zod + Pydantic schema definitions
-└── infra/
-    ├── docker-compose.yml   # Postgres, MinIO, Milvus, Redis
-    └── migrations/          # SQL migration files
+```text
+apps/api/              FastAPI 后端与业务路由
+apps/web/              Next.js 14 Web 工作台
+services/copywriter/   文案与合规能力
+services/editor/       图片 OCR、修补与合成编辑
+services/imagegen/     视觉套包生成与模板库
+services/providers/    AI 服务商抽象层
+packages/schemas/      OpenAPI、TypeScript 与 Python 共享模型
+infra/                 Docker Compose 与 SQL 迁移
 ```
 
----
+仓库只保留运行源码、配置样例、迁移和必要静态资源；本地编排状态、Demo、测试资产、开发文档和维护脚本不进入远端仓库。
 
-## Kit-Generation Flow
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant API as apps/api
-    participant R as retrieval
-    participant S as style
-    participant C as copywriter
-    participant G as imagegen
-
-    U->>API: Upload brief + product images
-    API->>R: Retrieve top-K style references
-    R->>S: Extract style profile + brand color
-    S->>C: Generate compliant copy (preflight)
-    C->>G: Build image prompts
-    G->>G: Generate → color-lock → compliance OCR
-    G->>API: Return completed marketing kit
-```
-
----
-
-## Bootstrap
+## 本地运行
 
 ```bash
-# 1. Install all dependencies
 make bootstrap
-
-# 2. Configure environment
 cp .env.example .env
-# edit .env — set DATABASE_URL, MINIO_*, etc.
-
-# 3. Start infrastructure (Postgres, MinIO, Milvus, Redis)
 make compose-up
-
-# 4. Run database migrations
-make migrate
-
-# 5. Create the local operator user
-make seed-user
-# or: make seed-user PASSWORD=mysecret
-
-# 6. (Optional) Load the sample kit fixture
-make seed-sample-kit
-
-# 7. Start development servers
 make dev
 ```
 
----
+默认服务：
 
-## Make Targets
+- Web: `http://localhost:3001`
+- API: `http://localhost:8001`
+- OpenAPI: `http://localhost:8001/openapi.json`
 
-| Target             | Description                                                                 |
-|--------------------|-----------------------------------------------------------------------------|
-| `bootstrap`        | Install pnpm + uv dependencies and pre-commit hooks                         |
-| `compose-up`       | Start full infra stack (Postgres, MinIO, Milvus, Redis) in detached mode    |
-| `compose-down`     | Stop and remove infra containers                                            |
-| `compose-logs`     | Tail logs from all infra containers                                         |
-| `dev`              | Run Next.js apps + FastAPI in parallel (hot-reload)                         |
-| `test`             | Run all JS/TS and Python tests                                              |
-| `lint`             | Run Biome (JS/TS) and Ruff (Python) linters                                 |
-| `typecheck`        | Run TypeScript and mypy type checks                                         |
-| `migrate`          | Apply database migrations via `scripts/migrate.py`                          |
-| `seed-user`        | Create the `aishop_local` operator user (idempotent); supports `PASSWORD=`  |
-| `seed-sample-kit`  | Upload 14 placeholder PNGs to MinIO and insert sample kit DB rows           |
-| `grep-providers`   | Fail if vendor names appear outside their allowed paths (CI guard)          |
-| `schemas`          | Generate OpenAPI + DB schemas (implemented in US-0.5)                       |
-| `ingest-corpus`    | Ingest reference image corpus into Milvus (implemented in EPIC-2)           |
+## 常用命令
 
----
-
-## Provider Abstraction
-
-Vendor names (`openai`, `anthropic`, `gemini`, etc.) appear **only** in `config.yaml` and
-`config.yaml.example`. All services import from `services/providers/` — never directly from
-vendor SDKs. `make grep-providers` enforces this rule in CI and will fail the build if any
-vendor name leaks into application code.
-
----
-
-## Reference Projects
-
-1. **Midjourney API patterns** — prompt construction, aspect-ratio handling, upscale flows
-2. **Replicate orchestration** — async polling, webhook callbacks, cost tracking
-3. **Shopify storefront kit templates** — image slot conventions (H1–H5 hero, D1–D9 detail)
-
----
-
-## Plans & Specs
-
-- Architecture plan: [`.omc/plans/aishop-studio-v1-plan.md`](.omc/plans/aishop-studio-v1-plan.md)
-- Architect review: [`.omc/plans/aishop-studio-v1-architect-review.md`](.omc/plans/aishop-studio-v1-architect-review.md)
-- Critic verdict: [`.omc/plans/aishop-studio-v1-critic-verdict.md`](.omc/plans/aishop-studio-v1-critic-verdict.md)
-- Open questions: [`.omc/plans/open-questions.md`](.omc/plans/open-questions.md)
-- EPIC-0 handoff: [`.omc/plans/epic-0-handoff.md`](.omc/plans/epic-0-handoff.md)
-- Specs directory: [`.omc/specs/`](.omc/specs/)
+```bash
+make lint
+make typecheck
+make web-build
+```

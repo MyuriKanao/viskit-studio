@@ -3,7 +3,7 @@
  * Build-time TanStack-Query typed-client generator.
  *
  * Pipeline:
- *   1. Boot `uvicorn apps.api.main:app` on a random high port (50000-60000).
+ *   1. Boot `python -m uvicorn apps.api.main:app` on a random high port (50000-60000).
  *   2. Poll http://127.0.0.1:<port>/openapi.json until 200 (15s timeout).
  *   3. Write the result into packages/schemas/openapi.yaml.
  *   4. Run openapi-typescript to regenerate packages/schemas/ts/api-paths.ts.
@@ -66,6 +66,8 @@ async function main() {
     'uv',
     [
       'run',
+      'python',
+      '-m',
       'uvicorn',
       'apps.api.main:app',
       '--host',

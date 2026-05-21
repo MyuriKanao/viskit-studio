@@ -1,5 +1,5 @@
 """
-Stub Pydantic v2 models for AIShop schemas.
+Stub Pydantic v2 models for Viskit schemas.
 Handwritten fallback — overwritten by `pnpm gen:py` / `python3 scripts/gen-py.py`.
 Source of truth: packages/schemas/openapi.yaml
 """

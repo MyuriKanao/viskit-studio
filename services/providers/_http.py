@@ -1,4 +1,4 @@
-"""Shared HTTP retry session helper for AIShop Studio provider adapters.
+"""Shared HTTP retry session helper for Viskit Studio provider adapters.
 
 Ported from Fashion-AI/image_generator.py lines 14-19, which used
 ``requests`` + ``urllib3.util.retry.Retry``.  This module replaces that

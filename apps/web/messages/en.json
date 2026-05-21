@@ -1,5 +1,5 @@
 {
-  "welcome": "AIShop Studio · Workbench",
+  "welcome": "Viskit Studio · Workbench",
   "sidebar": {
     "dashboard": "Dashboard",
     "catalog": "Catalog",
@@ -11,7 +11,7 @@
     "settings": "Settings"
   },
   "topbar": {
-    "title": "AIShop Studio",
+    "title": "Viskit Studio",
     "health": "Health",
     "healthLoading": "Checking…",
     "healthOk": "OK",
@@ -69,7 +69,6 @@
   "providers": {
     "page_title": "Providers",
     "add_endpoint_button": "Add endpoint",
-    "view_yaml_toggle": "View YAML",
     "latency_label": "Latency",
     "health_status_healthy": "Healthy",
     "health_status_degraded": "Degraded",
@@ -82,7 +81,13 @@
     "table_col_status": "Status",
     "table_col_actions": "Actions",
     "save_endpoint_button": "Save endpoint",
-    "modal_title": "Add endpoint"
+    "modal_title": "Add endpoint",
+    "role_routing_note": "Roles are logical routes. vision and llm may point to the same multimodal model when the provider supports both image analysis and chat, but compliance_screen should stay a separate low-cost review gate.",
+    "role_description_vision": "Vision reads images for extraction, OCR, style analysis, and image-aware scoring.",
+    "role_description_llm": "LLM writes and rewrites structured text such as product specs, copy, and review notes.",
+    "role_description_image": "Image generates final visual assets and should be bound to an image-capable model.",
+    "role_description_compliance_screen": "Compliance screen is the cheap preflight reviewer that blocks risky kits before expensive generation.",
+    "role_description_custom": "Custom roles are optional routes and are not required for registry startup."
   },
   "providersDialog": {
     "drift_title": "Config conflict",
@@ -158,6 +163,9 @@
     "pagination_prev": "Previous",
     "pagination_next": "Next",
     "pagination_page": "Page {page}/{total}",
+    "delete_image": "Delete image",
+    "delete_image_confirm": "Delete {image} from {name}?",
+    "delete_image_error": "Delete image failed",
     "drawer_title": "SKU details",
     "drawer_close_aria": "Close drawer",
     "drawer_kits_title": "Kit history",
@@ -170,7 +178,7 @@
   },
   "onboarding": {
     "page_title": "Welcome",
-    "welcome_copy": "Welcome to AIShop Studio — your e-commerce marketing kit generation workbench",
+    "welcome_copy": "Welcome to Viskit Studio — your e-commerce marketing kit generation workbench",
     "cta_new_kit_label": "Create new kit",
     "cta_sample_kit_label": "View sample kit",
     "cta_providers_label": "Configure providers",
@@ -179,7 +187,7 @@
     "monthly_cap_label": "Monthly cap",
     "brand_color_label": "Brand color",
     "default_locale_label": "Default locale",
-    "export_preset_label": "Export preset"
+    "export_preset_label": "Platform preset"
   },
   "wizard": {
     "page_title": "New Kit",
@@ -251,7 +259,8 @@
     "default_locale_label": "Default locale",
     "monthly_cap_label": "Monthly cap (USD)",
     "monthly_cap_hint": "Set to 0 to disable the cap",
-    "export_preset_label": "Export preset",
+    "export_preset_label": "Platform preset",
+    "export_preset_hint": "Sets the default platform for future specs and export formats; it does not export a file now",
     "locale_zh": "Chinese",
     "locale_en": "English",
     "preset_taobao_v2": "Taobao v2",

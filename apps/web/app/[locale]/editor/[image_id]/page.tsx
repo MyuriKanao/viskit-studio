@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { EditorRoot } from '@/components/editor/EditorRoot';
 
 export const metadata: Metadata = {
-  title: 'Editor — AIShop Studio',
+  title: 'Editor — Viskit Studio',
 };
 
 export default async function EditorPage({

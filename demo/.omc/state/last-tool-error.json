@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"ls /home/kano/.claude/projects/-home-kano-Desktop-aishop-img-studio/memory/ 2>/dev/null\",\"description\":\"Check existing memory files\"}",
-  "error": "Exit code 2",
-  "timestamp": "2026-05-11T08:57:54.470Z",
-  "retry_count": 1
-}

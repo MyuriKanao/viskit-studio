@@ -77,6 +77,7 @@ export function Topbar() {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-subtle bg-surface-01 px-s-5">
       <div className="flex items-center gap-s-3">
+        <img src="/brand/viskit-favicon.svg" alt="" aria-hidden="true" className="h-6 w-6" />
         <span className="font-display text-lg text-ink-primary">{t('title')}</span>
       </div>
       <div className="flex items-center gap-s-3">

@@ -1,11 +1,13 @@
 'use client';
 
+import { useLocale } from 'next-intl';
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
-import { useChatStore } from '@/lib/chat/store';
+import { useTemplateSchemes } from '@/hooks/use-templates';
 import { LOW_CONF_THRESHOLD } from '@/lib/chat/constants';
+import { useChatStore } from '@/lib/chat/store';
 import type { ConfirmationMode, FieldInference, InferredSpec } from '@/lib/chat/types';
+import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -72,10 +74,8 @@ function EditableCell({
   isProductType,
 }: EditableCellProps) {
   return (
-    <label
-      data-testid={`field-${fieldName}`}
-      className="flex flex-col gap-s-1 text-xs"
-    >
+    // biome-ignore lint/a11y/noLabelWithoutControl: editable cell keeps control nested across input/select/color variants.
+    <label data-testid={`field-${fieldName}`} className="flex flex-col gap-s-1 text-xs">
       <span className="flex items-center font-mono uppercase tracking-wider text-ink-faint">
         {label}
         <ConfidenceBadge field={field} />
@@ -133,12 +133,16 @@ function ColorSwatch({ hex }: { hex: string }) {
 // Main component
 // ---------------------------------------------------------------------------
 export function ConfirmationCard({ inferred, onStart, onModeChange }: ConfirmationCardProps) {
+  const locale = useLocale() as 'zh' | 'en';
   const confirmation_mode = useChatStore((s) => s.confirmation_mode);
   const setConfirmationMode = useChatStore((s) => s.setConfirmationMode);
 
   // Local editable copy of spec fields
   const [spec, setSpec] = React.useState<InferredSpec>(() => inferred);
   const [guardNote, setGuardNote] = React.useState<string | null>(null);
+  const schemesQuery = useTemplateSchemes(locale);
+  const schemes = schemesQuery.data ?? [];
+  const [selectedSchemeRef, setSelectedSchemeRef] = React.useState<string>('builtin:default');
 
   // Determine effective mode — default to minimal when store is null
   const mode: ConfirmationMode = confirmation_mode ?? 'minimal';
@@ -147,9 +151,12 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
   const lowConfFields = React.useMemo(() => {
     const fields: Array<{ key: keyof InferredSpec; label: string }> = [];
     if (spec.brand.confidence < LOW_CONF_THRESHOLD) fields.push({ key: 'brand', label: '品牌' });
-    if (spec.category.confidence < LOW_CONF_THRESHOLD) fields.push({ key: 'category', label: '品类' });
-    if (spec.product_type.confidence < LOW_CONF_THRESHOLD) fields.push({ key: 'product_type', label: '风格' });
-    if (spec.brand_color_hex.confidence < LOW_CONF_THRESHOLD) fields.push({ key: 'brand_color_hex', label: '品牌色' });
+    if (spec.category.confidence < LOW_CONF_THRESHOLD)
+      fields.push({ key: 'category', label: '品类' });
+    if (spec.product_type.confidence < LOW_CONF_THRESHOLD)
+      fields.push({ key: 'product_type', label: '风格' });
+    if (spec.brand_color_hex.confidence < LOW_CONF_THRESHOLD)
+      fields.push({ key: 'brand_color_hex', label: '品牌色' });
     return fields;
   }, [spec]);
 
@@ -159,7 +166,7 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
       setConfirmationMode('asking');
       onModeChange('asking');
     }
-  }, []); // only on mount — don't re-trigger on every render
+  }, [lowConfFields.length, mode, onModeChange, setConfirmationMode]);
 
   function handleSetMode(m: ConfirmationMode) {
     setConfirmationMode(m);
@@ -188,7 +195,11 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
       setGuardNote('请先确认品牌或品类');
       return;
     }
-    onStart(spec);
+    onStart({
+      ...spec,
+      template_scheme_ref: selectedSchemeRef || 'builtin:default',
+      template_slot_overrides: spec.template_slot_overrides ?? {},
+    });
   }
 
   // Check if asking mode still has unresolved low-conf fields
@@ -221,17 +232,23 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
       {(mode === 'minimal' || mode === 'asking') && (
         <div className="flex flex-col gap-s-2 text-sm">
           <div data-testid="field-category" className="flex items-center gap-s-2">
-            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">品类</span>
+            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">
+              品类
+            </span>
             <span className="text-ink-primary">{spec.category.value}</span>
             <ConfidenceBadge field={spec.category} />
           </div>
           <div data-testid="field-product_type" className="flex items-center gap-s-2">
-            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">风格</span>
+            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">
+              风格
+            </span>
             <span className="text-ink-primary">{spec.product_type.value}</span>
             <ConfidenceBadge field={spec.product_type} />
           </div>
           <div data-testid="field-brand_color_hex" className="flex items-center gap-s-2">
-            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">品牌色</span>
+            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">
+              品牌色
+            </span>
             <ColorSwatch hex={spec.brand_color_hex.value} />
             <ConfidenceBadge field={spec.brand_color_hex} />
           </div>
@@ -309,7 +326,11 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
                   setSpec((prev) => ({
                     ...prev,
                     price: prev.price
-                      ? { ...prev.price, value: parseFloat(e.target.value) || 0, confidence: 1 }
+                      ? {
+                          ...prev.price,
+                          value: Number.parseFloat(e.target.value) || 0,
+                          confidence: 1,
+                        }
                       : null,
                   }))
                 }
@@ -322,7 +343,7 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
               <span className="font-mono uppercase tracking-wider text-ink-faint">卖点</span>
               {spec.selling_points.map((sp, i) => (
                 <input
-                  key={i}
+                  key={`${sp.reasoning}-${i}`}
                   type="text"
                   value={sp.value}
                   onChange={(e) =>
@@ -340,6 +361,34 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
           )}
         </div>
       )}
+
+      <div className="rounded-input border border-border-subtle bg-surface-02 p-s-3 text-xs">
+        <label className="flex flex-col gap-s-1">
+          <span className="font-mono uppercase tracking-wider text-ink-faint">模板方案</span>
+          <select
+            data-testid="template-scheme-select"
+            value={selectedSchemeRef}
+            onChange={(e) => setSelectedSchemeRef(e.target.value)}
+            className={FIELD_INPUT_CLS}
+          >
+            {schemes.length === 0 ? (
+              <option value="builtin:default">默认模板方案</option>
+            ) : (
+              schemes
+                .filter((scheme) => scheme.enabled)
+                .map((scheme) => (
+                  <option key={scheme.id} value={scheme.id}>
+                    {scheme.source === 'built_in' ? '内置 · ' : '自定义 · '}
+                    {scheme.name}
+                  </option>
+                ))
+            )}
+          </select>
+        </label>
+        <p className="mt-s-2 text-ink-muted">
+          默认方案保持现有生成效果；自定义方案会作为生成约束写入最终提示词。
+        </p>
+      </div>
 
       {/* ── Action row ── */}
       <div className="flex items-center gap-s-3 pt-s-2">

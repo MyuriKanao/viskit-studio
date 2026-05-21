@@ -202,6 +202,7 @@ export default function SettingsPage() {
                   <option value="tmall">{t('preset_tmall')}</option>
                   <option value="generic_v1">{t('preset_generic_v1')}</option>
                 </select>
+                <span className="text-[10px] text-ink-faint">{t('export_preset_hint')}</span>
               </label>
             </div>
 

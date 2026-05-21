@@ -1,4 +1,4 @@
-"""Cost-tracking accumulator for AIShop Studio.
+"""Cost-tracking accumulator for Viskit Studio.
 
 Provides fire-and-forget helpers to record provider call costs into the
 ``cost_events`` table and to aggregate totals per marketing kit.

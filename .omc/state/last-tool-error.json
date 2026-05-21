@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"/usr/bin/pkill -f \\\"playwright\\\" 2>/dev/null || /usr/bin/true; /usr/bin/pkill -f \\\"chromium\\\" 2>/dev/null || /usr/bin/true; /usr/bin/pkill -f next-server 2>/dev/null || /usr/bin/true; /usr...",
-  "error": "Exit code 144",
-  "timestamp": "2026-05-11T18:42:39.652Z",
-  "retry_count": 1
-}

@@ -1,5 +1,0 @@
-{
-  "seeded": false,
-  "detail": "Command failed: make seed-fixtures\nERROR: DATABASE_URL environment variable is not set\nmake: *** [Makefile:50：seed-sample-kit] 错误 1\n",
-  "recorded_at": "2026-05-11T18:46:37.804Z"
-}

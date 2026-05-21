@@ -55,6 +55,8 @@ class KitGenerationInputs:
     style_prompt: str
     output_dir: Path
     locale: Literal["zh", "en"]
+    template_by_section: dict[str, Template] | None = None
+    template_snapshot: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +76,9 @@ def _build_section_prompt(
     section: HeroSection | DetailSection,
     inputs: KitGenerationInputs,
 ) -> tuple[str, Template]:
-    template = load_template_for_section(section.id, inputs.locale)
+    template = (inputs.template_by_section or {}).get(section.id)
+    if template is None:
+        template = load_template_for_section(section.id, inputs.locale)
     prompt_inputs = PromptInputs(
         template=template,
         image_brief=section.three_piece,
@@ -128,9 +132,7 @@ def _generate_one_image(
     """Generate one PNG and emit the cost-event + color-lock record."""
     response = image_adapter.generate(prompt, size=size, n=1)
     if not response.images:
-        raise RuntimeError(
-            f"image provider returned zero images for section {section_id!r}"
-        )
+        raise RuntimeError(f"image provider returned zero images for section {section_id!r}")
     png_bytes = response.images[0]
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(png_bytes)
@@ -218,8 +220,7 @@ def generate_kit(
     # --- compliance.json placeholder (EPIC-7 reads `score: null`) -------
     compliance_path = kit_root / "compliance.json"
     compliance_path.write_text(
-        json.dumps({"score": None, "version": 1}, ensure_ascii=False, indent=2)
-        + "\n",
+        json.dumps({"score": None, "version": 1}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 
@@ -256,13 +257,9 @@ def validate_kit_output(output_dir: Path, kit_id: str) -> None:
     hero_pngs = sorted((kit_root / "hero").glob("*.png"))
     detail_pngs = sorted((kit_root / "detail").glob("*.png"))
     if len(hero_pngs) != 5:
-        raise ValueError(
-            f"expected 5 hero PNGs at {kit_root / 'hero'}; got {len(hero_pngs)}"
-        )
+        raise ValueError(f"expected 5 hero PNGs at {kit_root / 'hero'}; got {len(hero_pngs)}")
     if len(detail_pngs) != 9:
-        raise ValueError(
-            f"expected 9 detail PNGs at {kit_root / 'detail'}; got {len(detail_pngs)}"
-        )
+        raise ValueError(f"expected 9 detail PNGs at {kit_root / 'detail'}; got {len(detail_pngs)}")
     if len(hero_pngs) + len(detail_pngs) != 14:
         raise ValueError(f"expected 14 total PNGs; got {len(hero_pngs) + len(detail_pngs)}")
 
@@ -278,6 +275,4 @@ def validate_kit_output(output_dir: Path, kit_id: str) -> None:
         raise ValueError(f"missing cost.json at {cost_path}")
     cost = json.loads(cost_path.read_text(encoding="utf-8"))
     if not isinstance(cost, dict) or not isinstance(cost.get("events"), list):
-        raise ValueError(
-            f"cost.json must contain an 'events' list; got {cost!r}"
-        )
+        raise ValueError(f"cost.json must contain an 'events' list; got {cost!r}")

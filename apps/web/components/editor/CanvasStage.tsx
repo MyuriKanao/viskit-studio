@@ -24,11 +24,6 @@ export interface CanvasStageProps {
 /**
  * fabric.js@6 canvas host for the EPIC-5 Text-touchup Editor.
  *
- * Spec references:
- *   - `.omc/specs/deep-interview-epic-5-text-touchup-editor.md` §R7
- *     (StrictMode lifecycle + imperative-only fabric handlers).
- *   - §R2 (Command-stack snapshot on `mouse:up`).
- *
  * Consumers must import this via `next/dynamic` with `ssr: false`
  * (fabric.js touches `document` at module-init time). Dynamic-import
  * wiring lives in US-010 (`EditorRoot`); this file deliberately
@@ -219,7 +214,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           pendingOp = null;
         });
 
-        // Test hook for Playwright. AIShop Studio is a single-tenant internal
+        // Test hook for Playwright. Viskit Studio is a single-tenant internal
         // tool (per project memory), so unconditionally exposing the canvas
         // and store via `window.__editorTest` is acceptable. Used by the
         // EPIC-5b AC#3/#5/#7 specs to drive real fabric events from the test

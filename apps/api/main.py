@@ -1,4 +1,4 @@
-"""FastAPI app factory for AIShop Studio API."""
+"""FastAPI app factory for Viskit Studio API."""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def _bootstrap_config_if_missing(path: Path) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    logger.info("AIShop API starting; config_path=%s", _config_path)
+    logger.info("Viskit API starting; config_path=%s", _config_path)
     _bootstrap_config_if_missing(_config_path)
     injected = secrets_store.load_into_env()
     if injected:
@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="AIShop Studio API",
+    title="Viskit Studio API",
     version="0.1.0",
     lifespan=lifespan,
     # OpenAPI auto-generated at /openapi.json (default FastAPI behaviour)

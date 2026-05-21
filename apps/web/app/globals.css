@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== AIShop Studio — Design Tokens ===== */
+/* ===== Viskit Studio — Design Tokens ===== */
 
 :root {
   /* surfaces — cooler ink, warm tone reserved for text + accent */
@@ -70,7 +70,35 @@
 }
 
 html[data-theme="light"] {
-  --ink-base: #faf7f2;
+  --ink-base: #eef5ff;
+  --ink-base-l: #ffffff;
+  --surface-01: #f8fbff;
+  --surface-02: #edf4ff;
+  --surface-03: #dfeaff;
+  --surface-glass: rgba(248, 251, 255, 0.78);
+  --border-subtle: #d4e1f5;
+  --border-strong: #b7cae8;
+  --border-hair: rgba(39, 72, 118, 0.1);
+
+  --text-primary: #102033;
+  --text-secondary: #38516f;
+  --text-muted: #667c98;
+  --text-faint: #99abc2;
+
+  --accent: #1e63f0;
+  --accent-soft: #4f8cff;
+  --accent-deep: #1744a6;
+  --accent-glow: rgba(30, 99, 240, 0.18);
+  --accent-wash: rgba(30, 99, 240, 0.09);
+
+  --success: #3d8062;
+  --warning: #9b6b1f;
+  --danger: #ba3f4b;
+  --info: #2c6ccf;
+  --neutral: #667c98;
+
+  --shadow-lift: 0 12px 32px rgba(23, 68, 166, 0.12), 0 2px 6px rgba(16, 32, 51, 0.08);
+  --shadow-glass: 0 24px 48px rgba(23, 68, 166, 0.16);
 }
 
 body {

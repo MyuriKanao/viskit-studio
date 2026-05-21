@@ -1,4 +1,4 @@
-"""Local secrets store for AIShop Studio.
+"""Local secrets store for Viskit Studio.
 
 Single-tenant, gitignored JSON file mapping ``api_key_env`` names → plaintext
 secret values.  Loaded into ``os.environ`` on lifespan startup so the rest of
@@ -65,16 +65,16 @@ def derive_env_name(*, role: str, name: str) -> str:
     """Build a deterministic env-var name from the user-supplied endpoint name + role.
 
     e.g. ``role="embedding"``, ``name="Gemini Embedding"`` →
-    ``"AISHOP_EMBEDDING_GEMINI_EMBEDDING"``.
+    ``"VISKIT_EMBEDDING_GEMINI_EMBEDDING"``.
 
     **Collision behaviour:** two endpoints whose ``role`` + slugified ``name``
     produce the same string share an env entry — :func:`put` will overwrite
     the older secret silently.  Caller is responsible for unique names (the
     add-endpoint UI uses the user-typed ``name`` field for this).
     """
-    raw = f"AISHOP_{role}_{name}".upper()
+    raw = f"VISKIT_{role}_{name}".upper()
     slug = _SLUG_RE.sub("_", raw).strip("_")
-    return slug or f"AISHOP_{role.upper()}_UNNAMED"
+    return slug or f"VISKIT_{role.upper()}_UNNAMED"
 
 
 def put(name: str, value: str, path: Path | None = None) -> None:

@@ -1,5 +1,5 @@
 [project]
-name = "aishop-img-studio-api"
+name = "viskit-studio-api"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -23,11 +23,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest",
-    "pytest-asyncio",
     "ruff",
     "mypy",
-    "respx",
     "pre-commit",
     "datamodel-code-generator",
     "types-PyYAML",
@@ -39,9 +36,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests", "apps/api/tests"]
 
 [tool.mypy]
 strict = true

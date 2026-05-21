@@ -1,5 +1,5 @@
 {
-  "welcome": "AIShop Studio · 工作台",
+  "welcome": "Viskit Studio · 工作台",
   "sidebar": {
     "dashboard": "总览",
     "catalog": "目录",
@@ -11,7 +11,7 @@
     "settings": "设置"
   },
   "topbar": {
-    "title": "AIShop Studio",
+    "title": "Viskit Studio",
     "health": "健康检查",
     "healthLoading": "检测中…",
     "healthOk": "正常",
@@ -69,7 +69,6 @@
   "providers": {
     "page_title": "服务商管理",
     "add_endpoint_button": "添加端点",
-    "view_yaml_toggle": "查看 YAML",
     "latency_label": "延迟",
     "health_status_healthy": "健康",
     "health_status_degraded": "降级",
@@ -82,7 +81,13 @@
     "table_col_status": "状态",
     "table_col_actions": "操作",
     "save_endpoint_button": "保存端点",
-    "modal_title": "添加端点"
+    "modal_title": "添加端点",
+    "role_routing_note": "角色是逻辑路由。vision 和 llm 可以绑定到同一个同时支持看图与对话的多模态模型，但 compliance_screen 建议保持为独立低成本审核入口。",
+    "role_description_vision": "Vision 用于图片理解、OCR、风格分析和带图评分。",
+    "role_description_llm": "LLM 用于生成和改写结构化文本，例如商品规格、文案和审核意见。",
+    "role_description_image": "Image 用于生成最终视觉资产，需要绑定到支持图片生成的模型。",
+    "role_description_compliance_screen": "Compliance screen 是低成本预审模型，用于在昂贵生成前拦截风险套件。",
+    "role_description_custom": "自定义角色是可选路由，不属于 registry 启动必需角色。"
   },
   "providersDialog": {
     "drift_title": "配置冲突",
@@ -158,6 +163,9 @@
     "pagination_prev": "上一页",
     "pagination_next": "下一页",
     "pagination_page": "第 {page}/{total} 页",
+    "delete_image": "删除图片",
+    "delete_image_confirm": "删除 {name} 的 {image} 图片？",
+    "delete_image_error": "删除图片失败",
     "drawer_title": "SKU 详情",
     "drawer_close_aria": "关闭抽屉",
     "drawer_kits_title": "套包历史",
@@ -170,7 +178,7 @@
   },
   "onboarding": {
     "page_title": "欢迎使用",
-    "welcome_copy": "欢迎来到 AIShop Studio —— 你的电商营销套包生成工作台",
+    "welcome_copy": "欢迎来到 Viskit Studio —— 你的电商营销套包生成工作台",
     "cta_new_kit_label": "创建新套包",
     "cta_sample_kit_label": "查看示例套包",
     "cta_providers_label": "配置服务商",
@@ -179,7 +187,7 @@
     "monthly_cap_label": "月度上限",
     "brand_color_label": "品牌色",
     "default_locale_label": "默认语言",
-    "export_preset_label": "导出预设"
+    "export_preset_label": "平台预设"
   },
   "wizard": {
     "page_title": "新建套包",
@@ -251,7 +259,8 @@
     "default_locale_label": "默认语言",
     "monthly_cap_label": "月度上限 (USD)",
     "monthly_cap_hint": "设为 0 表示不设上限",
-    "export_preset_label": "导出预设",
+    "export_preset_label": "平台预设",
+    "export_preset_hint": "用于后续生成规格和导出格式的默认平台，不会立即导出文件",
     "locale_zh": "中文",
     "locale_en": "English",
     "preset_taobao_v2": "淘宝 v2",

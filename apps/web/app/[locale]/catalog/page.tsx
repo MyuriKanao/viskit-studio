@@ -1,6 +1,8 @@
 'use client';
 
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocale, useTranslations } from 'next-intl';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
@@ -26,9 +28,32 @@ import type {
 } from '@/hooks/use-kits-catalog';
 import type { KitListItem } from '@/hooks/use-recent-kits';
 import { cn } from '@/lib/utils';
-import Link from 'next/link';
 
 const PAGE_SIZE = 24;
+const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+
+async function deleteKitImage({
+  kitId,
+  imageId,
+}: {
+  kitId: number;
+  imageId: string;
+}): Promise<void> {
+  const response = await fetch(
+    `${baseUrl}/api/kits/${encodeURIComponent(String(kitId))}/images/${encodeURIComponent(imageId)}`,
+    { method: 'DELETE' }
+  );
+  if (!response.ok) {
+    let detail = `Delete image failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === 'string') detail = body.detail;
+    } catch {
+      // Keep status fallback for non-JSON responses.
+    }
+    throw new Error(detail);
+  }
+}
 
 export default function CatalogPage() {
   const t = useTranslations('catalog');
@@ -36,6 +61,8 @@ export default function CatalogPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
 
   // View mode
   const [view, setView] = React.useState<CatalogView>('grid');
@@ -79,6 +106,15 @@ export default function CatalogPage() {
   const kits = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+  const deleteImage = useMutation({
+    mutationFn: deleteKitImage,
+    onSuccess: async () => {
+      setDeleteError(null);
+      await queryClient.invalidateQueries({ queryKey: ['kits'] });
+      await queryClient.invalidateQueries({ queryKey: ['kit-meta'] });
+    },
+    onError: (err) => setDeleteError((err as Error).message),
+  });
 
   // EPIC-9: ?sku=<sku> drives the per-SKU drawer; clicking a row opens it
   // instead of navigating straight to /kits/{id}. The drawer carries a CTA
@@ -103,6 +139,15 @@ export default function CatalogPage() {
     [updateSkuParam]
   );
   const onKitClick = onRowClick;
+  const handleDeleteImage = React.useCallback(
+    (kit: KitListItem, imageId: string) => {
+      if (deleteImage.isPending) return;
+      const ok = window.confirm(t('delete_image_confirm', { image: imageId, name: kit.name }));
+      if (!ok) return;
+      deleteImage.mutate({ kitId: kit.id, imageId });
+    },
+    [deleteImage, t]
+  );
 
   const selectedSku: CatalogDrawerSku | null = React.useMemo(() => {
     if (selectedSkuParam === null) return null;
@@ -151,6 +196,7 @@ export default function CatalogPage() {
     updated: t('table_updated'),
     empty: t('grid_empty'),
     advisory: t('advisory_badge'),
+    deleteImage: t('delete_image'),
   };
 
   const sortLabels: SortMenuLabels = {
@@ -235,6 +281,11 @@ export default function CatalogPage() {
             {t('count_pattern', { start: pageStart, end: pageEnd, total })}
           </p>
         ) : null}
+        {deleteError ? (
+          <p className="text-xs text-danger" role="alert">
+            {t('delete_image_error')}: {deleteError}
+          </p>
+        ) : null}
 
         {/* Content */}
         {isLoading ? (
@@ -252,11 +303,17 @@ export default function CatalogPage() {
           <CatalogGrid
             kits={kits}
             locale={locale}
-            labels={{ empty: t('grid_empty') }}
+            labels={{ empty: t('grid_empty'), deleteImage: t('delete_image') }}
             onKitClick={onKitClick}
+            onDeleteImage={handleDeleteImage}
           />
         ) : (
-          <CatalogTable kits={kits} labels={tableLabels} onRowClick={onRowClick} />
+          <CatalogTable
+            kits={kits}
+            labels={tableLabels}
+            onRowClick={onRowClick}
+            onDeleteImage={handleDeleteImage}
+          />
         )}
 
         {/* Pagination */}

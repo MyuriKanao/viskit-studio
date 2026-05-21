@@ -2,10 +2,10 @@
 
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
-import { useChatStore } from '@/lib/chat/store';
-import { MAX_IMAGE_BYTES } from '@/lib/chat/constants';
 import { useChatImageFlow } from '@/hooks/use-chat-flow';
+import { MAX_IMAGE_BYTES } from '@/lib/chat/constants';
+import { useChatStore } from '@/lib/chat/store';
+import { cn } from '@/lib/utils';
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -34,22 +34,25 @@ export function MessageInput() {
     isDisabledRef.current = isDisabled;
   }, [isDisabled]);
 
-  async function handleImageFile(file: File) {
-    if (isDisabledRef.current) return;
-    setError(null);
-    if (file.size > MAX_IMAGE_BYTES) {
-      setError('图片超过 8 MB 大小限制，请压缩后重试');
-      return;
-    }
-    try {
-      const url = await fileToDataUrl(file);
-      // Pass current text as optional description alongside the image
-      await handleImageDrop(url, file.type, text.trim() || undefined);
-      setText('');
-    } catch {
-      setError('图片读取失败，请重试');
-    }
-  }
+  const handleImageFile = React.useCallback(
+    async (file: File) => {
+      if (isDisabledRef.current) return;
+      setError(null);
+      if (file.size > MAX_IMAGE_BYTES) {
+        setError('图片超过 8 MB 大小限制，请压缩后重试');
+        return;
+      }
+      try {
+        const url = await fileToDataUrl(file);
+        // Pass current text as optional description alongside the image
+        await handleImageDrop(url, file.type, text.trim() || undefined);
+        setText('');
+      } catch {
+        setError('图片读取失败，请重试');
+      }
+    },
+    [handleImageDrop, text]
+  );
 
   function handleSend() {
     const trimmed = text.trim();
@@ -81,7 +84,7 @@ export function MessageInput() {
     setIsDragOver(false);
     if (isDisabled) return;
     const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
+    if (file?.type.startsWith('image/')) {
       await handleImageFile(file);
     }
   }
@@ -104,15 +107,12 @@ export function MessageInput() {
     }
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [handleImageFile]);
 
   return (
     <div className="border-t border-border-subtle p-s-3 flex flex-col gap-s-2">
       {error && (
-        <div className="rounded-input bg-danger/10 px-s-3 py-s-2 text-xs text-danger">
-          {error}
-        </div>
+        <div className="rounded-input bg-danger/10 px-s-3 py-s-2 text-xs text-danger">{error}</div>
       )}
 
       {/* Drop zone */}
@@ -123,9 +123,7 @@ export function MessageInput() {
         onDrop={handleDrop}
         className={cn(
           'rounded-input border-2 border-dashed px-s-3 py-s-2 text-center text-xs text-ink-faint transition-colors duration-fast',
-          isDragOver
-            ? 'border-accent bg-accent/5 text-accent'
-            : 'border-border-subtle'
+          isDragOver ? 'border-accent bg-accent/5 text-accent' : 'border-border-subtle'
         )}
       >
         拖拽或粘贴图片至此

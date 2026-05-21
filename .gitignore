@@ -4,6 +4,7 @@ node_modules/
 dist/
 .next/
 .turbo/
+*.tsbuildinfo
 # Keep pnpm-lock.yaml and uv.lock; ignore other lock files
 yarn.lock
 package-lock.json
@@ -34,9 +35,26 @@ data/config.yaml
 # Docker volumes
 volumes/
 
-# OMC orchestration state — local-only, never committed
+# Local orchestration / QA output — never committed
 .omc/
+.omx/
+.playwright-cli/
+output/
+playwright-report/
+test-results/
+*.log
 
+# Non-runtime development artifacts kept out of the remote repo
+demo/
+docs/adr/
+docs/assets/
+apps/**/README.md
 tests/
-.omc
+**/tests/
+**/__tests__/
+*.test.*
+*.spec.*
+apps/web/tests/
+scripts/
+
 data/

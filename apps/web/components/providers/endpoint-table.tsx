@@ -13,12 +13,7 @@ const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
 // Mirrors REQUIRED_ROLES in services/providers/registry.py — these cannot be
 // deleted because the registry refuses to boot if any is absent (ADR-005).
-const REQUIRED_ROLES = new Set([
-  'vision',
-  'llm',
-  'image',
-  'compliance_screen',
-]);
+const REQUIRED_ROLES = new Set(['vision', 'llm', 'image', 'compliance_screen']);
 
 export interface EndpointRow {
   endpoint_id: string;
@@ -122,103 +117,116 @@ export function EndpointTable({ endpoints, health, onEdit, className }: Endpoint
 
   return (
     <>
-    {error ? (
-      <p className="mb-s-2 font-mono text-xs text-danger" role="alert">
-        {error}
-      </p>
-    ) : null}
-    <div className="overflow-x-auto">
-    <table
-      aria-label={t('page_title')}
-      className={cn('min-w-[760px] w-full border-collapse text-sm text-ink-secondary', className)}
-    >
-      <thead>
-        <tr className="border-b border-border-subtle text-xs uppercase tracking-wider text-ink-faint">
-          <th className="px-s-3 py-s-2 text-left font-medium">{t('table_col_role')}</th>
-          <th className="px-s-3 py-s-2 text-left font-medium">{t('table_col_name')}</th>
-          <th className="px-s-3 py-s-2 text-left font-medium">URL</th>
-          <th className="px-s-3 py-s-2 text-left font-medium">{t('table_col_status')}</th>
-          <th className="px-s-3 py-s-2 text-right font-medium">{t('table_col_latency')}</th>
-          <th className="px-s-3 py-s-2 text-right font-medium">操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        {endpoints.map((row) => {
-          const h = healthByRole.get(row.role);
-          const probeRow = probeByRole.get(row.role);
-          const isTesting = probe.isPending && probe.variables === row.role;
-          const testError = probe.isError && probe.variables === row.role ? probe.error.message : null;
-          const kind = testError ? 'error' : probeRow ? (probeRow.ok ? 'ok' : 'error') : statusKind(h?.status ?? null);
-          const latencyMs = probeRow ? probeRow.latency_ms : h?.latency_ms;
-          const isUnbound = (h?.unbound?.length ?? 0) > 0;
-          const isRequired = REQUIRED_ROLES.has(row.role);
-          return (
-            <tr key={`${row.role}-${row.endpoint_id}`} className="border-b border-border-hair">
-              <td className="px-s-3 py-s-2 font-mono text-xs text-ink-secondary">{row.role}</td>
-              <td className="px-s-3 py-s-2 text-ink-primary">{row.endpoint_id}</td>
-              <td className="px-s-3 py-s-2 font-mono text-xs text-ink-muted">
-                {row.base_url ?? '—'}
-              </td>
-              <td className="px-s-3 py-s-2">
-                <div className="flex flex-col items-start gap-s-1">
-                  <StatusChip status={kind} label={isTesting ? '测试中' : statusLabelFor[kind]} />
-                  {testError || (probeRow && !probeRow.ok) ? (
-                    <span className="font-mono text-xs text-danger">
-                      {testError ?? probeRow?.error ?? 'unknown'}
-                    </span>
-                  ) : null}
-                </div>
-              </td>
-              <td className="px-s-3 py-s-2 text-right font-mono text-xs text-ink-muted">
-                {latencyMs != null ? `${latencyMs} ms` : '—'}
-              </td>
-              <td className="px-s-3 py-s-2 text-right">
-                {isUnbound ? (
-                  <span className="font-mono text-xs text-ink-faint">未绑定</span>
-                ) : (
-                  <div className="flex justify-end gap-s-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={isTesting}
-                      onClick={() => probe.mutate(row.role)}
-                      aria-label={`Test ${row.role}`}
-                    >
-                      {isTesting ? '测试中…' : '测试调用'}
-                    </Button>
-                    {onEdit ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onEdit(row.role)}
-                        aria-label={`Edit ${row.role}`}
-                      >
-                        编辑
-                      </Button>
-                    ) : null}
-                    {!isRequired ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={pendingRole === row.role}
-                        onClick={() => handleDelete(row.role)}
-                        aria-label={`Delete ${row.role}`}
-                      >
-                        {pendingRole === row.role ? '删除中…' : '删除'}
-                      </Button>
-                    ) : null}
-                  </div>
-                )}
-              </td>
+      {error ? (
+        <p className="mb-s-2 font-mono text-xs text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="overflow-x-auto">
+        <table
+          aria-label={t('page_title')}
+          className={cn(
+            'min-w-[760px] w-full border-collapse text-sm text-ink-secondary',
+            className
+          )}
+        >
+          <thead>
+            <tr className="border-b border-border-subtle text-xs uppercase tracking-wider text-ink-faint">
+              <th className="px-s-3 py-s-2 text-left font-medium">{t('table_col_role')}</th>
+              <th className="px-s-3 py-s-2 text-left font-medium">{t('table_col_name')}</th>
+              <th className="px-s-3 py-s-2 text-left font-medium">URL</th>
+              <th className="px-s-3 py-s-2 text-left font-medium">{t('table_col_status')}</th>
+              <th className="px-s-3 py-s-2 text-right font-medium">{t('table_col_latency')}</th>
+              <th className="px-s-3 py-s-2 text-right font-medium">操作</th>
             </tr>
-          );
-        })}
-      </tbody>
-    </table>
-    </div>
+          </thead>
+          <tbody>
+            {endpoints.map((row) => {
+              const h = healthByRole.get(row.role);
+              const probeRow = probeByRole.get(row.role);
+              const isTesting = probe.isPending && probe.variables === row.role;
+              const testError =
+                probe.isError && probe.variables === row.role ? probe.error.message : null;
+              const kind = testError
+                ? 'error'
+                : probeRow
+                  ? probeRow.ok
+                    ? 'ok'
+                    : 'error'
+                  : statusKind(h?.status ?? null);
+              const latencyMs = probeRow ? probeRow.latency_ms : h?.latency_ms;
+              const isUnbound = (h?.unbound?.length ?? 0) > 0;
+              const isRequired = REQUIRED_ROLES.has(row.role);
+              return (
+                <tr key={`${row.role}-${row.endpoint_id}`} className="border-b border-border-hair">
+                  <td className="px-s-3 py-s-2 font-mono text-xs text-ink-secondary">{row.role}</td>
+                  <td className="px-s-3 py-s-2 text-ink-primary">{row.endpoint_id}</td>
+                  <td className="px-s-3 py-s-2 font-mono text-xs text-ink-muted">
+                    {row.base_url ?? '—'}
+                  </td>
+                  <td className="px-s-3 py-s-2">
+                    <div className="flex flex-col items-start gap-s-1">
+                      <StatusChip
+                        status={kind}
+                        label={isTesting ? '测试中' : statusLabelFor[kind]}
+                      />
+                      {testError || (probeRow && !probeRow.ok) ? (
+                        <span className="font-mono text-xs text-danger">
+                          {testError ?? probeRow?.error ?? 'unknown'}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="px-s-3 py-s-2 text-right font-mono text-xs text-ink-muted">
+                    {latencyMs != null ? `${latencyMs} ms` : '—'}
+                  </td>
+                  <td className="px-s-3 py-s-2 text-right">
+                    {isUnbound ? (
+                      <span className="font-mono text-xs text-ink-faint">未绑定</span>
+                    ) : (
+                      <div className="flex justify-end gap-s-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={isTesting}
+                          onClick={() => probe.mutate(row.role)}
+                          aria-label={`Test ${row.role}`}
+                        >
+                          {isTesting ? '测试中…' : '测试调用'}
+                        </Button>
+                        {onEdit ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onEdit(row.role)}
+                            aria-label={`Edit ${row.role}`}
+                          >
+                            编辑
+                          </Button>
+                        ) : null}
+                        {!isRequired ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={pendingRole === row.role}
+                            onClick={() => handleDelete(row.role)}
+                            aria-label={`Delete ${row.role}`}
+                          >
+                            {pendingRole === row.role ? '删除中…' : '删除'}
+                          </Button>
+                        ) : null}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

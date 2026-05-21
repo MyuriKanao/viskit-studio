@@ -1,5 +1,6 @@
 'use client';
 
+import { Trash2 } from 'lucide-react';
 import * as React from 'react';
 
 import { ComplianceRing } from '@/components/atoms/compliance-ring';
@@ -13,6 +14,8 @@ export interface KitCardProps {
   kit: KitListItem;
   locale: 'zh' | 'en';
   onClick?: () => void;
+  onDeleteImage?: (imageId: string) => void;
+  deleteImageLabel?: string;
 }
 
 type KitStatus = 'ok' | 'warn' | 'error' | 'pending';
@@ -39,6 +42,10 @@ function statusLabel(raw: string): string {
  * Render a single 7x2 thumbnail collage cell.  A null/empty path keeps the
  * surface-03 placeholder so the grid never collapses.
  */
+function imageIdForIndex(index: number): string {
+  return index < 5 ? `H${index + 1}` : `M${index - 4}`;
+}
+
 function Cell({ src }: { src: string | null | undefined }) {
   if (!src) {
     return <span aria-hidden="true" className="block h-full w-full bg-surface-03" />;
@@ -53,51 +60,76 @@ function Cell({ src }: { src: string | null | undefined }) {
   );
 }
 
-export function KitCard({ kit, locale, onClick }: KitCardProps) {
+export function KitCard({ kit, locale, onClick, onDeleteImage, deleteImageLabel }: KitCardProps) {
   const displayName = locale === 'zh' ? kit.name : (kit.name_en ?? kit.name);
   const thumbs = (kit.thumbs ?? []).slice(0, 14);
   while (thumbs.length < 14) thumbs.push(null);
   const localeBadge: 'zh' | 'en' = (kit.locale ?? '').toLowerCase().startsWith('en') ? 'en' : 'zh';
   const kind = statusKind(kit.status);
   return (
-    <button
-      type="button"
-      aria-label={`${displayName} ${kit.sku}`}
-      onClick={onClick}
-      className={cn(
-        'group flex flex-col gap-s-2 rounded-card border border-border-subtle bg-surface-01 p-s-3 text-left transition-colors duration-fast hover:border-border-strong hover:bg-surface-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-ink-base'
-      )}
-    >
-      <div className="grid grid-cols-7 grid-rows-2 gap-s-1 overflow-hidden rounded-input border border-border-hair">
-        {thumbs.map((t, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: positional collage cell
-          <div key={i} className="aspect-square overflow-hidden bg-surface-02">
-            <Cell src={t} />
+    <div className="group/card relative">
+      <button
+        type="button"
+        aria-label={`${displayName} ${kit.sku}`}
+        onClick={onClick}
+        className={cn(
+          'flex w-full cursor-pointer flex-col gap-s-2 rounded-card border border-border-subtle bg-surface-01 p-s-3 text-left transition-colors duration-fast hover:border-border-strong hover:bg-surface-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-ink-base'
+        )}
+      >
+        <div className="grid grid-cols-7 grid-rows-2 gap-s-1 overflow-hidden rounded-input border border-border-hair">
+          {thumbs.map((t, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: positional collage cell
+            <div key={i} className="aspect-square overflow-hidden bg-surface-02">
+              <Cell src={t} />
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-s-1">
+          <div className="flex items-baseline justify-between gap-s-2">
+            <span className="truncate text-sm font-medium text-ink-primary">{displayName}</span>
+            <span className="font-mono text-xs text-ink-faint">{kit.sku}</span>
           </div>
-        ))}
-      </div>
-      <div className="flex flex-col gap-s-1">
-        <div className="flex items-baseline justify-between gap-s-2">
-          <span className="truncate text-sm font-medium text-ink-primary">{displayName}</span>
-          <span className="font-mono text-xs text-ink-faint">{kit.sku}</span>
+          <div className="flex items-center gap-s-2">
+            <StatusChip status={kind} label={statusLabel(kit.status)} />
+            <LocaleFlag locale={localeBadge} />
+            <span className="flex-1" />
+            {kit.score !== null ? (
+              <>
+                <ComplianceRing score={kit.score} size={28} />
+                <span className="font-mono text-xs text-ink-muted">{kit.score}</span>
+              </>
+            ) : (
+              <span
+                aria-label="Compliance score computing"
+                className="inline-block h-7 w-7 animate-pulse rounded-pill bg-surface-03"
+              />
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-s-2">
-          <StatusChip status={kind} label={statusLabel(kit.status)} />
-          <LocaleFlag locale={localeBadge} />
-          <span className="flex-1" />
-          {kit.score !== null ? (
-            <>
-              <ComplianceRing score={kit.score} size={28} />
-              <span className="font-mono text-xs text-ink-muted">{kit.score}</span>
-            </>
-          ) : (
-            <span
-              aria-label="Compliance score computing"
-              className="inline-block h-7 w-7 animate-pulse rounded-pill bg-surface-03"
-            />
-          )}
+      </button>
+      {onDeleteImage ? (
+        <div className="pointer-events-none absolute left-s-3 right-s-3 top-s-3 grid grid-cols-7 grid-rows-2 gap-s-1 overflow-hidden rounded-input">
+          {thumbs.map((thumb, index) => {
+            const imageId = imageIdForIndex(index);
+            return (
+              // biome-ignore lint/suspicious/noArrayIndexKey: positional collage cell
+              <div key={index} className="aspect-square">
+                {thumb ? (
+                  <button
+                    type="button"
+                    aria-label={`${deleteImageLabel ?? 'Delete image'} ${imageId}`}
+                    title={`${deleteImageLabel ?? 'Delete image'} ${imageId}`}
+                    onClick={() => onDeleteImage(imageId)}
+                    className="pointer-events-auto float-right mr-0.5 mt-0.5 grid h-5 w-5 place-items-center rounded-input border border-danger/40 bg-ink-base/80 text-danger shadow-sm transition-colors duration-fast hover:bg-danger hover:text-white focus:outline-none focus:ring-2 focus:ring-danger"
+                  >
+                    <Trash2 aria-hidden="true" className="h-3 w-3" />
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
-      </div>
-    </button>
+      ) : null}
+    </div>
   );
 }

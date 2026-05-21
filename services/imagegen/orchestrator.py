@@ -145,6 +145,7 @@ class OrchestratorResult:
     needs_review: bool
     abort_reason: str | None
     max_concurrent_observed: int
+    template_snapshot: dict[str, Any] | None = None
 
 
 # ``(binding, role) -> adapter_instance`` — adapter must satisfy the ImageGen
@@ -184,9 +185,7 @@ def capture_snapshot(registry: Any, *, cap: int = 4) -> RoutingSnapshot:
                     role=role,
                 )
         providers[role] = ProviderBinding(
-            protocol=cast(
-                Literal["openai_compatible", "anthropic_compatible"], protocol
-            ),
+            protocol=cast(Literal["openai_compatible", "anthropic_compatible"], protocol),
             base_url=entry["base_url"],
             api_key_env_var=entry["api_key_env"],
             model=entry["model"],
@@ -226,6 +225,7 @@ def default_adapter_factory(registry: Any) -> AdapterFactory:
     returns Fake adapters keyed by ``binding.model`` so snapshot vs
     current-registry behaviour can be exercised without real network.
     """
+
     def _factory(binding: ProviderBinding, role: str) -> Any:
         return registry.get(role)
 
@@ -404,9 +404,7 @@ def _build_env_var_cost_event(
 # ---------------------------------------------------------------------------
 
 
-def _output_path_for_section(
-    output_dir: Path, kit_id: str, image_id: str
-) -> Path:
+def _output_path_for_section(output_dir: Path, kit_id: str, image_id: str) -> Path:
     sub = "hero" if image_id.startswith("H") else "detail"
     return output_dir / "kits" / kit_id / sub / f"{image_id}.png"
 
@@ -490,9 +488,7 @@ async def _run_one_image_with_retry(
 
     # Real factory call returns the adapter for this binding.
     adapter = adapter_factory(binding, payload.role)
-    output_path = _output_path_for_section(
-        output_dir, payload.kit_id, payload.image_id
-    )
+    output_path = _output_path_for_section(output_dir, payload.kit_id, payload.image_id)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     await _publish(
@@ -519,9 +515,7 @@ async def _run_one_image_with_retry(
             "brand_color_locked": False,
             "png_path": None,
         }
-        loop.call_soon_threadsafe(
-            lambda: asyncio.create_task(_publish(bus, payload.kit_id, event))
-        )
+        loop.call_soon_threadsafe(lambda: asyncio.create_task(_publish(bus, payload.kit_id, event)))
 
     for attempt in range(2):
         try:
@@ -657,7 +651,9 @@ def _build_locked_prompts(
     )
     out: list[tuple[HeroSection | DetailSection, str, Template, str]] = []
     for hero in inputs.spec.hero_sections:
-        template = load_template_for_section(hero.id, inputs.locale)
+        template = (inputs.template_by_section or {}).get(hero.id)
+        if template is None:
+            template = load_template_for_section(hero.id, inputs.locale)
         body = build_prompt(
             PromptInputs(
                 template=template,
@@ -670,7 +666,9 @@ def _build_locked_prompts(
         )
         out.append((hero, apply_lock(lock, body), template, HERO_SIZE))
     for detail in inputs.spec.detail_sections:
-        template = load_template_for_section(detail.id, inputs.locale)
+        template = (inputs.template_by_section or {}).get(detail.id)
+        if template is None:
+            template = load_template_for_section(detail.id, inputs.locale)
         body = build_prompt(
             PromptInputs(
                 template=template,
@@ -725,9 +723,7 @@ def _write_compliance_json(
     if key_resolution is not None:
         data["key_resolution"] = key_resolution
     path = kit_root / "compliance.json"
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
 
 
@@ -764,9 +760,7 @@ def _write_cost_json(*, kit_root: Path, events: list[dict[str, Any]]) -> Path:
             {
                 "events": events,
                 "total": total,
-                "by_role": [
-                    {"role": role, "usd": usd} for role, usd in sorted(by_role.items())
-                ],
+                "by_role": [{"role": role, "usd": usd} for role, usd in sorted(by_role.items())],
                 "version": 1,
                 "written_at": _now_iso(),
             },
@@ -798,17 +792,13 @@ async def orchestrate_kit(
     kit_root = inputs.output_dir / "kits" / inputs.kit_id
 
     # ----- 1. Build the 14 locked prompts ---------------------------------
-    rendered = _build_locked_prompts(
-        inputs, secondary_color_hex=secondary_color_hex
-    )
+    rendered = _build_locked_prompts(inputs, secondary_color_hex=secondary_color_hex)
     prompt_strs = [body for (_, body, _, _) in rendered]
 
     # ----- 2. Pre-flight gate (US-4B.4 — always invoked) ------------------
     # Propagates ProviderConfigError ERR-PROV-001 if compliance_screen is
     # unbound at runtime (defence-in-depth).
-    preflight_result = run_preflight(
-        prompt_strs, registry=registry, locale=inputs.locale
-    )
+    preflight_result = run_preflight(prompt_strs, registry=registry, locale=inputs.locale)
     preflight_event = _build_preflight_cost_event(
         kit_id=inputs.kit_id,
         cost_usd=preflight_result.cost_estimate_usd,
@@ -825,9 +815,7 @@ async def orchestrate_kit(
             scorecard=_score_generated_spec(inputs),
             key_resolution=None,
         )
-        cost_path = _write_cost_json(
-            kit_root=kit_root, events=[preflight_event]
-        )
+        cost_path = _write_cost_json(kit_root=kit_root, events=[preflight_event])
         if event_bus is not None:
             await event_bus.publish(
                 inputs.kit_id,
@@ -967,9 +955,7 @@ async def orchestrate_kit(
     return OrchestratorResult(
         kit_id=inputs.kit_id,
         png_paths=tuple(png_paths_list),
-        image_paths_by_id={
-            img_id: outcomes_by_id[img_id].png_path for img_id in ordered_ids
-        },
+        image_paths_by_id={img_id: outcomes_by_id[img_id].png_path for img_id in ordered_ids},
         compliance_path=compliance_path,
         cost_path=cost_path,
         color_lock_summary=summary,

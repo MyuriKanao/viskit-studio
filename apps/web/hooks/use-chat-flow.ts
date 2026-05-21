@@ -176,10 +176,12 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
       const pointTexts = inferred.selling_points
         .map((sp) => sellingPointValue(sp.value))
         .filter(Boolean);
-      const fallbackPoint = [inferred.brand.value, inferred.category.value, promptText]
-        .filter(Boolean)
-        .join(' ') || '商品基础展示';
-      const sellingPoints: KitSellingPoint[] = (pointTexts.length > 0 ? pointTexts : [fallbackPoint])
+      const fallbackPoint =
+        [inferred.brand.value, inferred.category.value, promptText].filter(Boolean).join(' ') ||
+        '商品基础展示';
+      const sellingPoints: KitSellingPoint[] = (
+        pointTexts.length > 0 ? pointTexts : [fallbackPoint]
+      )
         .filter(Boolean)
         .map((point) => ({
           title: point,
@@ -211,6 +213,8 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
           style_prompt: [promptText, ...inferred.selling_points.map((sp) => sp.value)]
             .filter(Boolean)
             .join('、'),
+          template_scheme_ref: inferred.template_scheme_ref ?? null,
+          template_slot_overrides: inferred.template_slot_overrides ?? {},
           onProgress: (e: ProgressEvent) => {
             onProgress?.(e);
             const existingId = progressMessages.get(e.slot);

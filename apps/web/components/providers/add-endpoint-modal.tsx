@@ -1,20 +1,17 @@
 'use client';
 
-import { RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { RefreshCw } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { type ConfigSaveError, useConfigSave } from '@/hooks/use-config-save';
 import { useProviderProbe } from '@/hooks/use-provider-probe';
 
 export interface AddEndpointModalProps {
   open: boolean;
   onClose: () => void;
-  currentYaml: string;
-  currentSha: string;
   /** When set, modal opens in edit mode and pre-fills from GET /endpoints/{role}. */
   editingRole?: string | null;
 }
@@ -44,21 +41,12 @@ const ROLES = ['vision', 'llm', 'image', 'compliance_screen'];
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
-async function persistSecret(form: FormState): Promise<string> {
-  const response = await fetch(`${baseUrl}/api/providers/secrets`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: form.role, name: form.name, api_key: form.api_key }),
-  });
-  if (!response.ok) throw new Error(`Save secret failed (${response.status})`);
-  const body = (await response.json()) as { api_key_env: string };
-  return body.api_key_env;
-}
-
-async function fetchConfigState(): Promise<{ yaml: string; sha256: string }> {
-  const response = await fetch(`${baseUrl}/api/providers/config-state`, { cache: 'no-store' });
-  if (!response.ok) throw new Error(`Read config failed (${response.status})`);
-  return (await response.json()) as { yaml: string; sha256: string };
+function roleDescriptionKey(role: string): string {
+  if (role === 'vision') return 'role_description_vision';
+  if (role === 'llm') return 'role_description_llm';
+  if (role === 'image') return 'role_description_image';
+  if (role === 'compliance_screen') return 'role_description_compliance_screen';
+  return 'role_description_custom';
 }
 
 interface EndpointStanza {
@@ -69,10 +57,10 @@ interface EndpointStanza {
 }
 
 async function fetchEndpoint(role: string, signal?: AbortSignal): Promise<EndpointStanza> {
-  const response = await fetch(
-    `${baseUrl}/api/providers/endpoints/${encodeURIComponent(role)}`,
-    { cache: 'no-store', signal }
-  );
+  const response = await fetch(`${baseUrl}/api/providers/endpoints/${encodeURIComponent(role)}`, {
+    cache: 'no-store',
+    signal,
+  });
   if (!response.ok) throw new Error(`Read endpoint failed (${response.status})`);
   return (await response.json()) as EndpointStanza;
 }
@@ -86,36 +74,29 @@ async function putEndpoint(role: string, body: object): Promise<void> {
   if (!response.ok) throw new Error(`Update failed (${response.status})`);
 }
 
-/**
- * Append a new provider stanza to the current YAML body and POST to
- * /api/providers/endpoints. On 409, dispatches a window 'provider-conflict'
- * event carrying the typed error so the parent page can open the
- * ConflictResolutionDialog.
- */
-function buildNextYaml(currentYaml: string, form: FormState, apiKeyEnv: string): string {
-  const stanza = [
-    `  ${form.role}:`,
-    `    protocol: ${form.protocol}`,
-    `    base_url: ${form.base_url}`,
-    `    api_key_env: ${apiKeyEnv}`,
-    `    model: ${form.model}`,
-  ].join('\n');
-  // Ensure single trailing newline before appending.
-  const trimmed = currentYaml.replace(/\n*$/, '\n');
-  return `${trimmed}\n# Added via UI: ${form.name}\n${stanza}\n`;
+async function postEndpoint(role: string, body: object): Promise<void> {
+  const response = await fetch(`${baseUrl}/api/providers/endpoints/${encodeURIComponent(role)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let detail = `Create failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (typeof payload.detail === 'string') detail = payload.detail;
+    } catch {
+      // Keep the status-code fallback for non-JSON responses.
+    }
+    throw new Error(detail);
+  }
 }
 
-export function AddEndpointModal({
-  open,
-  onClose,
-  currentYaml,
-  currentSha,
-  editingRole,
-}: AddEndpointModalProps) {
+export function AddEndpointModal({ open, onClose, editingRole }: AddEndpointModalProps) {
   const t = useTranslations('providers');
   const [form, setForm] = React.useState<FormState>(EMPTY);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
-  const save = useConfigSave();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const probe = useProviderProbe();
   const queryClient = useQueryClient();
   const isEdit = Boolean(editingRole);
@@ -125,6 +106,7 @@ export function AddEndpointModal({
     if (!open) {
       setForm(EMPTY);
       setSubmitError(null);
+      setIsSubmitting(false);
       probeReset();
       return;
     }
@@ -177,6 +159,7 @@ export function AddEndpointModal({
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitError(null);
+    setIsSubmitting(true);
     if (isEdit && editingRole) {
       try {
         await putEndpoint(editingRole, {
@@ -190,40 +173,25 @@ export function AddEndpointModal({
         onClose();
       } catch (err) {
         setSubmitError((err as Error).message);
+      } finally {
+        setIsSubmitting(false);
       }
       return;
     }
-    // 1. Fetch the current YAML + sha to pass the CAS check.
-    // 2. Persist the inline API key to the local secrets store and get back
-    //    the auto-derived env-var name. 3. Embed that name into config.yaml.
-    let apiKeyEnv: string;
-    let state: { yaml: string; sha256: string };
     try {
-      state = await fetchConfigState();
-      apiKeyEnv = await persistSecret(form);
-    } catch (err) {
-      setSubmitError((err as Error).message);
-      return;
-    }
-    const next = buildNextYaml(state.yaml, form, apiKeyEnv);
-    try {
-      await save.mutateAsync({ new_yaml: next, expected_sha256: state.sha256 });
+      await postEndpoint(form.role, {
+        protocol: form.protocol,
+        base_url: form.base_url,
+        model: form.model,
+        name: form.name || form.role,
+        api_key: form.api_key,
+      });
       await queryClient.invalidateQueries({ queryKey: ['providers', 'health'] });
       onClose();
     } catch (err) {
-      const ce = err as ConfigSaveError;
-      if (ce.code === 'CHECKSUM_MISMATCH' || ce.code === 'INODE_CHANGED') {
-        window.dispatchEvent(
-          new CustomEvent('provider-conflict', {
-            detail: {
-              yourEdit: next,
-              onDiskYaml: ce.currentYaml ?? '',
-            },
-          })
-        );
-        onClose();
-      }
-      // 503 + UNKNOWN remain visible via save.error / save.isError on UI.
+      setSubmitError((err as Error).message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -251,6 +219,9 @@ export function AddEndpointModal({
                 </option>
               ))}
             </select>
+            <span className="leading-relaxed text-ink-faint">
+              {t(roleDescriptionKey(form.role))}
+            </span>
           </label>
           <label
             className="flex flex-col gap-s-1 text-xs text-ink-muted"
@@ -372,13 +343,6 @@ export function AddEndpointModal({
               {submitError}
             </p>
           ) : null}
-          {save.isError ? (
-            <p className="font-mono text-xs text-danger" role="alert">
-              {save.error?.code === 'CONFIG_LOCKED'
-                ? `${t('page_title')}: locked · retry in ${save.error.retryAfterS ?? 2}s`
-                : (save.error?.message ?? 'Save failed')}
-            </p>
-          ) : null}
           <div className="flex items-center justify-end gap-s-2 pt-s-2">
             <Button type="button" variant="ghost" size="sm" onClick={onClose} aria-label="Cancel">
               Cancel
@@ -387,7 +351,7 @@ export function AddEndpointModal({
               type="submit"
               variant="default"
               size="sm"
-              disabled={save.isPending}
+              disabled={isSubmitting}
               aria-label={t('save_endpoint_button')}
             >
               {t('save_endpoint_button')}

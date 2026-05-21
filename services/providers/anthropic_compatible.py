@@ -1,4 +1,4 @@
-"""Anthropic-compatible adapter for AIShop Studio.
+"""Anthropic-compatible adapter for Viskit Studio.
 
 Implements ChatLLM + VisionLLM protocols against any /v1/messages endpoint
 that follows the Anthropic Messages API shape.

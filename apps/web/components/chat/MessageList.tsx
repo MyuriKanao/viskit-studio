@@ -2,10 +2,10 @@
 
 import * as React from 'react';
 
-import { cn } from '@/lib/utils';
+import { ConfirmationCard } from '@/components/chat/ConfirmationCard';
 import { useChatStore } from '@/lib/chat/store';
 import type { ChatMessage, InferredSpec } from '@/lib/chat/types';
-import { ConfirmationCard } from '@/components/chat/ConfirmationCard';
+import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -18,7 +18,10 @@ export interface MessageListProps {
 // ---------------------------------------------------------------------------
 // Individual message bubble
 // ---------------------------------------------------------------------------
-function MessageBubble({ msg, onStart }: { msg: ChatMessage; onStart: (spec: InferredSpec) => void }) {
+function MessageBubble({
+  msg,
+  onStart,
+}: { msg: ChatMessage; onStart: (spec: InferredSpec) => void }) {
   const isUser = msg.role === 'user';
 
   // D2: card-type message renders ConfirmationCard inline
@@ -39,11 +42,7 @@ function MessageBubble({ msg, onStart }: { msg: ChatMessage; onStart: (spec: Inf
           )}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={msg.content}
-            alt="uploaded"
-            className="max-h-48 w-auto object-cover"
-          />
+          <img src={msg.content} alt="uploaded" className="max-h-48 w-auto object-cover" />
           <p className="px-s-3 py-s-2 text-xs opacity-80">图片已上传</p>
         </div>
       </div>
@@ -58,9 +57,7 @@ function MessageBubble({ msg, onStart }: { msg: ChatMessage; onStart: (spec: Inf
       <div
         className={cn(
           'max-w-[70%] rounded-xl px-s-3 py-s-2 text-sm',
-          isUser
-            ? 'bg-accent text-ink-base-l'
-            : 'bg-surface-02 text-ink-primary'
+          isUser ? 'bg-accent text-ink-base-l' : 'bg-surface-02 text-ink-primary'
         )}
       >
         {msg.content}
@@ -100,18 +97,21 @@ function CardMessage({ onStart }: { onStart: (spec: InferredSpec) => void }) {
 // ---------------------------------------------------------------------------
 export function MessageList({ onStart }: MessageListProps) {
   const messages = useChatStore((s) => s.messages);
+  const messageCount = messages.length;
   const bottomRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (messageCount >= 0) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messageCount]);
 
   return (
     <div
       data-testid="message-list"
       className="flex-1 overflow-y-auto px-s-4 py-s-4 flex flex-col gap-s-3"
     >
-      {messages.length === 0 && (
+      {messageCount === 0 && (
         <div className="flex flex-1 items-center justify-center text-sm text-ink-faint">
           上传商品图开始生成套包
         </div>

@@ -24,17 +24,14 @@ function sellingPointText(value: unknown): string {
 }
 
 async function postExtract(args: ExtractArgs): Promise<InferredSpec> {
-  const res = await fetch(
-    `${baseUrl}/api/kits/${encodeURIComponent(args.kitClientId)}/extract`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        image_url: args.imageUrl,
-        description: args.description,
-      }),
-    }
-  );
+  const res = await fetch(`${baseUrl}/api/kits/${encodeURIComponent(args.kitClientId)}/extract`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      image_url: args.imageUrl,
+      description: args.description,
+    }),
+  });
   if (!res.ok) {
     let detail = '';
     try {

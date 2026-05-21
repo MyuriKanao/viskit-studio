@@ -23,6 +23,82 @@ components:
         - locale
       title: ComplianceOut
       type: object
+    ConfigStateResponse:
+      properties:
+        sha256:
+          title: Sha256
+          type: string
+        yaml:
+          title: Yaml
+          type: string
+      required:
+        - yaml
+        - sha256
+      title: ConfigStateResponse
+      type: object
+    CopyTemplateRequest:
+      properties:
+        name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Name
+        source_ref:
+          title: Source Ref
+          type: string
+      required:
+        - source_ref
+      title: CopyTemplateRequest
+      type: object
+    CreateEndpointRequest:
+      properties:
+        api_key:
+          title: Api Key
+          type: string
+        base_url:
+          title: Base Url
+          type: string
+        model:
+          title: Model
+          type: string
+        name:
+          title: Name
+          type: string
+        protocol:
+          enum:
+            - openai_compatible
+            - anthropic_compatible
+          title: Protocol
+          type: string
+      required:
+        - protocol
+        - base_url
+        - model
+        - name
+        - api_key
+      title: CreateEndpointRequest
+      type: object
+    DeleteKitImageResponse:
+      properties:
+        deleted:
+          title: Deleted
+          type: boolean
+        file_deleted:
+          title: File Deleted
+          type: boolean
+        image_id:
+          title: Image Id
+          type: string
+        kit_id:
+          title: Kit Id
+          type: integer
+      required:
+        - kit_id
+        - image_id
+        - deleted
+        - file_deleted
+      title: DeleteKitImageResponse
+      type: object
     DetailSectionIn:
       properties:
         id:
@@ -99,6 +175,94 @@ components:
         - new_text
       title: EditRequest
       type: object
+    EndpointStanza:
+      properties:
+        api_key_env:
+          title: Api Key Env
+          type: string
+        base_url:
+          title: Base Url
+          type: string
+        model:
+          title: Model
+          type: string
+        protocol:
+          title: Protocol
+          type: string
+      required:
+        - protocol
+        - base_url
+        - api_key_env
+        - model
+      title: EndpointStanza
+      type: object
+    ExtractRequest:
+      properties:
+        description:
+          anyOf:
+            - maxLength: 2000
+              type: string
+            - type: 'null'
+          title: Description
+        image_url:
+          maxLength: 12000000
+          title: Image Url
+          type: string
+      required:
+        - image_url
+      title: ExtractRequest
+      type: object
+    ExtractResponse:
+      properties:
+        brand:
+          $ref: '#/components/schemas/FieldInference'
+        brand_color_hex:
+          $ref: '#/components/schemas/FieldInference'
+        category:
+          $ref: '#/components/schemas/FieldInference'
+        name:
+          anyOf:
+            - $ref: '#/components/schemas/FieldInference'
+            - type: 'null'
+        price:
+          anyOf:
+            - $ref: '#/components/schemas/FieldInference'
+            - type: 'null'
+        product_type:
+          $ref: '#/components/schemas/FieldInference'
+        selling_points:
+          items:
+            $ref: '#/components/schemas/FieldInference'
+          title: Selling Points
+          type: array
+      required:
+        - name
+        - brand
+        - category
+        - product_type
+        - price
+        - brand_color_hex
+        - selling_points
+      title: ExtractResponse
+      type: object
+    FieldInference:
+      properties:
+        confidence:
+          maximum: 1
+          minimum: 0
+          title: Confidence
+          type: number
+        reasoning:
+          title: Reasoning
+          type: string
+        value:
+          title: Value
+      required:
+        - value
+        - confidence
+        - reasoning
+      title: FieldInference
+      type: object
     GenerateRequest:
       properties:
         brand_color_hex:
@@ -111,6 +275,11 @@ components:
             - en
           title: Locale
           type: string
+        retrieved_bestseller_ids:
+          items:
+            type: integer
+          title: Retrieved Bestseller Ids
+          type: array
         spec:
           $ref: '#/components/schemas/SpecIn'
         style_prompt:
@@ -118,6 +287,16 @@ components:
             - type: string
             - type: 'null'
           title: Style Prompt
+        template_scheme_ref:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Template Scheme Ref
+        template_slot_overrides:
+          additionalProperties:
+            type: string
+          title: Template Slot Overrides
+          type: object
       required:
         - spec
         - brand_color_hex
@@ -283,6 +462,50 @@ components:
         - total
       title: KitListResponse
       type: object
+    KitMetaResponse:
+      description: Side-car payload for kit detail and the EPIC-9 Catalog drawer.
+      properties:
+        compliance:
+          anyOf:
+            - additionalProperties: true
+              type: object
+            - type: 'null'
+          title: Compliance
+        cost:
+          anyOf:
+            - additionalProperties: true
+              type: object
+            - type: 'null'
+          title: Cost
+        db_kit_id:
+          title: Db Kit Id
+          type: integer
+        kit_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Kit Id
+        retrieved_bestseller_ids:
+          items:
+            type: integer
+          title: Retrieved Bestseller Ids
+          type: array
+        spec:
+          anyOf:
+            - additionalProperties: true
+              type: object
+            - type: 'null'
+          title: Spec
+        spec_markdown:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Spec Markdown
+      required:
+        - db_kit_id
+        - retrieved_bestseller_ids
+      title: KitMetaResponse
+      type: object
     OcrResponse:
       properties:
         boxes:
@@ -311,8 +534,131 @@ components:
         - needs_onboarding
       title: OnboardingNeededResponse
       type: object
+    PreviewRequest:
+      properties:
+        brand_color_hex:
+          default: '#C4513A'
+          pattern: ^#[0-9A-Fa-f]{6}$
+          title: Brand Color Hex
+          type: string
+        copy:
+          default: 新品上市
+          title: Copy
+          type: string
+        design_note:
+          default: keep product centered with premium spacing
+          title: Design Note
+          type: string
+        locale:
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+        sample_brand:
+          default: 示例品牌
+          title: Sample Brand
+          type: string
+        sample_category:
+          default: 服饰
+          title: Sample Category
+          type: string
+        sample_name:
+          default: 示例商品
+          title: Sample Name
+          type: string
+        style_prompt:
+          default: warm minimalist studio, soft daylight
+          title: Style Prompt
+          type: string
+        template_ref:
+          title: Template Ref
+          type: string
+        visual:
+          default: single product hero image, clean ecommerce composition
+          title: Visual
+          type: string
+      required:
+        - template_ref
+        - locale
+      title: PreviewRequest
+      type: object
+    PreviewResponse:
+      properties:
+        cost_usd:
+          title: Cost Usd
+          type: number
+        png_path:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Png Path
+        prompt:
+          title: Prompt
+          type: string
+      required:
+        - prompt
+        - png_path
+        - cost_usd
+      title: PreviewResponse
+      type: object
+    ProbeCandidateRequest:
+      properties:
+        api_key:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Api Key
+        api_key_env:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Api Key Env
+        base_url:
+          title: Base Url
+          type: string
+        protocol:
+          enum:
+            - openai_compatible
+            - anthropic_compatible
+          title: Protocol
+          type: string
+      required:
+        - protocol
+        - base_url
+      title: ProbeCandidateRequest
+      type: object
+    ProbeCandidateResponse:
+      properties:
+        error:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Error
+        latency_ms:
+          title: Latency Ms
+          type: integer
+        models:
+          items:
+            type: string
+          title: Models
+          type: array
+        ok:
+          title: Ok
+          type: boolean
+      required:
+        - ok
+        - latency_ms
+        - models
+      title: ProbeCandidateResponse
+      type: object
     ProviderHealthRow:
       properties:
+        base_url:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Base Url
         endpoint_id:
           title: Endpoint Id
           type: string
@@ -348,10 +694,50 @@ components:
       required:
         - endpoint_id
         - role
+        - base_url
         - status
         - latency_ms
         - last_check
       title: ProviderHealthRow
+      type: object
+    ProviderProbeResponse:
+      properties:
+        rows:
+          items:
+            $ref: '#/components/schemas/ProviderProbeRow'
+          title: Rows
+          type: array
+      required:
+        - rows
+      title: ProviderProbeResponse
+      type: object
+    ProviderProbeRow:
+      properties:
+        error:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Error
+        latency_ms:
+          title: Latency Ms
+          type: integer
+        models:
+          items:
+            type: string
+          title: Models
+          type: array
+        ok:
+          title: Ok
+          type: boolean
+        role:
+          title: Role
+          type: string
+      required:
+        - role
+        - ok
+        - latency_ms
+        - models
+      title: ProviderProbeRow
       type: object
     ProvidersSummaryResponse:
       properties:
@@ -449,54 +835,126 @@ components:
         new_sha256:
           title: New Sha256
           type: string
+        registry_rebooted:
+          default: true
+          title: Registry Rebooted
+          type: boolean
+        warning:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Warning
       required:
         - new_sha256
       title: SaveEndpointsResponse
       type: object
-    SearchHitOut:
+    SchemePayload:
       properties:
-        image_url:
-          title: Image Url
+        description:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Description
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        locale:
+          enum:
+            - zh
+            - en
+          title: Locale
           type: string
-        metadata:
-          additionalProperties: true
-          title: Metadata
-          type: object
-        score:
-          title: Score
-          type: number
-      required:
-        - image_url
-        - score
-        - metadata
-      title: SearchHitOut
-      type: object
-    SearchRequest:
-      properties:
-        filters:
-          $ref: '#/components/schemas/_Filters'
-          default: {}
-        image:
-          title: Image
+        name:
+          minLength: 1
+          title: Name
           type: string
-        top_k:
-          default: 10
-          title: Top K
-          type: integer
-      required:
-        - image
-      title: SearchRequest
-      type: object
-    SearchResponse:
-      properties:
-        hits:
+        slots:
           items:
-            $ref: '#/components/schemas/SearchHitOut'
-          title: Hits
+            $ref: '#/components/schemas/SchemeSlot'
+          maxItems: 14
+          minItems: 14
+          title: Slots
           type: array
       required:
-        - hits
-      title: SearchResponse
+        - locale
+        - name
+        - slots
+      title: SchemePayload
+      type: object
+    SchemeSlot:
+      properties:
+        slot_id:
+          enum:
+            - H1
+            - H2
+            - H3
+            - H4
+            - H5
+            - M1
+            - M2
+            - M3
+            - M4
+            - M5
+            - M6
+            - M7
+            - M8
+            - M9
+          title: Slot Id
+          type: string
+        template_ref:
+          title: Template Ref
+          type: string
+      required:
+        - slot_id
+        - template_ref
+      title: SchemeSlot
+      type: object
+    SchemeSummary:
+      properties:
+        description:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Description
+        editable:
+          default: true
+          title: Editable
+          type: boolean
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        id:
+          title: Id
+          type: string
+        locale:
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+        name:
+          title: Name
+          type: string
+        slots:
+          items:
+            $ref: '#/components/schemas/SchemeSlot'
+          title: Slots
+          type: array
+        source:
+          default: custom
+          enum:
+            - built_in
+            - custom
+          title: Source
+          type: string
+      required:
+        - id
+        - name
+        - locale
+        - slots
+      title: SchemeSummary
       type: object
     SellingPointIn:
       properties:
@@ -519,6 +977,65 @@ components:
         - evidence
       title: SellingPointIn
       type: object
+    SettingsResponse:
+      description: Post-write snapshot of the 4 workspace-level fields.
+      properties:
+        brand_color:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Brand Color
+        default_locale:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Default Locale
+        export_preset:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Export Preset
+        monthly_cap_usd:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Monthly Cap Usd
+      required:
+        - brand_color
+        - default_locale
+        - monthly_cap_usd
+        - export_preset
+      title: SettingsResponse
+      type: object
+    SettingsUpdate:
+      description: All four fields optional — only the provided keys get merged.
+      properties:
+        brand_color:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Brand Color
+        default_locale:
+          anyOf:
+            - enum:
+                - zh
+                - en
+              type: string
+            - type: 'null'
+          title: Default Locale
+        export_preset:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Export Preset
+        monthly_cap_usd:
+          anyOf:
+            - minimum: 0
+              type: number
+            - type: 'null'
+          title: Monthly Cap Usd
+      title: SettingsUpdate
+      type: object
     SkuMetaIn:
       properties:
         brand:
@@ -528,8 +1045,10 @@ components:
           title: Category
           type: string
         name:
+          anyOf:
+            - type: string
+            - type: 'null'
           title: Name
-          type: string
         price:
           title: Price
           type: number
@@ -542,11 +1061,11 @@ components:
           title: Product Type
           type: string
         sku:
+          anyOf:
+            - type: string
+            - type: 'null'
           title: Sku
-          type: string
       required:
-        - sku
-        - name
         - brand
         - category
         - product_type
@@ -688,41 +1207,67 @@ components:
         - compliance
       title: SpecResponse
       type: object
-    StylePromptHitIn:
-      description: |-
-        A single retrieval hit accepted by ``POST /api/retrieval/style-prompt``.
-
-        Mirrors :class:`SearchHitOut` from the ``/search`` response so the wizard
-        can pass selected hits straight through. ``image_path`` is optional —
-        the synthesiser only uses ``image_url`` + ``score`` — but we accept it
-        when present so round-tripping a search result loses no fields.
+    StoreSecretRequest:
       properties:
-        image_path:
-          default: ''
-          title: Image Path
+        api_key:
+          title: Api Key
           type: string
-        image_url:
-          title: Image Url
+        name:
+          title: Name
           type: string
-        metadata:
-          additionalProperties: true
-          title: Metadata
-          type: object
-        score:
-          title: Score
-          type: number
+        role:
+          title: Role
+          type: string
       required:
-        - image_url
-        - score
-      title: StylePromptHitIn
+        - role
+        - name
+        - api_key
+      title: StoreSecretRequest
       type: object
-    StylePromptRequest:
+    StoreSecretResponse:
       properties:
-        hits:
+        api_key_env:
+          title: Api Key Env
+          type: string
+      required:
+        - api_key_env
+      title: StoreSecretResponse
+      type: object
+    TemplatePayload:
+      properties:
+        category:
+          default: lifestyle
+          enum:
+            - hero
+            - detail_m3
+            - lifestyle
+            - short_video
+            - amazon_hero
+          title: Category
+          type: string
+        category_tips:
+          additionalProperties:
+            type: string
+          title: Category Tips
+          type: object
+        defaults:
+          additionalProperties:
+            type: string
+          title: Defaults
+          type: object
+        description:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Description
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        examples:
           items:
-            $ref: '#/components/schemas/StylePromptHitIn'
-          minItems: 1
-          title: Hits
+            type: string
+          title: Examples
           type: array
         locale:
           enum:
@@ -730,19 +1275,201 @@ components:
             - en
           title: Locale
           type: string
-      required:
-        - hits
-        - locale
-      title: StylePromptRequest
-      type: object
-    StylePromptResponse:
-      properties:
-        style_prompt:
-          title: Style Prompt
+        name:
+          minLength: 1
+          title: Name
           type: string
+        prompt_template:
+          additionalProperties:
+            type: string
+          minProperties: 1
+          title: Prompt Template
+          type: object
+        supports_image_reference:
+          default: false
+          title: Supports Image Reference
+          type: boolean
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        variants:
+          additionalProperties: true
+          title: Variants
+          type: object
       required:
-        - style_prompt
-      title: StylePromptResponse
+        - locale
+        - name
+        - prompt_template
+      title: TemplatePayload
+      type: object
+    TemplateSummary:
+      properties:
+        category:
+          enum:
+            - hero
+            - detail_m3
+            - lifestyle
+            - short_video
+            - amazon_hero
+          title: Category
+          type: string
+        copyable:
+          default: true
+          title: Copyable
+          type: boolean
+        defaults:
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
+          title: Defaults
+        description:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Description
+        editable:
+          default: false
+          title: Editable
+          type: boolean
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        examples:
+          items:
+            type: string
+          title: Examples
+          type: array
+        id:
+          title: Id
+          type: string
+        locale:
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+        name:
+          title: Name
+          type: string
+        name_en:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Name En
+        prompt_template:
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
+          title: Prompt Template
+        source:
+          default: built_in
+          enum:
+            - built_in
+            - custom
+          title: Source
+          type: string
+        tags:
+          items:
+            type: string
+          title: Tags
+          type: array
+        thumbnail_url:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Thumbnail Url
+      required:
+        - id
+        - name
+        - category
+        - tags
+        - locale
+        - description
+        - thumbnail_url
+      title: TemplateSummary
+      type: object
+    TemplateUpdate:
+      properties:
+        category:
+          anyOf:
+            - enum:
+                - hero
+                - detail_m3
+                - lifestyle
+                - short_video
+                - amazon_hero
+              type: string
+            - type: 'null'
+          title: Category
+        category_tips:
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
+          title: Category Tips
+        defaults:
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
+          title: Defaults
+        description:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Description
+        enabled:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+          title: Enabled
+        examples:
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+          title: Examples
+        name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Name
+        prompt_template:
+          anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: 'null'
+          title: Prompt Template
+        supports_image_reference:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+          title: Supports Image Reference
+        tags:
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+          title: Tags
+        variants:
+          anyOf:
+            - additionalProperties: true
+              type: object
+            - type: 'null'
+          title: Variants
+      title: TemplateUpdate
       type: object
     TextBoxOut:
       properties:
@@ -812,6 +1539,35 @@ components:
         - copy
         - design_note
       title: ThreePieceOut
+      type: object
+    UpdateEndpointRequest:
+      properties:
+        api_key:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Api Key
+        base_url:
+          title: Base Url
+          type: string
+        model:
+          title: Model
+          type: string
+        name:
+          title: Name
+          type: string
+        protocol:
+          enum:
+            - openai_compatible
+            - anthropic_compatible
+          title: Protocol
+          type: string
+      required:
+        - protocol
+        - base_url
+        - model
+        - name
+      title: UpdateEndpointRequest
       type: object
     ValidationError:
       properties:
@@ -897,37 +1653,8 @@ components:
         - sparks
       title: WeeklyMetricsResponse
       type: object
-    _Filters:
-      properties:
-        category:
-          anyOf:
-            - type: string
-            - type: 'null'
-          title: Category
-        fallback_locale:
-          anyOf:
-            - type: string
-            - type: 'null'
-          title: Fallback Locale
-        locale:
-          anyOf:
-            - type: string
-            - type: 'null'
-          title: Locale
-        min_sales:
-          anyOf:
-            - type: integer
-            - type: 'null'
-          title: Min Sales
-        season:
-          anyOf:
-            - type: string
-            - type: 'null'
-          title: Season
-      title: _Filters
-      type: object
 info:
-  title: AIShop Studio API
+  title: Viskit Studio API
   version: 0.1.0
 openapi: 3.1.0
 paths:
@@ -1097,6 +1824,15 @@ paths:
               - type: 'null'
             title: Category
         - in: query
+          name: sku
+          required: false
+          schema:
+            anyOf:
+              - maxLength: 64
+                type: string
+              - type: 'null'
+            title: Sku
+        - in: query
           name: sort
           required: false
           schema:
@@ -1133,6 +1869,81 @@ paths:
       summary: List Kits
       tags:
         - imagegen
+  /api/kits/_warmup/extract:
+    get:
+      description: |-
+        Prime the vision provider connection so the first /extract call is warm.
+
+        Deliberately uses probe(timeout=5) — a 5s deviation from the 30s default
+        because this is a best-effort fire-and-forget warmup; we swallow all
+        failures and always return 204 so the frontend never sees an error.
+      operationId: warmup_extract_api_kits__warmup_extract_get
+      responses:
+        '204':
+          description: Successful Response
+      summary: Warmup Extract
+      tags:
+        - extract
+  /api/kits/{db_kit_id}/images/{image_id}:
+    delete:
+      description: Remove a generated image from a catalog kit slot and delete its PNG.
+      operationId: delete_generated_image_api_kits__db_kit_id__images__image_id__delete
+      parameters:
+        - in: path
+          name: db_kit_id
+          required: true
+          schema:
+            title: Db Kit Id
+            type: integer
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteKitImageResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete Generated Image
+      tags:
+        - imagegen
+  /api/kits/{db_kit_id}/meta:
+    get:
+      description: Read result sidecars for *db_kit_id*; 404 if the kit root is unknown.
+      operationId: get_kit_meta_api_kits__db_kit_id__meta_get
+      parameters:
+        - in: path
+          name: db_kit_id
+          required: true
+          schema:
+            title: Db Kit Id
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KitMetaResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Kit Meta
+      tags:
+        - imagegen
   /api/kits/{kit_id}/events:
     get:
       description: |-
@@ -1167,6 +1978,46 @@ paths:
       summary: Get Kit Events
       tags:
         - imagegen
+  /api/kits/{kit_id}/extract:
+    post:
+      description: |-
+        Extract per-field inferences from a product image.
+
+        Uses the vision provider (registry role "vision"); falls back to "llm" if
+        the vision role is unavailable (R2 mitigation).
+
+        Reserved-prefix guard: POST to kit_id='_warmup' returns 404 — defensive
+        against POST collision with the GET /_warmup/extract warmup endpoint.
+      operationId: extract_api_kits__kit_id__extract_post
+      parameters:
+        - in: path
+          name: kit_id
+          required: true
+          schema:
+            title: Kit Id
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Extract
+      tags:
+        - extract
   /api/kits/{kit_id}/generate:
     post:
       description: Generate the 14-image kit for *kit_id*.
@@ -1198,6 +2049,38 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Post Generate
+      tags:
+        - imagegen
+  /api/kits/{kit_id}/images/{image_id}:
+    get:
+      description: Serve a generated kit image by public kit id and slot id.
+      operationId: get_generated_image_api_kits__kit_id__images__image_id__get
+      parameters:
+        - in: path
+          name: kit_id
+          required: true
+          schema:
+            title: Kit Id
+            type: string
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Generated Image
       tags:
         - imagegen
   /api/kits/{kit_id}/spec:
@@ -1261,6 +2144,26 @@ paths:
       summary: Get Onboarding Needed
       tags:
         - onboarding
+  /api/providers/config-state:
+    get:
+      description: |-
+        Return the on-disk YAML body and its SHA-256 checksum.
+
+        Kept for legacy/admin tools that need an explicit config-body save path.
+        Bootstrapping the live config file is a lifespan concern
+        (``apps.api.main._bootstrap_config_if_missing``), so this route is
+        side-effect-free; if the file truly doesn't exist, 404.
+      operationId: get_config_state_api_providers_config_state_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigStateResponse'
+          description: Successful Response
+      summary: Get Config State
+      tags:
+        - providers
   /api/providers/endpoints:
     post:
       description: Save the new config YAML body.  ADR-010 v2 lock+checksum semantics.
@@ -1287,6 +2190,135 @@ paths:
       summary: Save Endpoints
       tags:
         - providers
+  /api/providers/endpoints/{role}:
+    delete:
+      description: |-
+        Remove a role's stanza from config.yaml and re-boot the registry.
+
+        Read-modify-write under the same lock+checksum protocol as POST.  Missing
+        role → 404.  Required roles (``REQUIRED_ROLES``) → 409; deleting them
+        would crash the next startup with ERR-PROV-001.  Use PUT to swap settings.
+      operationId: delete_endpoint_api_providers_endpoints__role__delete
+      parameters:
+        - in: path
+          name: role
+          required: true
+          schema:
+            title: Role
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveEndpointsResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete Endpoint
+      tags:
+        - providers
+    get:
+      description: Return the structured stanza for *role* so the UI can prefill the edit modal.
+      operationId: get_endpoint_api_providers_endpoints__role__get
+      parameters:
+        - in: path
+          name: role
+          required: true
+          schema:
+            title: Role
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointStanza'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Endpoint
+      tags:
+        - providers
+    post:
+      description: Create a single role stanza without exposing YAML editing to the UI.
+      operationId: create_endpoint_api_providers_endpoints__role__post
+      parameters:
+        - in: path
+          name: role
+          required: true
+          schema:
+            title: Role
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEndpointRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveEndpointsResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Endpoint
+      tags:
+        - providers
+    put:
+      description: |-
+        Replace a single role's stanza.
+
+        ``api_key`` semantics: ``None``, empty string, and whitespace-only all
+        mean "preserve the existing env-var binding on disk".  Any other value
+        is persisted to the secrets store and the YAML's ``api_key_env`` is
+        rewritten to the derived env name.  To explicitly unbind, DELETE the
+        role and re-POST.
+      operationId: update_endpoint_api_providers_endpoints__role__put
+      parameters:
+        - in: path
+          name: role
+          required: true
+          schema:
+            title: Role
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEndpointRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveEndpointsResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Update Endpoint
+      tags:
+        - providers
   /api/providers/health:
     get:
       description: |-
@@ -1307,6 +2339,107 @@ paths:
                 type: array
           description: Successful Response
       summary: Get Provider Health
+      tags:
+        - providers
+  /api/providers/models:
+    get:
+      description: |-
+        Probe registry-bound adapter model catalogs.
+
+        Each adapter hits its own ``/models`` endpoint (OpenAI: ``{base_url}/models``,
+        Anthropic: ``{base_url}/v1/models``). Passing ``?role=llm`` probes just one
+        role so the UI can test a row without waiting for every configured backend.
+      operationId: list_provider_models_api_providers_models_get
+      parameters:
+        - in: query
+          name: role
+          required: false
+          schema:
+            anyOf:
+              - type: string
+              - type: 'null'
+            title: Role
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderProbeResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Provider Models
+      tags:
+        - providers
+  /api/providers/probe:
+    post:
+      description: |-
+        Probe a candidate (un-registered) endpoint and return its model catalog.
+
+        Accepts either an existing ``api_key_env`` name (looked up via
+        ``os.environ``) or an inline ``api_key`` (used directly for the probe but
+        never persisted).  The inline path lets the AddEndpointModal probe a
+        freshly-pasted key before the operator commits to saving it.
+
+        Adapter contract: ``probe()`` never raises — failures surface as
+        ``ok=False`` with an ``error`` string.
+      operationId: probe_candidate_api_providers_probe_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProbeCandidateRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeCandidateResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Probe Candidate
+      tags:
+        - providers
+  /api/providers/secrets:
+    post:
+      description: |-
+        Persist an API key to the gitignored secrets store + inject into env.
+
+        Derives a deterministic env-var name from ``role`` + ``name`` so the
+        operator never has to invent one.  The plaintext key lives only in
+        ``data/secrets.json`` (gitignored); ``config.yaml`` continues to store
+        only the env-var name per ADR-011.
+      operationId: store_secret_api_providers_secrets_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreSecretRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreSecretResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Store Secret
       tags:
         - providers
   /api/providers/summary:
@@ -1340,58 +2473,27 @@ paths:
       summary: Get Active Queue
       tags:
         - queue
-  /api/retrieval/search:
-    post:
-      description: POST /api/retrieval/search — embed query image + hybrid retrieve.
-      operationId: search_api_retrieval_search_post
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SearchRequest'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SearchResponse'
-          description: Successful Response
-        '422':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-          description: Validation Error
-      summary: Search
-      tags:
-        - retrieval
-  /api/retrieval/style-prompt:
+  /api/settings:
     post:
       description: |-
-        Synthesise a ≤100-word ``style_prompt`` from selected retrieval hits.
+        Read-modify-write the 4 workspace-level options into config.yaml.
 
-        Calls :func:`services.imagegen.style_synthesizer.synthesize_style` via the
-        ``vision`` provider role.  The result is non-empty (the synthesiser raises
-        on empty adapter responses) and capped at 100 words.
-
-        Errors:
-            - 503 when ``app.state.registry`` is not booted.
-            - 502 when the vision adapter returns an empty prompt
-              (:class:`StyleSynthesisError`).
-      operationId: style_prompt_api_retrieval_style_prompt_post
+        Retries up to ``_MAX_CHECKSUM_RETRIES`` times if the config drifted
+        underneath us (concurrent provider save).  Inode-changed is treated
+        identically to checksum-mismatch.
+      operationId: post_settings_api_settings_post
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StylePromptRequest'
+              $ref: '#/components/schemas/SettingsUpdate'
         required: true
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StylePromptResponse'
+                $ref: '#/components/schemas/SettingsResponse'
           description: Successful Response
         '422':
           content:
@@ -1399,14 +2501,235 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
-      summary: Style Prompt
+      summary: Post Settings
       tags:
-        - retrieval
+        - settings
+  /api/templates:
+    get:
+      operationId: get_templates_api_templates_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TemplateSummary'
+                title: Response Get Templates Api Templates Get
+                type: array
+          description: Successful Response
+      summary: Get Templates
+      tags:
+        - templates
+    post:
+      operationId: create_template_api_templates_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplatePayload'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateSummary'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Template
+      tags:
+        - templates
+  /api/templates/copy:
+    post:
+      operationId: copy_template_api_templates_copy_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopyTemplateRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateSummary'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Copy Template
+      tags:
+        - templates
+  /api/templates/managed:
+    get:
+      operationId: get_managed_templates_api_templates_managed_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/TemplateSummary'
+                title: Response Get Managed Templates Api Templates Managed Get
+                type: array
+          description: Successful Response
+      summary: Get Managed Templates
+      tags:
+        - templates
+  /api/templates/preview:
+    post:
+      operationId: preview_template_api_templates_preview_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Preview Template
+      tags:
+        - templates
+  /api/templates/schemes:
+    get:
+      operationId: list_schemes_api_templates_schemes_get
+      parameters:
+        - in: query
+          name: locale
+          required: false
+          schema:
+            default: zh
+            enum:
+              - zh
+              - en
+            title: Locale
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SchemeSummary'
+                title: Response List Schemes Api Templates Schemes Get
+                type: array
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Schemes
+      tags:
+        - templates
+    post:
+      operationId: create_scheme_api_templates_schemes_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemePayload'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemeSummary'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Scheme
+      tags:
+        - templates
+  /api/templates/{template_ref}:
+    delete:
+      operationId: delete_template_api_templates__template_ref__delete
+      parameters:
+        - in: path
+          name: template_ref
+          required: true
+          schema:
+            title: Template Ref
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties:
+                  type: boolean
+                title: Response Delete Template Api Templates  Template Ref  Delete
+                type: object
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete Template
+      tags:
+        - templates
+    patch:
+      operationId: update_template_api_templates__template_ref__patch
+      parameters:
+        - in: path
+          name: template_ref
+          required: true
+          schema:
+            title: Template Ref
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateUpdate'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateSummary'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Update Template
+      tags:
+        - templates
   /health:
     get:
-      description: |-
-        Probe Postgres, Milvus, Redis, MinIO concurrently with a 2s timeout each.
-        Returns overall status 'ok' if all four connected, else 'degraded'.
+      description: Probe Postgres, Redis, MinIO concurrently with a 2s timeout each.
       operationId: health_health_get
       responses:
         '200':

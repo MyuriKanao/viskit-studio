@@ -1,4 +1,4 @@
-# AIShop Image Studio — infrastructure stack
+# Viskit Studio — infrastructure stack
 
 services:
 
@@ -6,15 +6,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: aishop
-      POSTGRES_PASSWORD: aishop
-      POSTGRES_DB: aishop
+      POSTGRES_USER: viskit
+      POSTGRES_PASSWORD: viskit
+      POSTGRES_DB: viskit
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aishop"]
+      test: ["CMD-SHELL", "pg_isready -U viskit"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -48,8 +48,8 @@ services:
     entrypoint: >
       /bin/sh -c "
         mc alias set local http://minio:9000 minioadmin minioadmin &&
-        mc mb --ignore-existing local/aishop-kits &&
-        echo 'Bucket aishop-kits ready.'
+        mc mb --ignore-existing local/viskit-kits &&
+        echo 'Bucket viskit-kits ready.'
       "
     restart: "no"
 

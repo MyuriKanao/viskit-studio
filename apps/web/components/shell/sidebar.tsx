@@ -26,8 +26,9 @@ export function Sidebar() {
       aria-label="Primary"
       className="flex h-screen w-[240px] shrink-0 flex-col gap-s-2 border-r border-border-subtle bg-surface-01 px-s-3 py-s-5"
     >
-      <div className="px-s-3 pb-s-4">
-        <span className="font-display text-lg text-ink-primary">AIShop</span>
+      <div className="flex items-center gap-s-2 px-s-3 pb-s-4">
+        <img src="/brand/viskit-favicon.svg" alt="" aria-hidden="true" className="h-7 w-7" />
+        <span className="font-display text-lg text-ink-primary">Viskit</span>
       </div>
       <TooltipProvider delayDuration={200}>
         <ul className="flex flex-col gap-s-1">

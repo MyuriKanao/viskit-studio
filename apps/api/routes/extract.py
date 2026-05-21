@@ -153,7 +153,7 @@ async def warmup_extract(req: Request) -> Response:
     if registry is not None:
         try:
             adapter = registry.get("vision")
-            adapter.probe(timeout=5)  # type: ignore[union-attr]
+            adapter.probe(timeout=5)
         except Exception:
             pass  # warmup failure is silent — never propagate to caller
     return Response(status_code=204)
@@ -220,7 +220,7 @@ async def extract(
                 ),
             ]
             chat_resp = await asyncio.wait_for(
-                asyncio.to_thread(adapter.complete, messages),  # type: ignore[union-attr]
+                asyncio.to_thread(adapter.complete, messages),
                 timeout=_EXTRACT_TIMEOUT_SECONDS,
             )
             raw_text = chat_resp.text

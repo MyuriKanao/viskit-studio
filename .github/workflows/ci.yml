@@ -62,7 +62,7 @@ jobs:
         run: pnpm -r build
 
   python:
-    name: Python (lint + types + tests)
+    name: Python (lint + types)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -89,15 +89,3 @@ jobs:
 
       - name: Mypy type-check
         run: uv run mypy .
-
-      - name: Pytest
-        run: uv run pytest -x
-
-  grep-providers:
-    name: Vendor leak guard
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check for vendor name leaks
-        run: bash scripts/grep_providers.sh

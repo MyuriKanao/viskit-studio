@@ -1,4 +1,4 @@
-# AIShop Studio — example config.yaml
+# Viskit Studio — example config.yaml
 # Copy this to config.yaml and replace ${...} env-var references with real env exports.
 # DO NOT commit secrets. api_key_env values are NAMES of environment variables only.
 #

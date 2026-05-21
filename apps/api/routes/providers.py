@@ -1,7 +1,6 @@
 """Provider-management routes — endpoints, health, summary.
 
-* ``POST /api/providers/endpoints`` saves a new ``config.yaml`` body using
-  :mod:`apps.api.lib.config_io` (ADR-010 v2 lock+checksum semantics).
+* ``POST /api/providers/endpoints/{role}`` creates a structured provider role.
 * ``GET /api/providers/health`` snapshots the current registry binding state.
 * ``GET /api/providers/summary`` summarises the on-disk ``config.yaml``.
 
@@ -13,11 +12,10 @@ without re-importing.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal
-
-import logging
 
 import yaml
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -94,6 +92,14 @@ class EndpointStanza(BaseModel):
     base_url: str
     api_key_env: str
     model: str
+
+
+class CreateEndpointRequest(BaseModel):
+    protocol: Literal["openai_compatible", "anthropic_compatible"]
+    base_url: str
+    model: str
+    name: str
+    api_key: str
 
 
 class UpdateEndpointRequest(BaseModel):
@@ -176,7 +182,7 @@ def save_endpoints(payload: SaveEndpointsRequest, req: Request) -> SaveEndpoints
 
 
 # ---------------------------------------------------------------------------
-# GET + PUT /api/providers/endpoints/{role}
+# GET + POST + PUT /api/providers/endpoints/{role}
 # ---------------------------------------------------------------------------
 
 
@@ -194,6 +200,50 @@ def get_endpoint(role: str) -> EndpointStanza:
         base_url=str(stanza.get("base_url", "")),
         api_key_env=str(stanza.get("api_key_env", "")),
         model=str(stanza.get("model", "")),
+    )
+
+
+@router.post("/endpoints/{role}", response_model=SaveEndpointsResponse)
+def create_endpoint(
+    role: str, payload: CreateEndpointRequest, req: Request
+) -> SaveEndpointsResponse:
+    """Create a single role stanza without exposing YAML editing to the UI."""
+    api_key = payload.api_key.strip()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="api_key is required")
+
+    path = _config_path()
+    content, current_sha = config_io.read(path)
+    data = yaml.safe_load(content) or {}
+    if not isinstance(data, dict):
+        data = {}
+    providers = data.get("providers") or {}
+    if not isinstance(providers, dict):
+        providers = {}
+    if role in providers:
+        raise HTTPException(status_code=409, detail=f"role already exists: {role}")
+
+    api_key_env = secrets_store.derive_env_name(role=role, name=payload.name)
+    secrets_store.put(api_key_env, api_key)
+    providers[role] = {
+        "protocol": payload.protocol,
+        "base_url": payload.base_url,
+        "api_key_env": api_key_env,
+        "model": payload.model,
+    }
+    data["providers"] = providers
+    new_yaml = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    try:
+        new_sha, _ = config_io.write(path, current_sha, new_yaml)
+    except ConfigLockTimeoutError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": exc.error_code, "retry_after_s": exc.retry_after},
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
+    rebooted, warning = _reboot_or_warn(req, path)
+    return SaveEndpointsResponse(
+        new_sha256=new_sha, registry_rebooted=rebooted, warning=warning
     )
 
 
@@ -513,7 +563,7 @@ def store_secret(payload: StoreSecretRequest) -> StoreSecretResponse:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/providers/config-state  — current YAML + checksum for CAS writes
+# GET /api/providers/config-state — current YAML + checksum for legacy CAS writes
 # ---------------------------------------------------------------------------
 
 
@@ -521,10 +571,10 @@ def store_secret(payload: StoreSecretRequest) -> StoreSecretResponse:
 def get_config_state() -> ConfigStateResponse:
     """Return the on-disk YAML body and its SHA-256 checksum.
 
-    Used by AddEndpointModal right before POST /endpoints so the CAS check
-    in ``config_io.write`` succeeds.  Bootstrapping the live config file is
-    a lifespan concern (``apps.api.main._bootstrap_config_if_missing``), so
-    this route is side-effect-free; if the file truly doesn't exist, 404.
+    Kept for legacy/admin tools that need an explicit config-body save path.
+    Bootstrapping the live config file is a lifespan concern
+    (``apps.api.main._bootstrap_config_if_missing``), so this route is
+    side-effect-free; if the file truly doesn't exist, 404.
     """
     path = _config_path()
     if not path.exists():
@@ -574,6 +624,7 @@ __all__ = [
     "router",
     "ProviderHealthRow",
     "ProvidersSummaryResponse",
+    "CreateEndpointRequest",
     "SaveEndpointsRequest",
     "SaveEndpointsResponse",
 ]

@@ -77,6 +77,8 @@ export interface GenerateParams {
   locale: Locale;
   spec: SpecOutPayload;
   style_prompt: string;
+  template_scheme_ref?: string | null;
+  template_slot_overrides?: Record<string, string>;
   /** Optional callback fanned out from the single SSE consumer. Chat-store MUST NOT
    *  open a second EventSource — progress arrives here instead (R10 / MED-3). */
   onProgress?: (e: ProgressEvent) => void;
@@ -210,6 +212,8 @@ export function useGenerateKit(): UseGenerateKitResult {
           locale: params.locale,
           spec: params.spec,
           style_prompt: params.style_prompt,
+          template_scheme_ref: params.template_scheme_ref ?? null,
+          template_slot_overrides: params.template_slot_overrides ?? {},
         }),
         signal: ctrl.signal,
       }

@@ -38,6 +38,7 @@ from services.copywriter.sop import (
 )
 from services.imagegen.orchestrator import orchestrate_kit
 from services.imagegen.single_gen import KitGenerationInputs
+from services.imagegen.template_library import TemplateLibraryError, resolve_scheme
 
 router = APIRouter(prefix="/api/kits", tags=["imagegen"])
 logger = logging.getLogger(__name__)
@@ -92,6 +93,36 @@ def _thumb_if_exists(png_path: str | None) -> str | None:
         return None
     version = candidate.stat().st_mtime_ns
     return f"/api/kits/{kit_id}/images/{image_id}?v={version}"
+
+
+def _resolve_generated_png(png_path: str | None) -> Path | None:
+    """Resolve a stored png_path only when it stays inside imagegen/kits."""
+    if not png_path:
+        return None
+    candidate = Path(png_path)
+    if not candidate.is_absolute():
+        candidate = _thumb_base() / candidate
+
+    output_root = _output_dir()
+    if not output_root.is_absolute():
+        output_root = _thumb_base() / output_root
+    kits_root = (output_root / "kits").resolve()
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(kits_root)
+    except ValueError:
+        return None
+    return resolved
+
+
+def _unlink_generated_png(png_path: str | None) -> bool:
+    path = _resolve_generated_png(png_path)
+    if path is None or not path.exists():
+        return False
+    if not path.is_file():
+        return False
+    path.unlink()
+    return True
 
 
 def _score_from_spec_payload(spec: dict[str, Any]) -> int | None:
@@ -219,6 +250,8 @@ class GenerateRequest(BaseModel):
     # "上次检索到的 bestsellers" subsection later. Default-empty keeps the
     # contract backward-compatible for callers that don't track ids.
     retrieved_bestseller_ids: list[int] = Field(default_factory=list)
+    template_scheme_ref: str | None = None
+    template_slot_overrides: dict[str, str] = Field(default_factory=dict)
 
 
 class GenerateResponse(BaseModel):
@@ -238,9 +271,11 @@ class GenerateResponse(BaseModel):
 
 
 def _to_dataclass_spec(spec_in: SpecIn) -> Spec:
+    sku_value = spec_in.sku_meta.sku or "KIT-UNKNOWN"
     sku = SkuMeta(
-        sku=spec_in.sku_meta.sku,
-        name=spec_in.sku_meta.name,
+        sku=sku_value,
+        name=spec_in.sku_meta.name
+        or _synthesize_name(spec_in.sku_meta.brand, spec_in.sku_meta.category, sku_value),
         brand=spec_in.sku_meta.brand,
         category=spec_in.sku_meta.category,
         product_type=spec_in.sku_meta.product_type,
@@ -291,7 +326,6 @@ def _resolve_default_workbench_id(session: Session) -> int:
 
     Phase 2.1 decision: rather than threading a workbench through the wizard
     payload, /generate picks ``MIN(id)`` because the project is single-tenant.
-    Bootstrap is owned by ``scripts/seed_user.py`` (or seed_dashboard_fixtures).
     If no workbench exists yet, fail loudly with HTTP 503 so the operator
     knows to provision one rather than getting a misleading FK violation.
     """
@@ -299,7 +333,7 @@ def _resolve_default_workbench_id(session: Session) -> int:
     if row is None:
         raise HTTPException(
             status_code=503,
-            detail="no workbench provisioned — run scripts/seed_user.py",
+            detail="no workbench provisioned — create a workbench before generating a kit",
         )
     return int(row)
 
@@ -331,6 +365,7 @@ def _write_result_sidecars(
                 "db_kit_id": db_kit_id,
                 "kit_id": getattr(result, "kit_id", kit_root.name),
                 "retrieved_bestseller_ids": list(payload.retrieved_bestseller_ids),
+                "template_snapshot": getattr(result, "template_snapshot", None),
                 "spec_path": str(spec_json_path),
                 "spec_markdown_path": str(spec_markdown_path),
                 "compliance_path": str(result.compliance_path),
@@ -417,9 +452,7 @@ def _persist_kit(
         },
     ).scalar()
     if kit_id_row is None:
-        raise HTTPException(
-            status_code=500, detail="marketing_kits INSERT returned no id"
-        )
+        raise HTTPException(status_code=500, detail="marketing_kits INSERT returned no id")
     db_kit_id = int(kit_id_row)
 
     # Fan png_paths into 5 hero + 9 detail rows, keyed by image_id (NOT by
@@ -461,6 +494,28 @@ def _persist_kit(
                 "brand_color_hex": payload.brand_color_hex,
             },
         )
+    snapshot = getattr(result, "template_snapshot", None)
+    if snapshot is not None:
+        try:
+            session.execute(
+                text(
+                    "INSERT INTO kit_template_snapshots"
+                    " (marketing_kit_id, scheme_ref, scheme_name, snapshot)"
+                    " VALUES (:kit_id, :scheme_ref, :scheme_name, CAST(:snapshot AS JSONB))"
+                    " ON CONFLICT (marketing_kit_id) DO NOTHING"
+                ),
+                {
+                    "kit_id": db_kit_id,
+                    "scheme_ref": str(snapshot.get("scheme_ref", "builtin:default")),
+                    "scheme_name": str(snapshot.get("scheme_name", "Default template scheme")),
+                    "snapshot": json.dumps(snapshot, ensure_ascii=False),
+                },
+            )
+        except Exception as exc:
+            logger.warning(
+                "failed to persist template snapshot for db_kit_id=%s: %s", db_kit_id, exc
+            )
+
     kit_root = Path(str(result.compliance_path)).parent
     try:
         _write_result_sidecars(
@@ -492,6 +547,8 @@ async def post_generate(
         raise HTTPException(status_code=503, detail="registry not booted")
 
     style_prompt = (payload.style_prompt or "").strip()
+    if not style_prompt:
+        raise HTTPException(status_code=409, detail="style_prompt is required before generation")
 
     # Locale must match between top-level and embedded spec.
     if payload.spec.locale != payload.locale:
@@ -522,6 +579,16 @@ async def post_generate(
     sm.name = effective_name
 
     spec = _to_dataclass_spec(payload.spec)
+    try:
+        resolved_scheme = resolve_scheme(
+            session,
+            locale=payload.locale,
+            scheme_ref=payload.template_scheme_ref,
+            slot_overrides=payload.template_slot_overrides,
+        )
+    except TemplateLibraryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     inputs = KitGenerationInputs(
         kit_id=kit_id,
         spec=spec,
@@ -530,16 +597,17 @@ async def post_generate(
         style_prompt=style_prompt,
         output_dir=_output_dir(),
         locale=payload.locale,
+        template_by_section={
+            slot: resolved.template for slot, resolved in resolved_scheme.slot_templates.items()
+        },
+        template_snapshot=resolved_scheme.snapshot(),
     )
 
     event_bus = getattr(req.app.state, "kit_event_bus", None)
-    result = await orchestrate_kit(
-        inputs, registry=registry, event_bus=event_bus
-    )
+    result = await orchestrate_kit(inputs, registry=registry, event_bus=event_bus)
+    object.__setattr__(result, "template_snapshot", resolved_scheme.snapshot())
 
-    db_kit_id = _persist_kit(
-        session, payload=payload, style_prompt=style_prompt, result=result
-    )
+    db_kit_id = _persist_kit(session, payload=payload, style_prompt=style_prompt, result=result)
 
     return GenerateResponse(
         kit_id=result.kit_id,
@@ -604,6 +672,79 @@ def get_generated_image(kit_id: str, image_id: str) -> FileResponse:
         path,
         media_type="image/png",
         headers={"Cache-Control": "no-store"},
+    )
+
+
+class DeleteKitImageResponse(BaseModel):
+    kit_id: int
+    image_id: str
+    deleted: bool
+    file_deleted: bool
+
+
+@router.delete("/{db_kit_id}/images/{image_id}", response_model=DeleteKitImageResponse)
+def delete_generated_image(
+    db_kit_id: int,
+    image_id: str,
+    session: Annotated[Session, Depends(get_session)],
+) -> DeleteKitImageResponse:
+    """Remove a generated image from a catalog kit slot and delete its PNG."""
+    if not re.fullmatch(r"[HM][1-9]", image_id):
+        raise HTTPException(status_code=404, detail="unknown image_id")
+
+    if image_id.startswith("H"):
+        slot_index = int(image_id[1:])
+        if slot_index > 5:
+            raise HTTPException(status_code=404, detail="unknown image_id")
+        row = session.execute(
+            text(
+                "SELECT png_path FROM hero_images"
+                " WHERE marketing_kit_id = :kit_id AND slot_index = :slot_index"
+            ),
+            {"kit_id": db_kit_id, "slot_index": slot_index},
+        ).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="image slot not found")
+        png_path = row.png_path
+        if png_path is not None:
+            session.execute(
+                text(
+                    "UPDATE hero_images SET png_path = NULL"
+                    " WHERE marketing_kit_id = :kit_id AND slot_index = :slot_index"
+                ),
+                {"kit_id": db_kit_id, "slot_index": slot_index},
+            )
+    else:
+        row = session.execute(
+            text(
+                "SELECT png_path FROM detail_images"
+                " WHERE marketing_kit_id = :kit_id AND module_id = :module_id"
+            ),
+            {"kit_id": db_kit_id, "module_id": image_id},
+        ).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="image slot not found")
+        png_path = row.png_path
+        if png_path is not None:
+            session.execute(
+                text(
+                    "UPDATE detail_images SET png_path = NULL"
+                    " WHERE marketing_kit_id = :kit_id AND module_id = :module_id"
+                ),
+                {"kit_id": db_kit_id, "module_id": image_id},
+            )
+
+    if png_path is not None:
+        session.execute(
+            text("UPDATE marketing_kits SET updated_at = NOW() WHERE id = :kit_id"),
+            {"kit_id": db_kit_id},
+        )
+    file_deleted = _unlink_generated_png(str(png_path) if png_path is not None else None)
+    return DeleteKitImageResponse(
+        kit_id=db_kit_id,
+        image_id=image_id,
+        deleted=png_path is not None,
+        file_deleted=file_deleted,
     )
 
 
@@ -735,9 +876,7 @@ def list_kits(
             ),
             {"kit_id": row.id},
         ).all()
-        detail_map: dict[str, str | None] = {
-            r.module_id: r.png_path for r in detail_rows
-        }
+        detail_map: dict[str, str | None] = {r.module_id: r.png_path for r in detail_rows}
         detail_thumbs: list[str | None] = [
             _thumb_if_exists(detail_map.get(f"M{i}")) for i in range(1, 10)
         ]
@@ -833,11 +972,7 @@ def get_kit_meta(
     ids = data.get("retrieved_bestseller_ids", [])
     if not isinstance(ids, list):
         ids = []
-    cleaned = [
-        int(x)
-        for x in ids
-        if isinstance(x, (int, float)) and not isinstance(x, bool)
-    ]
+    cleaned = [int(x) for x in ids if isinstance(x, (int, float)) and not isinstance(x, bool)]
     kit_id = data.get("kit_id")
     return KitMetaResponse(
         db_kit_id=db_kit_id,

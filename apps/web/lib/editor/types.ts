@@ -1,10 +1,8 @@
 /**
  * Shared types for the EPIC-5 Text-touchup Editor.
  *
- * The Command-pattern history model is locked in
- * `.omc/specs/deep-interview-epic-5-text-touchup-editor.md` §R2:
- *   Command = { id, op_type, payload, snapshot_json, ts }
- * Stack capped at 50 with FIFO eviction.
+ * The command-pattern history model stores a serialized fabric snapshot
+ * with each operation and caps stack growth at the call site.
  */
 export type OpType = 'edit_text' | 'move_layer' | 'inpaint' | 'revert';
 
@@ -32,9 +30,8 @@ export interface MaskBox {
 
 /**
  * Imperative handle exposed by `CanvasStage` via `React.forwardRef`. Lets
- * the EPIC-5b mask UI in `EditorRoot` drive fabric.js without subscribing
- * to a re-render on every fabric event (which would defeat §R7's
- * imperative-only handler rule).
+ * the mask UI in `EditorRoot` drive fabric.js without subscribing to a
+ * re-render on every fabric event.
  */
 export interface CanvasStageHandle {
   /** Focus the fabric.Text at the given OCR-box index. No-op if absent. */
