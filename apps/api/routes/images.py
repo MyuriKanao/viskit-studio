@@ -8,7 +8,7 @@ import shutil
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
@@ -477,7 +477,7 @@ def _parse_image_target(image_id: str, body_target: ImageSaveTarget | None) -> I
 def create_edit_result(
     image_id: str,
     body: EditResultCreate,
-    session: Session = Depends(get_session),
+    session: Annotated[Session, Depends(get_session)],
 ) -> EditResultOut:
     try:
         validate_image_id(image_id)
@@ -519,8 +519,8 @@ def create_edit_result(
 def get_edit_result_image(
     image_id: str,
     edit_result_ref: str,
-    session: Session = Depends(get_session),
-) -> Any:
+    session: Annotated[Session, Depends(get_session)],
+) -> FileResponse:
     row = session.execute(
         text(
             "SELECT result_path FROM image_edit_results"
@@ -536,8 +536,6 @@ def get_edit_result_image(
         raise HTTPException(status_code=404, detail="edit result not found") from exc
     if not path.is_file():
         raise HTTPException(status_code=404, detail="edit result file missing")
-    from fastapi.responses import FileResponse
-
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
@@ -545,7 +543,7 @@ def get_edit_result_image(
 def save_edited_image(
     image_id: str,
     body: ImageSaveRequest,
-    session: Session = Depends(get_session),
+    session: Annotated[Session, Depends(get_session)],
 ) -> ImageSaveResponse:
     target = _parse_image_target(image_id, body.target)
     edit_row = session.execute(
@@ -555,7 +553,9 @@ def save_edited_image(
     if edit_row is None:
         raise HTTPException(status_code=404, detail="edit_result_ref not found")
     try:
-        edit_path = require_within(resolve_stored_path(str(edit_row.result_path)), imagegen_output_dir())
+        edit_path = require_within(
+            resolve_stored_path(str(edit_row.result_path)), imagegen_output_dir()
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="edit result file not found") from exc
     if not edit_path.is_file():
@@ -571,7 +571,9 @@ def save_edited_image(
             ).first()
             if row is None:
                 raise HTTPException(status_code=404, detail="asset not found")
-            asset_path = require_within(resolve_stored_path(str(row.png_path)), imagegen_output_dir())
+            asset_path = require_within(
+                resolve_stored_path(str(row.png_path)), imagegen_output_dir()
+            )
             asset_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(edit_path, asset_path)
             session.execute(
@@ -601,7 +603,10 @@ def save_edited_image(
                 "png_path": str(asset_path),
                 "source_image_ref": None,
                 "metadata": json.dumps(
-                    {"copied_from_asset_id": target.asset_id, "edit_result_ref": body.edit_result_ref},
+                    {
+                        "copied_from_asset_id": target.asset_id,
+                        "edit_result_ref": body.edit_result_ref,
+                    },
                     ensure_ascii=False,
                 ),
             },

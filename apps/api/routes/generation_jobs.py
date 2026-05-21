@@ -727,7 +727,11 @@ async def _run_generation_job(app: Any, job_id: str) -> None:
                     },
                 )
             except Exception as exc:  # keep later outputs independent
-                logger.exception("generation output failed: job_id=%s output_id=%s", job_id, output_id)
+                logger.exception(
+                    "generation output failed: job_id=%s output_id=%s",
+                    job_id,
+                    output_id,
+                )
                 with session_scope() as session:
                     session.execute(
                         text(
