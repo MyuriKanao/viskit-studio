@@ -15,8 +15,7 @@ packages/schemas/      OpenAPI、TypeScript 与 Python 共享模型
 infra/                 Docker Compose 与 SQL 迁移
 ```
 
-仓库只保留运行源码、配置样例、迁移和必要静态资源；本地编排状态、Demo、测试资产、开发文档和维护脚本不进入远端仓库。
-
+仓库只保留运行源码、配置样例、迁移和必要静态资源；
 ## 本地运行
 
 ```bash
