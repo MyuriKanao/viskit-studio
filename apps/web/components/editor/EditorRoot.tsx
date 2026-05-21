@@ -10,9 +10,17 @@ import { HistoryTimeline } from '@/components/editor/HistoryTimeline';
 import { TextLayerOverlay } from '@/components/editor/TextLayerOverlay';
 import { ToolRail } from '@/components/editor/ToolRail';
 import { useInpaint } from '@/hooks/use-inpaint';
-import { type ImageSaveMode, imageBytesUrl, saveEditedImage } from '@/lib/api/images';
+import type { OcrBox } from '@/hooks/use-ocr';
+import {
+  type ImageSaveMode,
+  createEditResultFromDataUrl,
+  imageBytesUrl,
+  saveEditedImage,
+} from '@/lib/api/images';
 import { useCommandStack } from '@/lib/editor/command-stack';
 import type { CanvasStageHandle, MaskBox } from '@/lib/editor/types';
+import { useLocale } from 'next-intl';
+import { useRouter } from 'next/navigation';
 
 // CanvasStage uses fabric.js which touches `document` at module init —
 // must be dynamically imported with ssr: false. The dynamic() typing in
@@ -44,6 +52,8 @@ type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export function EditorRoot({ imageId }: EditorRootProps) {
   const t = useTranslations('editor');
+  const locale = useLocale() as 'zh' | 'en';
+  const router = useRouter();
   const [activeTool, setActiveTool] = useState<'select' | 'text' | 'move' | 'inpaint' | null>(
     'select'
   );
@@ -52,6 +62,7 @@ export function EditorRoot({ imageId }: EditorRootProps) {
   const canvasRef = useRef<CanvasStageHandle | null>(null);
   const inpaint = useInpaint();
   const [pendingEditResultRef, setPendingEditResultRef] = useState<string | null>(null);
+  const [hasLocalCanvasEdits, setHasLocalCanvasEdits] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -62,8 +73,30 @@ export function EditorRoot({ imageId }: EditorRootProps) {
     void inpaint.start(imageId, { mask_box: maskBox, new_text: '' });
   }, [imageId, inpaint, maskBox]);
 
-  const handleBoxClick = useCallback((index: number) => {
-    canvasRef.current?.selectByOcrIndex(index);
+  const handleBoxClick = useCallback(
+    (index: number, box: OcrBox) => {
+      if (activeTool === 'text') {
+        canvasRef.current?.upsertTextLayerFromOcr(index, box);
+        setHasLocalCanvasEdits(true);
+        setSaveStatus('idle');
+        setSaveError(null);
+        return;
+      }
+      canvasRef.current?.selectByOcrIndex(index);
+    },
+    [activeTool]
+  );
+
+  const handleUndo = useCallback(() => {
+    canvasRef.current?.undo();
+    setHasLocalCanvasEdits(useCommandStack.getState().undoStack.length > 0);
+    setSaveStatus('idle');
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    canvasRef.current?.redo();
+    setHasLocalCanvasEdits(useCommandStack.getState().undoStack.length > 0);
+    setSaveStatus('idle');
   }, []);
 
   // Surface setMaskBox + setActiveTool on the test hook so EPIC-5b AC#7 can
@@ -117,22 +150,38 @@ export function EditorRoot({ imageId }: EditorRootProps) {
 
   const handleSaveEdit = useCallback(
     async (mode: ImageSaveMode) => {
-      if (!pendingEditResultRef || saveStatus === 'saving') return;
+      if ((!pendingEditResultRef && !hasLocalCanvasEdits) || saveStatus === 'saving') return;
       setSaveStatus('saving');
       setSaveError(null);
       try {
-        await saveEditedImage(imageId, {
-          edit_result_ref: pendingEditResultRef,
+        let editResultRef = pendingEditResultRef;
+        if (!editResultRef) {
+          const dataUrl = canvasRef.current?.exportPngDataUrl();
+          if (!dataUrl) throw new Error('Canvas export failed');
+          const result = await createEditResultFromDataUrl(imageId, dataUrl, {
+            op_type: 'canvas_text',
+            command_count: useCommandStack.getState().undoStack.length,
+          });
+          editResultRef = result.edit_result_ref;
+        }
+        const saved = await saveEditedImage(imageId, {
+          edit_result_ref: editResultRef,
           mode,
         });
         setPendingEditResultRef(null);
+        setHasLocalCanvasEdits(false);
+        useCommandStack.getState().clear();
         setSaveStatus('saved');
+        if (saved.image_id !== imageId) {
+          const prefix = locale === 'zh' ? '' : `/${locale}`;
+          router.replace(`${prefix}/editor/${encodeURIComponent(saved.image_id)}`);
+        }
       } catch (err) {
         setSaveError((err as Error).message);
         setSaveStatus('error');
       }
     },
-    [imageId, pendingEditResultRef, saveStatus]
+    [hasLocalCanvasEdits, imageId, locale, pendingEditResultRef, router, saveStatus]
   );
 
   return (
@@ -141,7 +190,7 @@ export function EditorRoot({ imageId }: EditorRootProps) {
       <header className="flex items-center justify-between border-b border-border-subtle bg-surface-02 px-s-5 py-s-3">
         <span className="font-display text-ink-primary">{t('title')}</span>
         <div className="flex items-center gap-s-2 text-xs">
-          {pendingEditResultRef ? (
+          {pendingEditResultRef || hasLocalCanvasEdits ? (
             <>
               <span className="text-ink-muted">{t('save.pending')}</span>
               <button
@@ -180,6 +229,8 @@ export function EditorRoot({ imageId }: EditorRootProps) {
           onToolChange={setActiveTool}
           onInpaintStart={handleInpaintStart}
           onInpaintAbort={inpaint.abort}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
           inpaintStatus={inpaint.status}
           hasMask={hasMask}
           className="shrink-0 m-s-3"
@@ -196,6 +247,7 @@ export function EditorRoot({ imageId }: EditorRootProps) {
               height={CANVAS_HEIGHT}
               activeTool={activeTool}
               onMaskChange={setMaskBox}
+              onLocalEdit={() => setHasLocalCanvasEdits(true)}
             />
             {/* TextLayerOverlay stacked absolute over canvas */}
             <TextLayerOverlay

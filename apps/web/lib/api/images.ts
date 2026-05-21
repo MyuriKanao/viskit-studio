@@ -17,6 +17,12 @@ export interface SaveEditedImageResponse {
   replaced: boolean;
 }
 
+export interface CreateEditResultResponse {
+  edit_result_ref: string;
+  result_url: string;
+  status: string;
+}
+
 export interface ImportedSourceImage extends SourceImageRef {
   data_url: string;
 }
@@ -95,4 +101,34 @@ export async function saveEditedImage(
     throw new Error(detail);
   }
   return (await response.json()) as SaveEditedImageResponse;
+}
+
+export async function createEditResultFromDataUrl(
+  imageId: string,
+  resultDataUrl: string,
+  metadata: Record<string, unknown> = {}
+): Promise<CreateEditResultResponse> {
+  const response = await fetch(
+    `${baseUrl}/api/images/${encodeURIComponent(imageId)}/edit-results`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        result_data_url: resultDataUrl,
+        source_image_ref: imageId,
+        metadata,
+      }),
+    }
+  );
+  if (!response.ok) {
+    let detail = `Create edit result failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === 'string') detail = body.detail;
+    } catch {
+      // Keep status fallback for non-JSON responses.
+    }
+    throw new Error(detail);
+  }
+  return (await response.json()) as CreateEditResultResponse;
 }

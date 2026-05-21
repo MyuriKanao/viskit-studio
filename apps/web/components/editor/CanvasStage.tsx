@@ -19,10 +19,12 @@ export interface CanvasStageProps {
   activeTool?: EditorActiveTool;
   /** Fired on mouse-up after a mask rect is committed (or `null` on clear). */
   onMaskChange?: (box: MaskBox | null) => void;
+  /** Fired when a local canvas edit needs explicit save. */
+  onLocalEdit?: () => void;
 }
 
 /**
- * fabric.js@6 canvas host for the EPIC-5 Text-touchup Editor.
+ * fabric.js@6 canvas host for the image editor.
  *
  * Consumers must import this via `next/dynamic` with `ssr: false`
  * (fabric.js touches `document` at module-init time). Dynamic-import
@@ -31,7 +33,16 @@ export interface CanvasStageProps {
  */
 export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>(
   function CanvasStage(
-    { imageId, imageUrl, width = 1024, height = 1536, className, activeTool, onMaskChange },
+    {
+      imageId,
+      imageUrl,
+      width = 1024,
+      height = 1536,
+      className,
+      activeTool,
+      onMaskChange,
+      onLocalEdit,
+    },
     ref
   ) {
     const canvasElRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -42,6 +53,8 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
     const activeToolRef = React.useRef<EditorActiveTool>(activeTool ?? null);
     /** Latest onMaskChange — read inside fabric handlers (kept out of useEffect deps). */
     const onMaskChangeRef = React.useRef<typeof onMaskChange>(onMaskChange);
+    const onLocalEditRef = React.useRef<typeof onLocalEdit>(onLocalEdit);
+    const baselineSnapshotRef = React.useRef<string | null>(null);
     /**
      * Mount guard ref — required to keep `new fabric.Canvas(...)` from running
      * twice under React 18 `<StrictMode>` double-mount. The cleanup branch
@@ -57,6 +70,10 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
     React.useEffect(() => {
       onMaskChangeRef.current = onMaskChange;
     }, [onMaskChange]);
+
+    React.useEffect(() => {
+      onLocalEditRef.current = onLocalEdit;
+    }, [onLocalEdit]);
 
     React.useImperativeHandle(
       ref,
@@ -76,6 +93,61 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
             fab.requestRenderAll();
           }
         },
+        upsertTextLayerFromOcr: (index, box) => {
+          const fab = fabricRef.current;
+          if (!fab) return;
+          const existing = fab
+            .getObjects()
+            .find(
+              (o) =>
+                (o as fabric.Object & { customProps?: { ocrIndex?: number; layerType?: string } })
+                  .customProps?.ocrIndex === index
+            );
+          if (existing) {
+            fab.setActiveObject(existing);
+            if (existing instanceof fabric.Textbox) {
+              existing.enterEditing();
+              existing.selectAll();
+            }
+            fab.requestRenderAll();
+            return;
+          }
+
+          const fontSize = Math.max(18, Math.min(72, box.h * 0.9));
+          const rootStyle =
+            typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null;
+          const textFill = rootStyle?.getPropertyValue('--text-primary').trim() || '#f0e8dd';
+          const text = new fabric.Textbox(box.text || 'Text', {
+            left: box.x,
+            top: box.y,
+            width: Math.max(80, box.w),
+            fontSize,
+            fontFamily: 'Inter, PingFang SC, Noto Sans SC, sans-serif',
+            fill: textFill,
+            backgroundColor: 'rgba(11, 11, 14, 0.54)',
+            padding: 4,
+            editable: true,
+            selectable: true,
+            cornerColor: '#ffffff',
+            borderColor: '#ffffff',
+            transparentCorners: false,
+          }) as fabric.Textbox & { customProps?: { layerType: string; ocrIndex: number } };
+          text.customProps = { layerType: 'ocr-text', ocrIndex: index };
+          fab.add(text);
+          fab.setActiveObject(text);
+          text.enterEditing();
+          text.selectAll();
+          const snapshot = fab.toObject(['customProps']);
+          useCommandStack.getState().push({
+            id: `${imageId}-${Date.now()}`,
+            op_type: 'edit_text',
+            payload: { ocrIndex: index, text: box.text },
+            snapshot_json: JSON.stringify(snapshot),
+            ts: Date.now(),
+          });
+          onLocalEditRef.current?.();
+          fab.requestRenderAll();
+        },
         clearMaskRect: () => {
           const fab = fabricRef.current;
           const rect = maskRectRef.current;
@@ -86,9 +158,37 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           }
           onMaskChangeRef.current?.(null);
         },
+        undo: () => {
+          const fab = fabricRef.current;
+          if (!fab) return;
+          const undone = useCommandStack.getState().undo();
+          if (!undone) return;
+          const previous = useCommandStack.getState().undoStack.at(-1);
+          const snapshot = previous?.snapshot_json ?? baselineSnapshotRef.current;
+          if (!snapshot) return;
+          void fab.loadFromJSON(JSON.parse(snapshot)).then(() => {
+            fab.requestRenderAll();
+          });
+        },
+        redo: () => {
+          const fab = fabricRef.current;
+          if (!fab) return;
+          const redone = useCommandStack.getState().redo();
+          if (!redone) return;
+          void fab.loadFromJSON(JSON.parse(redone.snapshot_json)).then(() => {
+            fab.requestRenderAll();
+          });
+        },
+        exportPngDataUrl: () => {
+          const fab = fabricRef.current;
+          if (!fab) return null;
+          fab.discardActiveObject();
+          fab.requestRenderAll();
+          return fab.toDataURL({ format: 'png', multiplier: 1 });
+        },
         getObjectCount: () => fabricRef.current?.getObjects().length ?? 0,
       }),
-      []
+      [imageId]
     );
 
     React.useEffect(() => {
@@ -144,6 +244,9 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
         });
         fab.on('object:scaling', () => {
           pendingOp = 'move_layer';
+        });
+        fab.on('text:changed', () => {
+          onLocalEditRef.current?.();
         });
 
         fab.on('mouse:down', (e) => {
@@ -234,6 +337,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           .then((img) => {
             if (!fabricRef.current) return; // unmounted during async load
             fab.backgroundImage = img;
+            baselineSnapshotRef.current = JSON.stringify(fab.toObject(['customProps']));
             fab.requestRenderAll();
           })
           .catch(() => {
