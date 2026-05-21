@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import * as React from 'react';
 
 import { StatusChip } from '@/components/atoms/status-chip';
+import { providerRoleDescriptionKey } from '@/components/providers/role-descriptions';
 import { Button } from '@/components/ui/button';
 import type { ProviderHealthRow } from '@/hooks/use-providers-health';
 import { cn } from '@/lib/utils';
@@ -159,7 +160,14 @@ export function EndpointTable({ endpoints, health, onEdit, className }: Endpoint
               const isRequired = REQUIRED_ROLES.has(row.role);
               return (
                 <tr key={`${row.role}-${row.endpoint_id}`} className="border-b border-border-hair">
-                  <td className="px-s-3 py-s-2 font-mono text-xs text-ink-secondary">{row.role}</td>
+                  <td className="px-s-3 py-s-2">
+                    <div className="flex max-w-[240px] flex-col gap-1">
+                      <span className="font-mono text-xs text-ink-secondary">{row.role}</span>
+                      <span className="text-xs leading-relaxed text-ink-faint">
+                        {t(providerRoleDescriptionKey(row.role))}
+                      </span>
+                    </div>
+                  </td>
                   <td className="px-s-3 py-s-2 text-ink-primary">{row.endpoint_id}</td>
                   <td className="px-s-3 py-s-2 font-mono text-xs text-ink-muted">
                     {row.base_url ?? '—'}

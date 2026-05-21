@@ -8,7 +8,7 @@
 providers:
   vision:           # used by style analyzer + multimodal scoring
     protocol: openai_compatible
-    base_url: https://api.apimart.ai/v1
+    base_url: https://api.apimart.ai
     api_key_env: APIMART_API_KEY
     model: gpt-4o-vision
 
@@ -20,9 +20,15 @@ providers:
 
   image:            # used by generation and text touch-up
     protocol: openai_compatible
-    base_url: https://api.apimart.ai/v1
+    base_url: https://api.apimart.ai
     api_key_env: APIMART_API_KEY
     model: gpt-image-2
+    # For provider-specific image APIs use:
+    # protocol: image_generation
+    # adapter: openai
+    # Supported adapters:
+    # gemini, gemini_openai, openai, chatgpt2api, volcengine_ark,
+    # z_image_gitee, jimeng2api, grok, siliconflow_adapter
 
   # ─── REQUIRED ROLE — see ADR-005 v2 ──────────────────────────────────────
   # REQUIRED ROLE — do not remove without acknowledging $0.04→$2 per-kit

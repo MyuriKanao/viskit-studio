@@ -1,9 +1,9 @@
 """Provider protocol base classes for Viskit Studio.
 
 Architecture references:
-  - ADR-001: Two-protocol abstraction — all LLM/image backends are normalised
-    into exactly two protocol families: ``openai_compatible`` and
-    ``anthropic_compatible``.  Vendor brand names must not appear here.
+  - ADR-001: LLM backends stay normalised into the ``openai_compatible`` and
+    ``anthropic_compatible`` protocol families. Provider-specific image APIs
+    are isolated behind the image-only ``image_generation`` adapter.
   - ADR-005: compliance_screen role — VisionLLM.analyze supports a
     ``tool_use`` flag so the compliance screening layer can request structured
     JSON tool-call output from compatible backends without coupling to any

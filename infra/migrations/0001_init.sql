@@ -144,7 +144,9 @@ CREATE INDEX IF NOT EXISTS text_editor_sessions_image_id_idx ON text_editor_sess
 -- ─── Core: model_provider_adapters ───────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS model_provider_adapters (
     id          BIGSERIAL PRIMARY KEY,
-    protocol    VARCHAR(20) NOT NULL CHECK (protocol IN ('openai_compatible','anthropic_compatible')),
+    protocol    VARCHAR(32) NOT NULL CHECK (
+        protocol IN ('openai_compatible','anthropic_compatible','image_generation')
+    ),
     base_url    TEXT NOT NULL,
     model_id    TEXT NOT NULL,
     role        VARCHAR(20),

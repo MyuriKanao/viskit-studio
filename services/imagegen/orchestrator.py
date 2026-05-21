@@ -40,7 +40,7 @@ from typing import Any, Literal, cast
 
 from services.copywriter.compliance.preflight import run_preflight
 from services.copywriter.compliance.scorer import ScoreResult, score_spec
-from services.copywriter.sop import DetailSection, HeroSection
+from services.copywriter.sop import DetailSection, HeroSection, SkuMeta
 from services.imagegen._slot_map import load_template_for_section
 from services.imagegen.campaign_lock import apply_lock, build_lock
 from services.imagegen.color_lock import (
@@ -48,12 +48,19 @@ from services.imagegen.color_lock import (
     ColorLockResult,
     verify,
 )
+from services.imagegen.output_plan import (
+    OutputPlan,
+    OutputPlanItem,
+    build_full_kit_output_plan,
+    resolve_plan_templates,
+)
 from services.imagegen.prompt_builder import PromptInputs, build_prompt
 from services.imagegen.single_gen import (
     DETAIL_SIZE,
     HERO_SIZE,
     KitGenerationInputs,
 )
+from services.imagegen.template_library import parse_template_ref
 from services.imagegen.template_loader import Template
 from services.providers.registry import ProviderConfigError
 
@@ -63,11 +70,15 @@ __all__ = [
     "JobPayload",
     "KitEventBus",
     "OrchestratorResult",
+    "PlannedGenerationInputs",
+    "PlannedOrchestratorResult",
     "ProviderBinding",
     "RoutingSnapshot",
     "capture_snapshot",
     "default_adapter_factory",
+    "orchestrate_full_kit_plan",
     "orchestrate_kit",
+    "orchestrate_output_plan",
     "resolve_api_key",
 ]
 
@@ -91,7 +102,7 @@ _BRAND_COLOR_LOCKED_FLOOR = 12
 class ProviderBinding:
     """One row of a :class:`RoutingSnapshot` — env-var NAMES only, no secrets."""
 
-    protocol: Literal["openai_compatible", "anthropic_compatible"]
+    protocol: Literal["openai_compatible", "anthropic_compatible", "image_generation"]
     base_url: str
     api_key_env_var: str
     model: str
@@ -116,6 +127,8 @@ class JobPayload:
     brand_color_hex: str
     snapshot: RoutingSnapshot
     color_lock_threshold: float
+    output_path: Path | None = None
+    public_path: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,9 +161,45 @@ class OrchestratorResult:
     template_snapshot: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class PlannedGenerationInputs:
+    """Execution inputs for a confirmed variable-output plan.
+
+    ``job_id`` is the durable generation-job identity. ``kit_id`` is optional
+    and only used when a plan output writes to existing kit slots.
+    """
+
+    job_id: str
+    output_items: tuple[OutputPlanItem, ...]
+    sku_meta: SkuMeta
+    brand_color_hex: str
+    style_prompt: str
+    output_dir: Path
+    locale: Literal["zh", "en"]
+    kit_id: str | None = None
+    template_by_output_id: dict[str, Template] | None = None
+    template_snapshot: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PlannedOrchestratorResult:
+    job_id: str
+    png_paths: tuple[Path, ...]
+    image_paths_by_id: dict[str, Path | None]
+    skipped_output_ids: tuple[str, ...]
+    compliance_path: Path
+    cost_path: Path
+    color_lock_summary: dict[str, int]
+    needs_review: bool
+    abort_reason: str | None
+    max_concurrent_observed: int
+    template_snapshot: dict[str, Any] | None = None
+
+
 # ``(binding, role) -> adapter_instance`` — adapter must satisfy the ImageGen
 # Protocol from :mod:`services.providers.base`.
 AdapterFactory = Callable[[ProviderBinding, str], Any]
+StopChecker = Callable[[], bool]
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +217,7 @@ def capture_snapshot(registry: Any, *, cap: int = 4) -> RoutingSnapshot:
     providers: dict[str, ProviderBinding] = {}
     for role, entry in raw.get("providers", {}).items():
         protocol = entry.get("protocol")
-        if protocol not in {"openai_compatible", "anthropic_compatible"}:
+        if protocol not in {"openai_compatible", "anthropic_compatible", "image_generation"}:
             # ERR-PROV-002 covers snapshot-shape integrity (peer to the
             # secret-leak check below); ERR-PROV-003 is reserved for
             # env-var-missing-at-worker per ADR-011 v2.
@@ -185,7 +234,10 @@ def capture_snapshot(registry: Any, *, cap: int = 4) -> RoutingSnapshot:
                     role=role,
                 )
         providers[role] = ProviderBinding(
-            protocol=cast(Literal["openai_compatible", "anthropic_compatible"], protocol),
+            protocol=cast(
+                Literal["openai_compatible", "anthropic_compatible", "image_generation"],
+                protocol,
+            ),
             base_url=entry["base_url"],
             api_key_env_var=entry["api_key_env"],
             model=entry["model"],
@@ -409,6 +461,17 @@ def _output_path_for_section(output_dir: Path, kit_id: str, image_id: str) -> Pa
     return output_dir / "kits" / kit_id / sub / f"{image_id}.png"
 
 
+def _safe_output_filename(output_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", output_id).strip("._")
+    return safe or "output"
+
+
+def _output_path_for_payload(output_dir: Path, payload: JobPayload) -> Path:
+    if payload.output_path is not None:
+        return payload.output_path
+    return _output_path_for_section(output_dir, payload.kit_id, payload.image_id)
+
+
 def _call_generate(
     adapter: Any,
     prompt: str,
@@ -435,6 +498,14 @@ def _call_generate(
 def _public_image_path(kit_id: str, image_id: str, path: Path) -> str:
     version = path.stat().st_mtime_ns if path.exists() else time.time_ns()
     return f"/api/kits/{kit_id}/images/{image_id}?v={version}"
+
+
+def _public_payload_image_path(payload: JobPayload, path: Path) -> str:
+    if payload.public_path is not None:
+        sep = "&" if "?" in payload.public_path else "?"
+        version = path.stat().st_mtime_ns if path.exists() else time.time_ns()
+        return f"{payload.public_path}{sep}v={version}"
+    return _public_image_path(payload.kit_id, payload.image_id, path)
 
 
 async def _publish(bus: KitEventBus | None, kit_id: str, event: dict[str, Any]) -> None:
@@ -488,7 +559,7 @@ async def _run_one_image_with_retry(
 
     # Real factory call returns the adapter for this binding.
     adapter = adapter_factory(binding, payload.role)
-    output_path = _output_path_for_section(output_dir, payload.kit_id, payload.image_id)
+    output_path = _output_path_for_payload(output_dir, payload)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     await _publish(
@@ -613,7 +684,7 @@ async def _run_one_image_with_retry(
             "progress": 0,
             "brand_color_locked": color_lock.status == "ok",
             "png_path": (
-                _public_image_path(payload.kit_id, payload.image_id, output_path)
+                _public_payload_image_path(payload, output_path)
                 if color_lock.status == "ok" and output_path.exists()
                 else None
             ),
@@ -683,6 +754,81 @@ def _build_locked_prompts(
     return out
 
 
+def _template_for_plan_item(inputs: PlannedGenerationInputs, item: OutputPlanItem) -> Template:
+    mapped = (inputs.template_by_output_id or {}).get(item.output_id)
+    if mapped is not None:
+        return mapped
+
+    kind, ref_locale, ident = parse_template_ref(item.template_ref)
+    if kind != "builtin" or ref_locale != inputs.locale:
+        raise ValueError(
+            "custom or locale-mismatched plan item templates must be supplied "
+            f"via template_by_output_id for output_id={item.output_id!r}"
+        )
+    return resolve_plan_templates(
+        OutputPlan(
+            plan_id="single-item-validation",
+            plan_source=item.source,
+            recommendation_source="none",
+            requires_confirmation=True,
+            items=(item,),
+        ),
+        locale=inputs.locale,
+    )[item.output_id]
+
+
+def _size_from_plan_item(item: OutputPlanItem) -> str:
+    return f"{item.width}x{item.height}"
+
+
+def _planned_output_path(inputs: PlannedGenerationInputs, item: OutputPlanItem) -> Path:
+    if item.destination_type == "kit_slot" and inputs.kit_id and item.slot_id:
+        return _output_path_for_section(inputs.output_dir, inputs.kit_id, item.slot_id)
+    return (
+        inputs.output_dir
+        / "generation_jobs"
+        / inputs.job_id
+        / "outputs"
+        / f"{_safe_output_filename(item.output_id)}.png"
+    )
+
+
+def _planned_public_path(inputs: PlannedGenerationInputs, item: OutputPlanItem) -> str:
+    if item.destination_type == "kit_slot" and inputs.kit_id and item.slot_id:
+        return f"/api/kits/{inputs.kit_id}/images/{item.slot_id}"
+    return f"/api/generation/jobs/{inputs.job_id}/outputs/{item.output_id}/image"
+
+
+def _build_plan_locked_prompts(
+    inputs: PlannedGenerationInputs,
+    *,
+    secondary_color_hex: str | None = None,
+) -> list[tuple[OutputPlanItem, str, Template, str]]:
+    """Render locked prompts for exactly the items in a confirmed output plan."""
+    lock = build_lock(
+        inputs.job_id,
+        brand_color_hex=inputs.brand_color_hex,
+        locale=inputs.locale,
+        style_prompt=inputs.style_prompt,
+        secondary_color_hex=secondary_color_hex,
+    )
+    out: list[tuple[OutputPlanItem, str, Template, str]] = []
+    for item in sorted(inputs.output_items, key=lambda i: i.sort_order):
+        template = _template_for_plan_item(inputs, item)
+        body = build_prompt(
+            PromptInputs(
+                template=template,
+                image_brief=item.three_piece,
+                sku_meta=inputs.sku_meta,
+                brand_color_hex=inputs.brand_color_hex,
+                style_prompt=inputs.style_prompt,
+                locale=inputs.locale,
+            )
+        )
+        out.append((item, apply_lock(lock, body), template, _size_from_plan_item(item)))
+    return out
+
+
 def _write_compliance_json(
     *,
     kit_root: Path,
@@ -742,6 +888,16 @@ def _score_generated_spec(inputs: KitGenerationInputs) -> ScoreResult:
     return score_spec(sections, locale=inputs.locale)
 
 
+def _score_plan_items(inputs: PlannedGenerationInputs) -> ScoreResult:
+    sections: dict[str, str] = {}
+    for item in inputs.output_items:
+        sections[f"output.{item.output_id}"] = (
+            f"{item.three_piece.visual}\n{item.three_piece.copy}\n"
+            f"{item.three_piece.design_note}"
+        )
+    return score_spec(sections, locale=inputs.locale)
+
+
 def _write_cost_json(*, kit_root: Path, events: list[dict[str, Any]]) -> Path:
     kit_root.mkdir(parents=True, exist_ok=True)
     by_role: dict[str, float] = {}
@@ -771,6 +927,329 @@ def _write_cost_json(*, kit_root: Path, events: list[dict[str, Any]]) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+async def _publish_skipped_payloads(
+    *,
+    bus: KitEventBus | None,
+    channel_id: str,
+    payloads: Iterable[JobPayload],
+) -> tuple[str, ...]:
+    skipped: list[str] = []
+    for payload in payloads:
+        skipped.append(payload.image_id)
+        await _publish(
+            bus,
+            channel_id,
+            {
+                "image_id": payload.image_id,
+                "status": "skipped",
+                "progress": 0,
+                "brand_color_locked": False,
+                "png_path": None,
+                "reason": "stop_requested_before_start",
+            },
+        )
+    return tuple(skipped)
+
+
+async def _run_payloads_with_stop(
+    payloads: list[JobPayload],
+    *,
+    output_dir: Path,
+    adapter_factory: AdapterFactory,
+    counter: _ConcurrencyCounter,
+    bus: KitEventBus | None,
+    channel_id: str,
+    batch_size: int,
+    stop_checker: StopChecker | None = None,
+) -> tuple[list[JobOutcome], tuple[str, ...]]:
+    """Run payloads while honoring stop-before-schedule semantics.
+
+    The stop checker is consulted before each batch is scheduled.  Already
+    in-flight provider calls are allowed to finish; unscheduled payloads are
+    marked skipped and never call the provider.
+    """
+    outcomes: list[JobOutcome] = []
+    skipped: tuple[str, ...] = ()
+    effective_batch_size = max(1, batch_size)
+    for start in range(0, len(payloads), effective_batch_size):
+        if stop_checker is not None and stop_checker():
+            skipped = await _publish_skipped_payloads(
+                bus=bus,
+                channel_id=channel_id,
+                payloads=payloads[start:],
+            )
+            break
+        batch = payloads[start : start + effective_batch_size]
+        outcomes.extend(
+            await asyncio.gather(
+                *(
+                    _run_one_image_with_retry(
+                        p,
+                        output_dir=output_dir,
+                        adapter_factory=adapter_factory,
+                        counter=counter,
+                        bus=bus,
+                    )
+                    for p in batch
+                )
+            )
+        )
+    return outcomes, skipped
+
+
+async def orchestrate_output_plan(
+    inputs: PlannedGenerationInputs,
+    *,
+    registry: Any,
+    snapshot: RoutingSnapshot | None = None,
+    cap: int = 1,
+    color_lock_threshold: float = DEFAULT_THRESHOLD,
+    adapter_factory: AdapterFactory | None = None,
+    event_bus: KitEventBus | None = None,
+    stop_checker: StopChecker | None = None,
+    secondary_color_hex: str | None = None,
+) -> PlannedOrchestratorResult:
+    """Drive a confirmed variable-output plan.
+
+    The function runs exactly ``inputs.output_items``.  It does not create a
+    plan, mutate API state, or infer additional outputs.  Stop semantics are
+    intentionally soft: the checker prevents unscheduled outputs from starting
+    while allowing already in-flight provider calls to finish.
+    """
+    if not inputs.output_items:
+        raise ValueError("planned generation requires at least one output item")
+    if snapshot is None:
+        snapshot = capture_snapshot(registry, cap=cap)
+
+    factory = adapter_factory or default_adapter_factory(registry)
+    job_root = inputs.output_dir / "generation_jobs" / inputs.job_id
+
+    rendered = _build_plan_locked_prompts(inputs, secondary_color_hex=secondary_color_hex)
+    prompt_strs = [body for (_, body, _, _) in rendered]
+
+    preflight_result = run_preflight(prompt_strs, registry=registry, locale=inputs.locale)
+    preflight_event = _build_preflight_cost_event(
+        kit_id=inputs.job_id,
+        cost_usd=preflight_result.cost_estimate_usd,
+        passed=preflight_result.passed,
+    )
+
+    if not preflight_result.passed:
+        rule_ids = sorted({v.rule_id for v in preflight_result.violations})
+        abort_reason = "preflight_failed:" + ",".join(rule_ids)
+        compliance_path = _write_compliance_json(
+            kit_root=job_root,
+            preflight_passed=False,
+            violations=preflight_result.violations,
+            scorecard=_score_plan_items(inputs),
+            key_resolution=None,
+        )
+        cost_path = _write_cost_json(kit_root=job_root, events=[preflight_event])
+        await _publish(
+            event_bus,
+            inputs.job_id,
+            {
+                "image_id": "*",
+                "status": "preflight_failed",
+                "progress": 0,
+                "brand_color_locked": False,
+            },
+        )
+        if event_bus is not None:
+            event_bus.close(inputs.job_id)
+        return PlannedOrchestratorResult(
+            job_id=inputs.job_id,
+            png_paths=(),
+            image_paths_by_id={item.output_id: None for item in inputs.output_items},
+            skipped_output_ids=(),
+            compliance_path=compliance_path,
+            cost_path=cost_path,
+            color_lock_summary={
+                "ok": 0,
+                "out_of_tolerance": 0,
+                "error": 0,
+                "failed": 0,
+                "skipped": 0,
+            },
+            needs_review=True,
+            abort_reason=abort_reason,
+            max_concurrent_observed=0,
+            template_snapshot=inputs.template_snapshot,
+        )
+
+    image_role = "image" if "image" in snapshot.providers else "image_gen"
+    image_binding = snapshot.providers.get(image_role)
+    if image_binding is None:
+        raise ProviderConfigError(
+            "ERR-PROV-001",
+            "snapshot missing role 'image' or legacy role 'image_gen'",
+            role="image",
+        )
+
+    payloads: list[JobPayload] = []
+    for item, prompt, template, size in rendered:
+        payloads.append(
+            JobPayload(
+                kit_id=inputs.job_id,
+                image_id=item.output_id,
+                template_id=template.id,
+                role=image_role,
+                size=size,
+                prompt=prompt,
+                brand_color_hex=inputs.brand_color_hex,
+                snapshot=snapshot,
+                color_lock_threshold=color_lock_threshold,
+                output_path=_planned_output_path(inputs, item),
+                public_path=_planned_public_path(inputs, item),
+            )
+        )
+
+    counter = _ConcurrencyCounter()
+    outcomes, skipped = await _run_payloads_with_stop(
+        payloads,
+        output_dir=inputs.output_dir,
+        adapter_factory=factory,
+        counter=counter,
+        bus=event_bus,
+        channel_id=inputs.job_id,
+        batch_size=max(1, min(cap, image_binding.cap)),
+        stop_checker=stop_checker,
+    )
+
+    outcomes_by_id = {outcome.image_id: outcome for outcome in outcomes}
+    ordered_items = sorted(inputs.output_items, key=lambda i: i.sort_order)
+    ordered_ids = [item.output_id for item in ordered_items]
+    summary: dict[str, int] = {
+        "ok": 0,
+        "out_of_tolerance": 0,
+        "error": 0,
+        "failed": 0,
+        "skipped": len(skipped),
+    }
+    cost_events: list[dict[str, Any]] = [preflight_event]
+    png_paths_list: list[Path] = []
+    image_paths_by_id: dict[str, Path | None] = {}
+    needs_review_job = False
+    key_resolution: dict[str, Any] | None = None
+
+    for image_id in ordered_ids:
+        outcome = outcomes_by_id.get(image_id)
+        if outcome is None:
+            image_paths_by_id[image_id] = None
+            continue
+        image_paths_by_id[image_id] = outcome.png_path
+        if outcome.png_path is not None:
+            png_paths_list.append(outcome.png_path)
+        if outcome.cost_event is not None:
+            cost_events.append(outcome.cost_event)
+        summary[outcome.color_lock_status] += 1
+        if outcome.needs_review:
+            needs_review_job = True
+        if (
+            outcome.error_code == "ERR-PROV-003"
+            and outcome.cost_event is not None
+            and key_resolution is None
+        ):
+            key_resolution = {
+                "failed_role": outcome.cost_event.get("role"),
+                "env_var_name": outcome.cost_event.get("env_var_missing"),
+                "reason": "env_var_missing",
+            }
+
+    compliance_path = _write_compliance_json(
+        kit_root=job_root,
+        preflight_passed=True,
+        violations=preflight_result.violations,
+        scorecard=_score_plan_items(inputs),
+        key_resolution=key_resolution,
+    )
+    cost_path = _write_cost_json(kit_root=job_root, events=cost_events)
+    final_status = "stopped" if skipped else "done"
+    await _publish(
+        event_bus,
+        inputs.job_id,
+        {
+            "image_id": "*",
+            "status": final_status,
+            "progress": len(outcomes),
+            "brand_color_locked": summary["ok"] == len(outcomes) and bool(outcomes),
+            "skipped": len(skipped),
+        },
+    )
+    if event_bus is not None:
+        event_bus.close(inputs.job_id)
+
+    return PlannedOrchestratorResult(
+        job_id=inputs.job_id,
+        png_paths=tuple(png_paths_list),
+        image_paths_by_id=image_paths_by_id,
+        skipped_output_ids=skipped,
+        compliance_path=compliance_path,
+        cost_path=cost_path,
+        color_lock_summary=summary,
+        needs_review=needs_review_job,
+        abort_reason="stopped" if skipped else None,
+        max_concurrent_observed=counter.max_observed,
+        template_snapshot=inputs.template_snapshot,
+    )
+
+
+async def orchestrate_full_kit_plan(
+    inputs: KitGenerationInputs,
+    *,
+    registry: Any,
+    plan: OutputPlan | None = None,
+    snapshot: RoutingSnapshot | None = None,
+    cap: int = 1,
+    color_lock_threshold: float = DEFAULT_THRESHOLD,
+    adapter_factory: AdapterFactory | None = None,
+    event_bus: KitEventBus | None = None,
+    stop_checker: StopChecker | None = None,
+    secondary_color_hex: str | None = None,
+) -> OrchestratorResult:
+    """Compatibility wrapper that executes the full H1-H5/M1-M9 kit as a plan."""
+    full_plan = plan or build_full_kit_output_plan(inputs.spec)
+    template_by_output_id = dict(inputs.template_by_section or {})
+    if not template_by_output_id:
+        template_by_output_id = resolve_plan_templates(full_plan, locale=inputs.locale)
+    planned_inputs = PlannedGenerationInputs(
+        job_id=inputs.kit_id,
+        kit_id=inputs.kit_id,
+        output_items=full_plan.items,
+        sku_meta=inputs.sku_meta,
+        brand_color_hex=inputs.brand_color_hex,
+        style_prompt=inputs.style_prompt,
+        output_dir=inputs.output_dir,
+        locale=inputs.locale,
+        template_by_output_id=template_by_output_id,
+        template_snapshot=inputs.template_snapshot,
+    )
+    planned_result = await orchestrate_output_plan(
+        planned_inputs,
+        registry=registry,
+        snapshot=snapshot,
+        cap=cap,
+        color_lock_threshold=color_lock_threshold,
+        adapter_factory=adapter_factory,
+        event_bus=event_bus,
+        stop_checker=stop_checker,
+        secondary_color_hex=secondary_color_hex,
+    )
+    summary = {k: v for k, v in planned_result.color_lock_summary.items() if k != "skipped"}
+    return OrchestratorResult(
+        kit_id=inputs.kit_id,
+        png_paths=planned_result.png_paths,
+        image_paths_by_id=planned_result.image_paths_by_id,
+        compliance_path=planned_result.compliance_path,
+        cost_path=planned_result.cost_path,
+        color_lock_summary=summary,
+        needs_review=planned_result.needs_review,
+        abort_reason=planned_result.abort_reason,
+        max_concurrent_observed=planned_result.max_concurrent_observed,
+        template_snapshot=planned_result.template_snapshot,
+    )
 
 
 async def orchestrate_kit(

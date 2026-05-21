@@ -79,7 +79,13 @@ async function main() {
     ],
     {
       cwd: REPO_ROOT,
-      env: { ...process.env, PYTHONUNBUFFERED: '1' },
+      env: {
+        ...process.env,
+        PYTHONUNBUFFERED: '1',
+        DATABASE_URL: process.env.DATABASE_URL ?? 'sqlite:///data/viskit.db',
+        VISKIT_AUTO_MIGRATE: process.env.VISKIT_AUTO_MIGRATE ?? '1',
+        VISKIT_BOOTSTRAP_WORKSPACE: process.env.VISKIT_BOOTSTRAP_WORKSPACE ?? '1',
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     }
   );

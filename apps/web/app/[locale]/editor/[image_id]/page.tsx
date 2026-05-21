@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 
 import { EditorRoot } from '@/components/editor/EditorRoot';
 
@@ -11,5 +12,11 @@ export default async function EditorPage({
 }: {
   params: { locale: string; image_id: string };
 }) {
-  return <EditorRoot imageId={params.image_id} />;
+  let imageId: string;
+  try {
+    imageId = decodeURIComponent(params.image_id);
+  } catch {
+    notFound();
+  }
+  return <EditorRoot imageId={imageId} />;
 }

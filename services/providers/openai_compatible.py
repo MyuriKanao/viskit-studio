@@ -106,6 +106,14 @@ def _decode_data_url(url: str) -> bytes | None:
     return base64.b64decode(payload)
 
 
+def _append_v1(base_url: str, endpoint: str) -> str:
+    """Build an OpenAI-compatible v1 endpoint without duplicating ``/v1``."""
+    base = base_url.rstrip("/")
+    if base.endswith("/v1"):
+        return f"{base}{endpoint}"
+    return f"{base}/v1{endpoint}"
+
+
 # ---------------------------------------------------------------------------
 # Adapter
 # ---------------------------------------------------------------------------
@@ -119,8 +127,8 @@ class OpenAICompatibleAdapter:
     via ``make_session`` so retry/timeout settings stay consistent.
 
     Args:
-        base_url: Root URL of the openai_compatible endpoint, with no trailing
-            slash (e.g. ``"https://gateway.example/v1"``).
+        base_url: Root URL of the openai_compatible endpoint, with or without
+            a trailing ``/v1``.
         api_key_env: Name of the environment variable that holds the bearer
             token.  Resolved at call time, not at construction time, so tests
             can ``monkeypatch.setenv`` per case.
@@ -222,7 +230,7 @@ class OpenAICompatibleAdapter:
 
         with make_session(timeout=self.timeout) as client:
             response = client.post(
-                f"{self.base_url}/chat/completions",
+                _append_v1(self.base_url, "/chat/completions"),
                 json=body,
                 headers=self._headers(),
             )
@@ -305,7 +313,7 @@ class OpenAICompatibleAdapter:
 
         with make_session(timeout=self.timeout) as client:
             response = client.post(
-                f"{self.base_url}/chat/completions",
+                _append_v1(self.base_url, "/chat/completions"),
                 json=body,
                 headers=self._headers(),
             )
@@ -402,7 +410,7 @@ class OpenAICompatibleAdapter:
         *,
         on_partial_image: Callable[[bytes], None] | None = None,
     ) -> tuple[list[bytes], str | None, dict[str, Any]]:
-        url = f"{self.base_url}/images/generations"
+        url = _append_v1(self.base_url, "/images/generations")
         stream_body = {**body, "stream": True, "partial_images": 1}
         try:
             with client.stream(
@@ -430,7 +438,7 @@ class OpenAICompatibleAdapter:
         self, client: httpx.Client, body: dict[str, Any]
     ) -> tuple[list[bytes], str | None, dict[str, Any]]:
         submit_response = client.post(
-            f"{self.base_url}/images/generations",
+            _append_v1(self.base_url, "/images/generations"),
             json=body,
             headers=self._headers(),
         )
@@ -534,7 +542,7 @@ class OpenAICompatibleAdapter:
 
         with make_session(timeout=self.timeout) as client:
             submit_response = client.post(
-                f"{self.base_url}/images/edits",
+                _append_v1(self.base_url, "/images/edits"),
                 files=files,
                 data=data,
                 headers=headers,
@@ -618,7 +626,7 @@ class OpenAICompatibleAdapter:
         deadline = self._clock() + _POLL_DEADLINE
         self._sleep(_INITIAL_POLL_DELAY)
 
-        url = f"{self.base_url}/tasks/{task_id}"
+        url = _append_v1(self.base_url, f"/tasks/{task_id}")
         while True:
             if self._clock() >= deadline:
                 raise ImageGenTimeoutError(
@@ -687,7 +695,7 @@ class OpenAICompatibleAdapter:
 
         with make_session(timeout=self.timeout) as client:
             response = client.post(
-                f"{self.base_url}/embeddings",
+                _append_v1(self.base_url, "/embeddings"),
                 json=body,
                 headers=self._headers(),
             )
@@ -711,7 +719,7 @@ class OpenAICompatibleAdapter:
     # ------------------------------------------------------------------
 
     def probe(self, *, timeout: float = 30.0) -> ProbeResult:
-        """Hit ``GET {base_url}/models`` to verify reachability + list models.
+        """Hit ``GET {base_url}/v1/models`` to verify reachability + list models.
 
         Never raises — failures are encoded in the returned :class:`ProbeResult`.
         Uses a plain ``httpx.Client`` (no retry session) so the reported latency
@@ -723,7 +731,7 @@ class OpenAICompatibleAdapter:
                 ok=False, latency_ms=0, models=[],
                 error=f"{self.api_key_env} unset",
             )
-        url = f"{self.base_url}/models"
+        url = _append_v1(self.base_url, "/models")
         headers = {"Authorization": f"Bearer {api_key}"}
         started = self._clock()
         try:

@@ -4,6 +4,210 @@
  */
 
 export interface paths {
+    "/api/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Assets */
+        get: operations["list_assets_api_assets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Asset */
+        get: operations["download_asset_api_assets__asset_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Get Asset Edit Context */
+        post: operations["get_asset_edit_context_api_assets__asset_id__edit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{asset_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Asset Image */
+        get: operations["get_asset_image_api_assets__asset_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/generation/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Generation Job */
+        post: operations["create_generation_job_api_generation_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/generation/jobs/kits/{marketing_kit_id}/slots/{slot_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Kit Slot Output Image */
+        get: operations["get_kit_slot_output_image_api_generation_jobs_kits__marketing_kit_id__slots__slot_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/generation/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Generation Job */
+        get: operations["get_generation_job_api_generation_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/generation/jobs/{job_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Generation Job Events */
+        get: operations["generation_job_events_api_generation_jobs__job_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/generation/jobs/{job_id}/outputs/{output_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Generation Output Image */
+        get: operations["get_generation_output_image_api_generation_jobs__job_id__outputs__output_id__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/generation/jobs/{job_id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Generation Job */
+        post: operations["start_generation_job_api_generation_jobs__job_id__start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/generation/jobs/{job_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Generation Job */
+        post: operations["stop_generation_job_api_generation_jobs__job_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/images/{image_id}/bytes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Image Bytes */
+        get: operations["get_image_bytes_api_images__image_id__bytes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/images/{image_id}/edit": {
         parameters: {
             query?: never;
@@ -15,6 +219,40 @@ export interface paths {
         put?: never;
         /** Start Edit */
         post: operations["start_edit_api_images__image_id__edit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/images/{image_id}/edit-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Edit Result */
+        post: operations["create_edit_result_api_images__image_id__edit_results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/images/{image_id}/edit-results/{edit_result_ref}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Edit Result Image */
+        get: operations["get_edit_result_image_api_images__image_id__edit_results__edit_result_ref__image_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -49,6 +287,26 @@ export interface paths {
         put?: never;
         /** Ocr Image */
         post: operations["ocr_image_api_images__image_id__ocr_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/images/{image_id}/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Edited Image
+         * @description Persist an edit result via an explicit replace-or-copy choice.
+         */
+        post: operations["save_edited_image_api_images__image_id__save_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -388,6 +646,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/providers/endpoints/{role}/secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Endpoint Secret
+         * @description Return the locally saved secret for *role*.
+         *
+         *     Only keys saved through ``data/secrets.json`` are revealable.  If the
+         *     endpoint is backed by a shell/environment variable, the UI can still probe
+         *     it via ``api_key_env`` but the plaintext value is not exposed here.
+         */
+        get: operations["get_endpoint_secret_api_providers_endpoints__role__secret_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/providers/health": {
         parameters: {
             query?: never;
@@ -553,6 +835,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source-images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Source Image */
+        post: operations["create_source_image_api_source_images_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/source-images/{source_image_ref}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Source Image */
+        get: operations["get_source_image_api_source_images__source_image_ref__image_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/templates": {
         parameters: {
             query?: never;
@@ -667,7 +983,7 @@ export interface paths {
         };
         /**
          * Health
-         * @description Probe Postgres, Redis, MinIO concurrently with a 2s timeout each.
+         * @description Probe the configured database with a 2s timeout.
          */
         get: operations["health_health_get"];
         put?: never;
@@ -682,6 +998,53 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AssetEditContext */
+        AssetEditContext: {
+            /** Asset Id */
+            asset_id: string;
+            /** Image Id */
+            image_id: string;
+            /** Image Url */
+            image_url: string;
+            /** Target */
+            target: {
+                [key: string]: string;
+            };
+        };
+        /** AssetListResponse */
+        AssetListResponse: {
+            /** Items */
+            items: components["schemas"]["AssetOut"][];
+            /** Total */
+            total: number;
+        };
+        /** AssetOut */
+        AssetOut: {
+            /** Download Url */
+            download_url: string;
+            /** Id */
+            id: string;
+            /** Image Id */
+            image_id: string;
+            /** Image Url */
+            image_url: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /** Output Kind */
+            output_kind?: string | null;
+            /** Source Image Ref */
+            source_image_ref?: string | null;
+            /** Source Job Id */
+            source_job_id?: string | null;
+            /** Source Output Id */
+            source_output_id?: string | null;
+            /** Template Ref */
+            template_ref?: string | null;
+        };
         /** ComplianceOut */
         ComplianceOut: {
             /** Advisory */
@@ -709,6 +1072,8 @@ export interface components {
         };
         /** CreateEndpointRequest */
         CreateEndpointRequest: {
+            /** Adapter */
+            adapter?: string | null;
             /** Api Key */
             api_key: string;
             /** Base Url */
@@ -721,7 +1086,7 @@ export interface components {
              * Protocol
              * @enum {string}
              */
-            protocol: "openai_compatible" | "anthropic_compatible";
+            protocol: "openai_compatible" | "anthropic_compatible" | "image_generation";
         };
         /** DeleteKitImageResponse */
         DeleteKitImageResponse: {
@@ -761,7 +1126,7 @@ export interface components {
         EditRequest: {
             /**
              * Kit Id
-             * @description Optional kit id for MinIO sidecar write; safe-character allowlist guards the object-store path.
+             * @description Optional kit id for local edit context; safe-character allowlist keeps sidecar references portable.
              */
             kit_id?: string | null;
             /**
@@ -774,8 +1139,35 @@ export interface components {
             /** New Text */
             new_text: string;
         };
+        /** EditResultCreate */
+        EditResultCreate: {
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Result Data Url */
+            result_data_url: string;
+            /** Source Image Ref */
+            source_image_ref?: string | null;
+        };
+        /** EditResultOut */
+        EditResultOut: {
+            /** Edit Result Ref */
+            edit_result_ref: string;
+            /** Result Url */
+            result_url: string;
+            /** Status */
+            status: string;
+        };
+        /** EndpointSecretResponse */
+        EndpointSecretResponse: {
+            /** Api Key */
+            api_key: string;
+        };
         /** EndpointStanza */
         EndpointStanza: {
+            /** Adapter */
+            adapter?: string | null;
             /** Api Key Env */
             api_key_env: string;
             /** Base Url */
@@ -853,6 +1245,184 @@ export interface components {
             needs_review: boolean;
             /** Png Paths */
             png_paths: string[];
+        };
+        /** GenerationJobCreate */
+        GenerationJobCreate: {
+            /** Client Job Id */
+            client_job_id?: string | null;
+            /**
+             * Locale
+             * @default zh
+             * @enum {string}
+             */
+            locale: "zh" | "en";
+            /** Marketing Kit Id */
+            marketing_kit_id?: number | null;
+            /** Outputs */
+            outputs: components["schemas"]["GenerationOutputCreate"][];
+            /** Planner Payload */
+            planner_payload?: {
+                [key: string]: unknown;
+            };
+            /** Source Image Ref */
+            source_image_ref: string;
+            /**
+             * User Prompt
+             * @default
+             */
+            user_prompt: string;
+        };
+        /** GenerationJobCreated */
+        GenerationJobCreated: {
+            /** Job Id */
+            job_id: string;
+            /** Output Count */
+            output_count: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "stopping" | "stopped" | "succeeded" | "failed" | "partial" | "interrupted";
+        };
+        /** GenerationJobOut */
+        GenerationJobOut: {
+            /** Cancel Requested */
+            cancel_requested: boolean;
+            /** Client Job Id */
+            client_job_id: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Id */
+            id: string;
+            /** Locale */
+            locale: string;
+            /** Marketing Kit Id */
+            marketing_kit_id: number | null;
+            /** Outputs */
+            outputs: components["schemas"]["GenerationOutputOut"][];
+            /** Planner Payload */
+            planner_payload: {
+                [key: string]: unknown;
+            };
+            /** Source Image Ref */
+            source_image_ref: string;
+            /** Started At */
+            started_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "stopping" | "stopped" | "succeeded" | "failed" | "partial" | "interrupted";
+            /** Updated At */
+            updated_at: string | null;
+            /** User Prompt */
+            user_prompt: string;
+        };
+        /** GenerationJobStartResponse */
+        GenerationJobStartResponse: {
+            /** Job Id */
+            job_id: string;
+            /** Scheduled */
+            scheduled: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "stopping" | "stopped" | "succeeded" | "failed" | "partial" | "interrupted";
+        };
+        /** GenerationJobStopResponse */
+        GenerationJobStopResponse: {
+            /** Cancel Requested */
+            cancel_requested: boolean;
+            /** Job Id */
+            job_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "planned" | "queued" | "running" | "stopping" | "stopped" | "succeeded" | "failed" | "partial" | "interrupted";
+        };
+        /** GenerationOutputCreate */
+        GenerationOutputCreate: {
+            /** Aspect Ratio */
+            aspect_ratio?: string | null;
+            /**
+             * Destination Type
+             * @default asset
+             * @enum {string}
+             */
+            destination_type: "kit_slot" | "asset";
+            /**
+             * Height
+             * @default 1024
+             */
+            height: number;
+            /** Marketing Kit Id */
+            marketing_kit_id?: number | null;
+            /** Output Key */
+            output_key: string;
+            /**
+             * Output Kind
+             * @default custom
+             * @enum {string}
+             */
+            output_kind: "product_main" | "white_bg" | "solid_bg" | "banner" | "poster" | "hero" | "detail" | "custom";
+            /** Prompt */
+            prompt: string;
+            /** Slot Id */
+            slot_id?: string | null;
+            /** Template Name */
+            template_name?: string | null;
+            /** Template Ref */
+            template_ref: string;
+            /**
+             * Width
+             * @default 1024
+             */
+            width: number;
+        };
+        /** GenerationOutputOut */
+        GenerationOutputOut: {
+            /** Aspect Ratio */
+            aspect_ratio: string | null;
+            /** Asset Id */
+            asset_id: string | null;
+            /** Destination Type */
+            destination_type: string;
+            /** Error Message */
+            error_message: string | null;
+            /** Height */
+            height: number;
+            /** Id */
+            id: string;
+            /** Image Id */
+            image_id: string | null;
+            /** Image Url */
+            image_url: string | null;
+            /** Marketing Kit Id */
+            marketing_kit_id: number | null;
+            /** Output Key */
+            output_key: string;
+            /** Output Kind */
+            output_kind: string;
+            /** Prompt */
+            prompt: string;
+            /** Slot Id */
+            slot_id: string | null;
+            /** Sort Order */
+            sort_order: number;
+            /** Status */
+            status: string;
+            /** Template Name */
+            template_name: string | null;
+            /** Template Ref */
+            template_ref: string;
+            /** Width */
+            width: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1008,6 +1578,8 @@ export interface components {
         };
         /** ProbeCandidateRequest */
         ProbeCandidateRequest: {
+            /** Adapter */
+            adapter?: string | null;
             /** Api Key */
             api_key?: string | null;
             /** Api Key Env */
@@ -1018,7 +1590,7 @@ export interface components {
              * Protocol
              * @enum {string}
              */
-            protocol: "openai_compatible" | "anthropic_compatible";
+            protocol: "openai_compatible" | "anthropic_compatible" | "image_generation";
         };
         /** ProbeCandidateResponse */
         ProbeCandidateResponse: {
@@ -1114,6 +1686,32 @@ export interface components {
             registry_rebooted: boolean;
             /** Warning */
             warning?: string | null;
+        };
+        /** SaveImageRequest */
+        SaveImageRequest: {
+            /** Edit Result Ref */
+            edit_result_ref: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "replace" | "copy";
+        };
+        /** SaveImageResponse */
+        SaveImageResponse: {
+            /** Asset Id */
+            asset_id?: number | null;
+            /** Image Id */
+            image_id: string;
+            /** Image Url */
+            image_url: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "replace" | "copy";
+            /** Replaced */
+            replaced: boolean;
         };
         /** SchemePayload */
         SchemePayload: {
@@ -1233,6 +1831,19 @@ export interface components {
             product_type: "blue_hat" | "sports" | "general_food" | "other";
             /** Sku */
             sku?: string | null;
+        };
+        /** SourceImageOut */
+        SourceImageOut: {
+            /** Mime Type */
+            mime_type: string;
+            /** Preview Url */
+            preview_url: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Source Image Ref */
+            source_image_ref: string;
         };
         /** Sparks */
         Sparks: {
@@ -1484,6 +2095,8 @@ export interface components {
         };
         /** UpdateEndpointRequest */
         UpdateEndpointRequest: {
+            /** Adapter */
+            adapter?: string | null;
             /** Api Key */
             api_key?: string | null;
             /** Base Url */
@@ -1496,7 +2109,7 @@ export interface components {
              * Protocol
              * @enum {string}
              */
-            protocol: "openai_compatible" | "anthropic_compatible";
+            protocol: "openai_compatible" | "anthropic_compatible" | "image_generation";
         };
         /** ValidationError */
         ValidationError: {
@@ -1548,6 +2161,383 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_assets_api_assets_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_asset_api_assets__asset_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_asset_edit_context_api_assets__asset_id__edit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetEditContext"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_asset_image_api_assets__asset_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_generation_job_api_generation_jobs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerationJobCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJobCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_kit_slot_output_image_api_generation_jobs_kits__marketing_kit_id__slots__slot_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                marketing_kit_id: number;
+                slot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_generation_job_api_generation_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generation_job_events_api_generation_jobs__job_id__events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_generation_output_image_api_generation_jobs__job_id__outputs__output_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                output_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_generation_job_api_generation_jobs__job_id__start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJobStartResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_generation_job_api_generation_jobs__job_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJobStopResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_image_bytes_api_images__image_id__bytes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_edit_api_images__image_id__edit_post: {
         parameters: {
             query?: never;
@@ -1570,6 +2560,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EditAccepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_edit_result_api_images__image_id__edit_results_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditResultCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_edit_result_image_api_images__image_id__edit_results__edit_result_ref__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+                edit_result_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -1634,6 +2691,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OcrResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_edited_image_api_images__image_id__save_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveImageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveImageResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2161,6 +3253,37 @@ export interface operations {
             };
         };
     };
+    get_endpoint_secret_api_providers_endpoints__role__secret_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndpointSecretResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_provider_health_api_providers_health_get: {
         parameters: {
             query?: never;
@@ -2338,6 +3461,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_source_image_api_source_images_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceImageOut"];
+                };
+            };
+        };
+    };
+    get_source_image_api_source_images__source_image_ref__image_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_image_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

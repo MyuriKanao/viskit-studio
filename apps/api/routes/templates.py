@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from apps.api.lib.db import get_session
+from apps.api.lib.db import array_param, get_session, json_param
 from services.copywriter.sop import SkuMeta, ThreePiece
 from services.imagegen.prompt_builder import PromptInputs, build_prompt
 from services.imagegen.template_library import (
@@ -203,6 +203,48 @@ def _summary_from_template(
     )
 
 
+def _tags_from_db(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return [value] if value else []
+        if isinstance(parsed, list):
+            return [str(item) for item in parsed]
+        return []
+    if isinstance(value, list | tuple):
+        return [str(item) for item in value]
+    return []
+
+
+def _dict_from_db(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _list_from_db(value: object) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return []
+        return parsed if isinstance(parsed, list) else []
+    return []
+
+
 def _builtin_templates() -> list[TemplateSummary]:
     result: list[TemplateSummary] = []
     for locale in sorted(SUPPORTED_LOCALES):
@@ -230,7 +272,7 @@ def _custom_templates(session: Session) -> list[TemplateSummary]:
                 source="custom",
                 enabled=bool(data["enabled"]),
                 description=data.get("description"),
-                tags=list(data.get("tags") or []),
+                tags=_tags_from_db(data.get("tags")),
                 category=cast(Category, data.get("category") or _category_for_template(tpl)),
             )
         )
@@ -277,9 +319,9 @@ def create_template(
             "(locale, name, description, category, tags, prompt_template, defaults, "
             "variants, category_tips, examples, supports_image_reference, enabled) "
             "VALUES (:locale, :name, :description, :category, :tags, "
-            "CAST(:prompt_template AS JSONB), CAST(:defaults AS JSONB), "
-            "CAST(:variants AS JSONB), CAST(:category_tips AS JSONB), "
-            "CAST(:examples AS JSONB), :supports_image_reference, :enabled) "
+            f"{json_param(session, 'prompt_template')}, {json_param(session, 'defaults')}, "
+            f"{json_param(session, 'variants')}, {json_param(session, 'category_tips')}, "
+            f"{json_param(session, 'examples')}, :supports_image_reference, :enabled) "
             "RETURNING id"
         ),
         {
@@ -287,7 +329,7 @@ def create_template(
             "name": tpl.name,
             "description": payload.description,
             "category": payload.category,
-            "tags": payload.tags,
+            "tags": array_param(session, payload.tags),
             "prompt_template": json.dumps(tpl.prompt_template, ensure_ascii=False),
             "defaults": json.dumps(tpl.defaults, ensure_ascii=False),
             "variants": json.dumps(tpl.variants, ensure_ascii=False),
@@ -353,6 +395,12 @@ def update_template(
     if row is None:
         raise HTTPException(status_code=404, detail="custom template not found")
     data = dict(row._mapping)
+    data["tags"] = _tags_from_db(data.get("tags"))
+    data["prompt_template"] = _dict_from_db(data.get("prompt_template"))
+    data["defaults"] = _dict_from_db(data.get("defaults"))
+    data["variants"] = _dict_from_db(data.get("variants"))
+    data["category_tips"] = _dict_from_db(data.get("category_tips"))
+    data["examples"] = _list_from_db(data.get("examples"))
     patch = payload.model_dump(exclude_unset=True)
     data.update(patch)
     try:
@@ -372,19 +420,20 @@ def update_template(
         text(
             "UPDATE custom_templates SET name=:name, description=:description, "
             "category=:category, tags=:tags, "
-            "prompt_template=CAST(:prompt_template AS JSONB), "
-            "defaults=CAST(:defaults AS JSONB), variants=CAST(:variants AS JSONB), "
-            "category_tips=CAST(:category_tips AS JSONB), "
-            "examples=CAST(:examples AS JSONB), "
+            f"prompt_template={json_param(session, 'prompt_template')}, "
+            f"defaults={json_param(session, 'defaults')}, "
+            f"variants={json_param(session, 'variants')}, "
+            f"category_tips={json_param(session, 'category_tips')}, "
+            f"examples={json_param(session, 'examples')}, "
             "supports_image_reference=:supports_image_reference, "
-            "enabled=:enabled, updated_at=NOW() WHERE id=:id"
+            "enabled=:enabled, updated_at=CURRENT_TIMESTAMP WHERE id=:id"
         ),
         {
             "id": template_id,
             "name": tpl.name,
             "description": data.get("description"),
             "category": data.get("category") or "lifestyle",
-            "tags": data.get("tags") or [],
+            "tags": array_param(session, _tags_from_db(data.get("tags"))),
             "prompt_template": json.dumps(tpl.prompt_template, ensure_ascii=False),
             "defaults": json.dumps(tpl.defaults, ensure_ascii=False),
             "variants": json.dumps(tpl.variants, ensure_ascii=False),
@@ -400,7 +449,7 @@ def update_template(
         source="custom",
         enabled=bool(data.get("enabled", True)),
         description=data.get("description"),
-        tags=list(data.get("tags") or []),
+        tags=_tags_from_db(data.get("tags")),
         category=cast(Category, data.get("category") or "lifestyle"),
     )
 
@@ -572,7 +621,7 @@ def preview_template(
             text(
                 "INSERT INTO template_preview_runs "
                 "(template_ref, locale, sample_payload, prompt, png_path, cost_usd, status) "
-                "VALUES (:template_ref, :locale, CAST(:sample_payload AS JSONB), "
+                f"VALUES (:template_ref, :locale, {json_param(session, 'sample_payload')}, "
                 ":prompt, :png_path, :cost_usd, 'ready')"
             ),
             {

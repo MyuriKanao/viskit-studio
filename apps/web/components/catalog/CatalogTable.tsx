@@ -1,11 +1,11 @@
 'use client';
 
-import { Trash2 } from 'lucide-react';
 import * as React from 'react';
 
 import { StatusChip } from '@/components/atoms/status-chip';
 import type { KitListItem } from '@/hooks/use-recent-kits';
 import { resolveApiImageSrc } from '@/lib/api/images';
+import { imageIdForIndex } from '@/lib/kits/images';
 import { cn } from '@/lib/utils';
 
 import { AdvisoryBadge } from './AdvisoryBadge';
@@ -20,14 +20,14 @@ export interface CatalogTableLabels {
   updated: string;
   empty: string;
   advisory: string;
-  deleteImage: string;
+  openImage: string;
 }
 
 export interface CatalogTableProps {
   kits: KitListItem[];
   labels: CatalogTableLabels;
   onRowClick?: (kit: KitListItem) => void;
-  onDeleteImage?: (kit: KitListItem, imageId: string) => void;
+  onImageClick?: (kit: KitListItem, imageIndex: number) => void;
 }
 
 function statusKind(raw: string): 'ok' | 'warn' | 'error' | 'pending' {
@@ -48,11 +48,7 @@ function statusLabel(raw: string): string {
   return raw || 'Unknown';
 }
 
-function imageIdForIndex(index: number): string {
-  return index < 5 ? `H${index + 1}` : `M${index - 4}`;
-}
-
-export function CatalogTable({ kits, labels, onRowClick, onDeleteImage }: CatalogTableProps) {
+export function CatalogTable({ kits, labels, onRowClick, onImageClick }: CatalogTableProps) {
   const isEmpty = kits.length === 0;
 
   return (
@@ -114,28 +110,23 @@ export function CatalogTable({ kits, labels, onRowClick, onDeleteImage }: Catalo
                 >
                   <td className="px-s-3 py-s-2">
                     {thumb && thumbImageId ? (
-                      <div className="group/thumb relative h-8 w-8">
+                      <button
+                        type="button"
+                        aria-label={`${labels.openImage} ${thumbImageId}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onImageClick?.(kit, thumbIndex);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        className="group/thumb relative h-8 w-8 rounded-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      >
                         <img
                           src={resolveApiImageSrc(thumb)}
                           alt=""
                           className="h-8 w-8 rounded-input object-cover"
                           loading="lazy"
                         />
-                        {onDeleteImage ? (
-                          <button
-                            type="button"
-                            aria-label={`${labels.deleteImage} ${thumbImageId}`}
-                            title={`${labels.deleteImage} ${thumbImageId}`}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onDeleteImage(kit, thumbImageId);
-                            }}
-                            className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-input border border-danger/40 bg-ink-base/90 text-danger shadow-sm transition-colors duration-fast hover:bg-danger hover:text-white focus:outline-none focus:ring-2 focus:ring-danger"
-                          >
-                            <Trash2 aria-hidden="true" className="h-3 w-3" />
-                          </button>
-                        ) : null}
-                      </div>
+                      </button>
                     ) : (
                       <span
                         aria-hidden="true"

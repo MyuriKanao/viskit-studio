@@ -7,7 +7,7 @@ emits a per-image cost event row.  After the loop completes it writes
 ``compliance.json`` (placeholder ``score=null``) and ``cost.json`` (raw event
 list) — the EPIC-7 Kit Detail page consumes these.
 
-NO concurrency, NO arq, NO SSE, NO campaign-lock.  All deferred to EPIC-4B.
+NO external queue, NO SSE, NO campaign-lock.  All deferred to EPIC-4B.
 """
 
 from __future__ import annotations

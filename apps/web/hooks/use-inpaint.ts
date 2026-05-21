@@ -21,6 +21,7 @@ export interface UseInpaintResult {
   status: InpaintStatus;
   lastEvent: InpaintEvent | null;
   jobId: string | null;
+  editResultRef: string | null;
   start: (imageId: string, request: InpaintRequest) => Promise<void>;
   abort: () => void;
   reset: () => void;
@@ -56,6 +57,7 @@ export function useInpaint(): UseInpaintResult {
   const [status, setStatus] = useState<InpaintStatus>('idle');
   const [lastEvent, setLastEvent] = useState<InpaintEvent | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [editResultRef, setEditResultRef] = useState<string | null>(null);
   const ctrlRef = useRef<AbortController | null>(null);
   const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -76,6 +78,7 @@ export function useInpaint(): UseInpaintResult {
     setStatus('idle');
     setLastEvent(null);
     setJobId(null);
+    setEditResultRef(null);
   }, []);
 
   const start = useCallback(
@@ -86,6 +89,7 @@ export function useInpaint(): UseInpaintResult {
       setStatus('streaming');
       setLastEvent(null);
       setJobId(null);
+      setEditResultRef(null);
       try {
         const startRes = await fetch(`${baseUrl}/api/images/${encodeURIComponent(imageId)}/edit`, {
           method: 'POST',
@@ -123,6 +127,9 @@ export function useInpaint(): UseInpaintResult {
             const parsed = parseSseFrame(frame);
             if (!parsed) continue;
             setLastEvent(parsed);
+            if (parsed.event === 'success' && typeof parsed.data.edit_result_ref === 'string') {
+              setEditResultRef(parsed.data.edit_result_ref);
+            }
             terminal = TERMINAL_EVENTS[parsed.event];
             if (terminal) {
               setStatus(terminal);
@@ -148,5 +155,5 @@ export function useInpaint(): UseInpaintResult {
     [baseUrl]
   );
 
-  return { status, lastEvent, jobId, start, abort, reset };
+  return { status, lastEvent, jobId, editResultRef, start, abort, reset };
 }

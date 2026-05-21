@@ -17,6 +17,8 @@ export interface ToolRailProps {
   onInpaintStart: () => void;
   inpaintStatus: 'idle' | 'streaming' | 'success' | 'error' | 'aborted';
   onInpaintAbort: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
   hasMask: boolean;
   className?: string;
 }
@@ -36,6 +38,8 @@ export function ToolRail({
   onInpaintStart,
   inpaintStatus,
   onInpaintAbort,
+  onUndo,
+  onRedo,
   hasMask,
   className,
 }: ToolRailProps) {
@@ -53,7 +57,7 @@ export function ToolRail({
       if (e.ctrlKey && e.shiftKey && e.key === 'Z') {
         e.preventDefault();
         if (!redoEmpty && !isStreaming) {
-          useCommandStack.getState().redo();
+          onRedo();
         }
         return;
       }
@@ -61,7 +65,7 @@ export function ToolRail({
       if (e.ctrlKey && e.key === 'z') {
         e.preventDefault();
         if (!undoEmpty && !isStreaming) {
-          useCommandStack.getState().undo();
+          onUndo();
         }
         return;
       }
@@ -96,7 +100,17 @@ export function ToolRail({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isStreaming, hasMask, undoEmpty, redoEmpty, onToolChange, onInpaintStart, onInpaintAbort]);
+  }, [
+    isStreaming,
+    hasMask,
+    undoEmpty,
+    redoEmpty,
+    onToolChange,
+    onInpaintStart,
+    onInpaintAbort,
+    onUndo,
+    onRedo,
+  ]);
 
   function getToolState(id: 'select' | 'text' | 'move'): ButtonState {
     if (isStreaming) return 'disabled';
@@ -220,7 +234,7 @@ export function ToolRail({
               data-state={undoState}
               data-testid="tool-undo"
               className={cn(STATE_CLASSES[undoState])}
-              onClick={() => useCommandStack.getState().undo()}
+              onClick={onUndo}
               aria-label={t('undo')}
             >
               <Undo2 className="h-4 w-4" />
@@ -238,7 +252,7 @@ export function ToolRail({
               data-state={redoState}
               data-testid="tool-redo"
               className={cn(STATE_CLASSES[redoState])}
-              onClick={() => useCommandStack.getState().redo()}
+              onClick={onRedo}
               aria-label={t('redo')}
             >
               <Redo2 className="h-4 w-4" />

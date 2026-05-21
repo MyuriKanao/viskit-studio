@@ -5,6 +5,7 @@ import * as React from 'react';
 import { ConfirmationCard } from '@/components/chat/ConfirmationCard';
 import { useChatStore } from '@/lib/chat/store';
 import type { ChatMessage, InferredSpec } from '@/lib/chat/types';
+import type { GenerationPlan } from '@/lib/generation/types';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -12,7 +13,7 @@ import { cn } from '@/lib/utils';
 // ---------------------------------------------------------------------------
 export interface MessageListProps {
   /** Forwarded to ConfirmationCard when a 'card' message is rendered (D2). */
-  onStart: (spec: InferredSpec) => void;
+  onStart: (spec: InferredSpec, plan: GenerationPlan) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -21,7 +22,7 @@ export interface MessageListProps {
 function MessageBubble({
   msg,
   onStart,
-}: { msg: ChatMessage; onStart: (spec: InferredSpec) => void }) {
+}: { msg: ChatMessage; onStart: (spec: InferredSpec, plan: GenerationPlan) => void }) {
   const isUser = msg.role === 'user';
 
   // D2: card-type message renders ConfirmationCard inline
@@ -69,11 +70,12 @@ function MessageBubble({
 // ---------------------------------------------------------------------------
 // Card message — reads inferred_spec from store, renders ConfirmationCard
 // ---------------------------------------------------------------------------
-function CardMessage({ onStart }: { onStart: (spec: InferredSpec) => void }) {
+function CardMessage({ onStart }: { onStart: (spec: InferredSpec, plan: GenerationPlan) => void }) {
   const inferred_spec = useChatStore((s) => s.inferred_spec);
+  const output_plan = useChatStore((s) => s.output_plan);
   const setConfirmationMode = useChatStore((s) => s.setConfirmationMode);
 
-  if (!inferred_spec) {
+  if (!inferred_spec || !output_plan) {
     // Skeleton while spec is not yet in store (should not normally happen, but be safe)
     return (
       <div
@@ -86,6 +88,7 @@ function CardMessage({ onStart }: { onStart: (spec: InferredSpec) => void }) {
   return (
     <ConfirmationCard
       inferred={inferred_spec}
+      outputPlan={output_plan}
       onStart={onStart}
       onModeChange={setConfirmationMode}
     />

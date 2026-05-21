@@ -9,6 +9,7 @@ import * as React from 'react';
 import { CatalogFilters } from '@/components/catalog/CatalogFilters';
 import type { FilterOption } from '@/components/catalog/CatalogFilters';
 import { CatalogGrid } from '@/components/catalog/CatalogGrid';
+import { CatalogImagePreview } from '@/components/catalog/CatalogImagePreview';
 import { CatalogTable } from '@/components/catalog/CatalogTable';
 import type { CatalogTableLabels } from '@/components/catalog/CatalogTable';
 import { SortMenu } from '@/components/catalog/SortMenu';
@@ -27,10 +28,16 @@ import type {
   CatalogSortOrder,
 } from '@/hooks/use-kits-catalog';
 import type { KitListItem } from '@/hooks/use-recent-kits';
+import { encodeKitSlotImageId } from '@/lib/api/images';
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 24;
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+
+type ImagePreviewSelection = {
+  kitId: number;
+  imageIndex: number;
+};
 
 async function deleteKitImage({
   kitId,
@@ -63,6 +70,7 @@ export default function CatalogPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [imagePreview, setImagePreview] = React.useState<ImagePreviewSelection | null>(null);
 
   // View mode
   const [view, setView] = React.useState<CatalogView>('grid');
@@ -106,6 +114,15 @@ export default function CatalogPage() {
   const kits = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+  const selectedPreviewKit = React.useMemo(
+    () => kits.find((kit) => kit.id === imagePreview?.kitId) ?? null,
+    [imagePreview?.kitId, kits]
+  );
+  React.useEffect(() => {
+    if (imagePreview !== null && !isLoading && selectedPreviewKit === null) {
+      setImagePreview(null);
+    }
+  }, [imagePreview, isLoading, selectedPreviewKit]);
   const deleteImage = useMutation({
     mutationFn: deleteKitImage,
     onSuccess: async () => {
@@ -139,14 +156,34 @@ export default function CatalogPage() {
     [updateSkuParam]
   );
   const onKitClick = onRowClick;
+  const handleImageClick = React.useCallback((kit: KitListItem, imageIndex: number) => {
+    setImagePreview({ kitId: kit.id, imageIndex });
+  }, []);
   const handleDeleteImage = React.useCallback(
     (kit: KitListItem, imageId: string) => {
       if (deleteImage.isPending) return;
       const ok = window.confirm(t('delete_image_confirm', { image: imageId, name: kit.name }));
       if (!ok) return;
-      deleteImage.mutate({ kitId: kit.id, imageId });
+      deleteImage.mutate(
+        { kitId: kit.id, imageId },
+        {
+          onSuccess: () => setImagePreview(null),
+        }
+      );
     },
     [deleteImage, t]
+  );
+  const handleEditImage = React.useCallback(
+    (kit: KitListItem, imageId: string) => {
+      const sourceImageId = encodeKitSlotImageId(kit.id, imageId);
+      const params = new URLSearchParams({ source_image_id: sourceImageId });
+      const href =
+        locale === 'zh'
+          ? `/new-kit?${params.toString()}`
+          : `/${locale}/new-kit?${params.toString()}`;
+      router.push(href);
+    },
+    [locale, router]
   );
 
   const selectedSku: CatalogDrawerSku | null = React.useMemo(() => {
@@ -196,7 +233,7 @@ export default function CatalogPage() {
     updated: t('table_updated'),
     empty: t('grid_empty'),
     advisory: t('advisory_badge'),
-    deleteImage: t('delete_image'),
+    openImage: t('open_image'),
   };
 
   const sortLabels: SortMenuLabels = {
@@ -303,16 +340,16 @@ export default function CatalogPage() {
           <CatalogGrid
             kits={kits}
             locale={locale}
-            labels={{ empty: t('grid_empty'), deleteImage: t('delete_image') }}
+            labels={{ empty: t('grid_empty'), openImage: t('open_image') }}
             onKitClick={onKitClick}
-            onDeleteImage={handleDeleteImage}
+            onImageClick={handleImageClick}
           />
         ) : (
           <CatalogTable
             kits={kits}
             labels={tableLabels}
             onRowClick={onRowClick}
-            onDeleteImage={handleDeleteImage}
+            onImageClick={handleImageClick}
           />
         )}
 
@@ -350,6 +387,31 @@ export default function CatalogPage() {
         sku={selectedSku}
         open={selectedSku !== null}
         onOpenChange={handleDrawerOpenChange}
+      />
+      <CatalogImagePreview
+        kit={selectedPreviewKit}
+        imageIndex={imagePreview?.imageIndex ?? 0}
+        open={imagePreview !== null && selectedPreviewKit !== null}
+        labels={{
+          title: t('image_preview_title'),
+          openImage: t('open_image'),
+          downloadImage: t('download_image'),
+          deleteImage: t('delete_image'),
+          editImage: t('edit_image'),
+        }}
+        isDeleting={deleteImage.isPending}
+        onOpenChange={(open) => {
+          if (!open) setImagePreview(null);
+        }}
+        onSelectImage={(imageIndex) =>
+          setImagePreview((current) => (current ? { ...current, imageIndex } : current))
+        }
+        onDeleteImage={(imageId) => {
+          if (selectedPreviewKit) handleDeleteImage(selectedPreviewKit, imageId);
+        }}
+        onEditImage={(imageId) => {
+          if (selectedPreviewKit) handleEditImage(selectedPreviewKit, imageId);
+        }}
       />
     </div>
   );

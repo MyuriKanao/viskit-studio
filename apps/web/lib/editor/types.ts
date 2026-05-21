@@ -36,8 +36,19 @@ export interface MaskBox {
 export interface CanvasStageHandle {
   /** Focus the fabric.Text at the given OCR-box index. No-op if absent. */
   selectByOcrIndex: (index: number) => void;
+  /** Create or focus an editable text layer from an OCR box. */
+  upsertTextLayerFromOcr: (
+    index: number,
+    box: { x: number; y: number; w: number; h: number; text: string }
+  ) => void;
   /** Remove the live mask rectangle (called on inpaint success / mask reset). */
   clearMaskRect: () => void;
+  /** Apply editor history and restore the matching fabric snapshot. */
+  undo: () => void;
+  /** Re-apply the next editor history snapshot. */
+  redo: () => void;
+  /** Export the current canvas as a PNG data URL for explicit save. */
+  exportPngDataUrl: () => string | null;
   /** Count of fabric objects on the canvas (mask + text layers). For tests. */
   getObjectCount: () => number;
 }

@@ -9,12 +9,13 @@ import { type UseMutationResult, useMutation } from '@tanstack/react-query';
  * Backend never raises: 200 always; ``ok=false`` carries an ``error`` string.
  */
 export interface ProbeRequest {
-  protocol: 'openai_compatible' | 'anthropic_compatible';
+  protocol: 'openai_compatible' | 'anthropic_compatible' | 'image_generation';
   base_url: string;
   // Pass either an env-var name OR an inline key; the backend rejects
   // requests where neither is provided.
   api_key_env?: string;
   api_key?: string;
+  adapter?: string;
 }
 
 export interface ProbeResponse {

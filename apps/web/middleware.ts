@@ -9,9 +9,17 @@ const intlMiddleware = createMiddleware(routing);
 const BARE_ROOT_PATHS = new Set(['/', '/zh', '/en']);
 const SUPPORTED_LOCALES = ['zh', 'en'] as const;
 const DEFAULT_LOCALE = 'zh';
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+const API_BASE =
+  process.env.NEXT_SERVER_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  'http://localhost:8000';
 
 function resolveLocale(request: NextRequest): string {
+  const localeCookie = request.cookies.get('NEXT_LOCALE')?.value;
+  if (localeCookie === 'zh' || localeCookie === 'en') {
+    return localeCookie;
+  }
+
   const acceptLanguage = request.headers.get('accept-language') ?? '';
   const languages = acceptLanguage
     .split(',')
@@ -62,5 +70,5 @@ export default async function middleware(request: NextRequest): Promise<NextResp
 }
 
 export const config = {
-  matcher: ['/((?!_next|_vercel|.*\\..*).*)'],
+  matcher: ['/((?!api|health|openapi\\.json|_next|_vercel|.*\\..*).*)'],
 };

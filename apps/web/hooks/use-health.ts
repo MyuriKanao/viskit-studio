@@ -11,10 +11,10 @@ import { apiClient } from '@/lib/api/client';
  */
 export interface HealthResponse {
   status: 'ok' | 'degraded';
-  postgres: 'connected' | 'disconnected';
-  milvus: 'connected' | 'disconnected';
-  redis: 'connected' | 'disconnected';
-  minio: 'connected' | 'disconnected';
+  database: 'connected' | 'disconnected';
+  database_backend: 'sqlite' | 'postgresql' | string;
+  /** Backward-compatible API key retained by the backend. */
+  postgres?: 'connected' | 'disconnected';
 }
 
 export function useHealth(): UseQueryResult<HealthResponse, Error> {

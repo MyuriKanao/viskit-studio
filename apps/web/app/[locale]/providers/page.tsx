@@ -45,6 +45,12 @@ export default function ProvidersPage() {
       base_url: h.base_url,
     }));
   }, [health.data]);
+  const boundRoles = React.useMemo(() => {
+    return (health.data ?? [])
+      .filter((h) => h.base_url && (h.unbound?.length ?? 0) === 0)
+      .map((h) => h.role);
+  }, [health.data]);
+  const canAddEndpoint = boundRoles.length < 4;
 
   return (
     <div className="grid h-screen grid-cols-[240px_1fr] grid-rows-[64px_1fr] bg-ink-base">
@@ -67,6 +73,8 @@ export default function ProvidersPage() {
                 variant="default"
                 size="sm"
                 aria-label={t('add_endpoint_button')}
+                title={canAddEndpoint ? undefined : '核心角色都已绑定；要替换请点击表格里的编辑。'}
+                disabled={!canAddEndpoint}
                 onClick={() => setModalOpen(true)}
               >
                 <Plus aria-hidden="true" className="h-4 w-4" />
@@ -94,6 +102,7 @@ export default function ProvidersPage() {
       <AddEndpointModal
         open={modalOpen}
         editingRole={editingRole}
+        existingRoles={boundRoles}
         onClose={() => {
           setModalOpen(false);
           setEditingRole(null);

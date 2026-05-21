@@ -23,9 +23,11 @@ class CopyTemplateRequest(BaseModel):
 class Protocol(Enum):
     openai_compatible = 'openai_compatible'
     anthropic_compatible = 'anthropic_compatible'
+    image_generation = 'image_generation'
 
 
 class CreateEndpointRequest(BaseModel):
+    adapter: Annotated[str | None, Field(title='Adapter')] = None
     api_key: Annotated[str, Field(title='Api Key')]
     base_url: Annotated[str, Field(title='Base Url')]
     model: Annotated[str, Field(title='Model')]
@@ -60,7 +62,7 @@ class KitId(RootModel[str]):
     root: Annotated[
         str,
         Field(
-            description='Optional kit id for MinIO sidecar write; safe-character allowlist guards the object-store path.',
+            description='Optional kit id for local edit context; safe-character allowlist keeps sidecar references portable.',
             pattern='^[A-Za-z0-9_-]{1,64}$',
             title='Kit Id',
         ),
@@ -71,7 +73,7 @@ class EditRequest(BaseModel):
     kit_id: Annotated[
         KitId | None,
         Field(
-            description='Optional kit id for MinIO sidecar write; safe-character allowlist guards the object-store path.',
+            description='Optional kit id for local edit context; safe-character allowlist keeps sidecar references portable.',
             title='Kit Id',
         ),
     ] = None
@@ -79,7 +81,12 @@ class EditRequest(BaseModel):
     new_text: Annotated[str, Field(title='New Text')]
 
 
+class EndpointSecretResponse(BaseModel):
+    api_key: Annotated[str, Field(title='Api Key')]
+
+
 class EndpointStanza(BaseModel):
+    adapter: Annotated[str | None, Field(title='Adapter')] = None
     api_key_env: Annotated[str, Field(title='Api Key Env')]
     base_url: Annotated[str, Field(title='Base Url')]
     model: Annotated[str, Field(title='Model')]
@@ -187,6 +194,7 @@ class PreviewResponse(BaseModel):
 
 
 class ProbeCandidateRequest(BaseModel):
+    adapter: Annotated[str | None, Field(title='Adapter')] = None
     api_key: Annotated[str | None, Field(title='Api Key')] = None
     api_key_env: Annotated[str | None, Field(title='Api Key Env')] = None
     base_url: Annotated[str, Field(title='Base Url')]
@@ -461,6 +469,7 @@ class ThreePieceOut(BaseModel):
 
 
 class UpdateEndpointRequest(BaseModel):
+    adapter: Annotated[str | None, Field(title='Adapter')] = None
     api_key: Annotated[str | None, Field(title='Api Key')] = None
     base_url: Annotated[str, Field(title='Base Url')]
     model: Annotated[str, Field(title='Model')]

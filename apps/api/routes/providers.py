@@ -28,6 +28,7 @@ from apps.api.lib.config_io import (
     ConfigLockTimeoutError,
 )
 from services.providers.anthropic_compatible import AnthropicCompatibleAdapter
+from services.providers.image_generation import UniversalImageGenerationAdapter
 from services.providers.openai_compatible import OpenAICompatibleAdapter
 from services.providers.registry import REQUIRED_ROLES, ProviderConfigError
 from services.providers.registry import boot as boot_registry
@@ -35,6 +36,7 @@ from services.providers.registry import boot as boot_registry
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
+ProviderProtocol = Literal["openai_compatible", "anthropic_compatible", "image_generation"]
 
 
 # ---------------------------------------------------------------------------
@@ -92,18 +94,24 @@ class EndpointStanza(BaseModel):
     base_url: str
     api_key_env: str
     model: str
+    adapter: str | None = None
+
+
+class EndpointSecretResponse(BaseModel):
+    api_key: str
 
 
 class CreateEndpointRequest(BaseModel):
-    protocol: Literal["openai_compatible", "anthropic_compatible"]
+    protocol: ProviderProtocol
     base_url: str
     model: str
     name: str
     api_key: str
+    adapter: str | None = None
 
 
 class UpdateEndpointRequest(BaseModel):
-    protocol: Literal["openai_compatible", "anthropic_compatible"]
+    protocol: ProviderProtocol
     base_url: str
     model: str
     name: str
@@ -111,6 +119,7 @@ class UpdateEndpointRequest(BaseModel):
     # derived.  When empty/omitted, the existing api_key_env on disk is
     # preserved so the operator can edit URL/model without re-pasting keys.
     api_key: str | None = None
+    adapter: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +143,41 @@ def _load_config_dict(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         return {}
     return data
+
+
+def _normalise_base_url_for_storage(
+    protocol: ProviderProtocol, base_url: str, adapter: str | None = None
+) -> str:
+    """Store provider roots; adapters add API-version path segments."""
+    base = base_url.strip().rstrip("/")
+    lower = base.lower()
+    if protocol in {"openai_compatible", "anthropic_compatible"} and lower.endswith("/v1"):
+        return base[:-3]
+    if protocol == "image_generation":
+        if adapter == "gemini" and lower.endswith("/v1beta"):
+            return base[:-7]
+        if adapter == "volcengine_ark":
+            for suffix in ("/api/v3/images/generations", "/api/v3"):
+                if lower.endswith(suffix):
+                    return base[: -len(suffix)]
+        if adapter != "gemini" and lower.endswith("/v1"):
+            return base[:-3]
+    return base
+
+
+def _ensure_role_protocol_allowed(role: str, protocol: ProviderProtocol) -> None:
+    if role == "image":
+        if protocol == "anthropic_compatible":
+            raise HTTPException(
+                status_code=400,
+                detail="image role supports image_generation or openai_compatible",
+            )
+        return
+    if role in {"vision", "llm", "compliance_screen"} and protocol == "image_generation":
+        raise HTTPException(
+            status_code=400,
+            detail="image_generation can only be used by the image role",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +244,31 @@ def get_endpoint(role: str) -> EndpointStanza:
         base_url=str(stanza.get("base_url", "")),
         api_key_env=str(stanza.get("api_key_env", "")),
         model=str(stanza.get("model", "")),
+        adapter=(str(stanza.get("adapter")) if stanza.get("adapter") is not None else None),
     )
+
+
+@router.get("/endpoints/{role}/secret", response_model=EndpointSecretResponse)
+def get_endpoint_secret(role: str) -> EndpointSecretResponse:
+    """Return the locally saved secret for *role*.
+
+    Only keys saved through ``data/secrets.json`` are revealable.  If the
+    endpoint is backed by a shell/environment variable, the UI can still probe
+    it via ``api_key_env`` but the plaintext value is not exposed here.
+    """
+    path = _config_path()
+    data = _load_config_dict(path)
+    providers = data.get("providers") or {}
+    stanza = providers.get(role)
+    if not isinstance(stanza, dict):
+        raise HTTPException(status_code=404, detail=f"role not found: {role}")
+    api_key_env = str(stanza.get("api_key_env", "")).strip()
+    if not api_key_env:
+        raise HTTPException(status_code=404, detail="api_key_env not found")
+    api_key = secrets_store.get(api_key_env)
+    if api_key is None:
+        raise HTTPException(status_code=404, detail="saved key not found")
+    return EndpointSecretResponse(api_key=api_key)
 
 
 @router.post("/endpoints/{role}", response_model=SaveEndpointsResponse)
@@ -220,17 +288,26 @@ def create_endpoint(
     providers = data.get("providers") or {}
     if not isinstance(providers, dict):
         providers = {}
+    _ensure_role_protocol_allowed(role, payload.protocol)
     if role in providers:
-        raise HTTPException(status_code=409, detail=f"role already exists: {role}")
+        raise HTTPException(
+            status_code=409,
+            detail=f"role already exists: {role}. edit the existing role instead",
+        )
 
+    adapter = payload.adapter or "openai"
     api_key_env = secrets_store.derive_env_name(role=role, name=payload.name)
     secrets_store.put(api_key_env, api_key)
     providers[role] = {
         "protocol": payload.protocol,
-        "base_url": payload.base_url,
+        "base_url": _normalise_base_url_for_storage(
+            payload.protocol, payload.base_url, adapter
+        ),
         "api_key_env": api_key_env,
         "model": payload.model,
     }
+    if payload.protocol == "image_generation":
+        providers[role]["adapter"] = adapter
     data["providers"] = providers
     new_yaml = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
     try:
@@ -266,6 +343,7 @@ def update_endpoint(
     existing = providers.get(role)
     if not isinstance(existing, dict):
         raise HTTPException(status_code=404, detail=f"role not found: {role}")
+    _ensure_role_protocol_allowed(role, payload.protocol)
 
     new_key = (payload.api_key or "").strip()
     if new_key:
@@ -274,12 +352,17 @@ def update_endpoint(
     else:
         api_key_env = str(existing.get("api_key_env", ""))
 
+    adapter = payload.adapter or str(existing.get("adapter") or "openai")
     providers[role] = {
         "protocol": payload.protocol,
-        "base_url": payload.base_url,
+        "base_url": _normalise_base_url_for_storage(
+            payload.protocol, payload.base_url, adapter
+        ),
         "api_key_env": api_key_env,
         "model": payload.model,
     }
+    if payload.protocol == "image_generation":
+        providers[role]["adapter"] = adapter
     data["providers"] = providers
     new_yaml = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
     try:
@@ -415,7 +498,7 @@ class ProviderProbeResponse(BaseModel):
 
 
 class ProbeCandidateRequest(BaseModel):
-    protocol: Literal["openai_compatible", "anthropic_compatible"]
+    protocol: ProviderProtocol
     base_url: str
     # Either: an env-var name to read (api_key_env), OR an inline key (api_key).
     # Inline keys are used for one-shot probes from the Add-Endpoint modal so
@@ -423,6 +506,7 @@ class ProbeCandidateRequest(BaseModel):
     # this endpoint.
     api_key_env: str | None = None
     api_key: str | None = None
+    adapter: str | None = None
 
 
 class ProbeCandidateResponse(BaseModel):
@@ -523,6 +607,23 @@ def probe_candidate(payload: ProbeCandidateRequest) -> ProbeCandidateResponse:
         raise HTTPException(
             status_code=422,
             detail="provide either api_key or api_key_env",
+        )
+
+    if payload.protocol == "image_generation":
+        image_adapter = UniversalImageGenerationAdapter(
+            base_url=payload.base_url,
+            api_key_env=payload.api_key_env or "INLINE",
+            model="",
+            role="probe",
+            adapter=payload.adapter or "openai",
+            api_key=payload.api_key,
+        )
+        result = image_adapter.probe()
+        return ProbeCandidateResponse(
+            ok=result.ok,
+            latency_ms=result.latency_ms,
+            models=result.models,
+            error=result.error,
         )
 
     cls = (
