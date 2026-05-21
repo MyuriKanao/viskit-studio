@@ -2,22 +2,31 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-import re
+import base64
 import shutil
-from collections.abc import AsyncIterator, Iterator
-from contextlib import contextmanager
+import json
+import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from apps.api.lib.db import get_session, json_param
+from apps.api.lib.generation_jobs import (
+    encode_asset_image_id,
+    encode_kit_slot_image_id,
+    fetch_kit_slot_png_path,
+    imagegen_output_dir,
+    require_within,
+    resolve_stored_path,
+    upsert_kit_slot_png_path,
+    validate_image_id,
+)
 
 router = APIRouter(prefix="/api/images", tags=["editor"])
 
@@ -362,44 +371,38 @@ class EditAccepted(BaseModel):
     job_id: str
 
 
-class SaveImageRequest(BaseModel):
-    edit_result_ref: str = Field(..., pattern=r"^edit-result:[A-Za-z0-9_-]{1,64}$")
-    mode: Literal["replace", "copy"]
+class EditResultCreate(BaseModel):
+    result_data_url: str = Field(max_length=14_000_000)
+    source_image_ref: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class SaveImageResponse(BaseModel):
-    mode: Literal["replace", "copy"]
+class EditResultOut(BaseModel):
+    edit_result_ref: str
+    result_url: str
+    status: str
+
+
+class ImageSaveTarget(BaseModel):
+    kind: str = Field(pattern=r"^(asset|kit_slot)$")
+    asset_id: str | None = None
+    marketing_kit_id: int | None = None
+    slot_id: str | None = Field(default=None, pattern=r"^[HM][1-9]$")
+
+
+class ImageSaveRequest(BaseModel):
+    edit_result_ref: str
+    mode: str = Field(pattern=r"^(replace|copy)$")
+    target: ImageSaveTarget | None = None
+
+
+class ImageSaveResponse(BaseModel):
+    mode: str
     image_id: str
+    asset_id: str | None = None
+    marketing_kit_id: int | None = None
+    slot_id: str | None = None
     image_url: str
-    asset_id: int | None = None
-    replaced: bool
-
-
-@router.get("/{image_id}/bytes")
-def image_bytes(
-    image_id: str,
-    request: Request,
-    session: Annotated[Session, Depends(get_session)],
-) -> FileResponse:
-    """Serve canonical editor image bytes for kit slots and generated assets."""
-    try:
-        target = _resolve_image_target(image_id, session)
-        path = _resolve_stored_png_path(target.png_path)
-    except HTTPException as exc:
-        image_loader = getattr(request.app.state, "image_loader", None)
-        if image_loader is None:
-            raise exc
-        # Legacy test/integration loader fallback. It cannot produce a stable file
-        # path for FileResponse, so write a short-lived cache under edit-results.
-        try:
-            data = image_loader(image_id)
-        except FileNotFoundError as e:
-            raise exc from e
-        safe_image_id = re.sub(r"[^A-Za-z0-9_-]", "_", image_id)
-        path = _edit_results_dir() / "loader-cache" / f"{safe_image_id}.png"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/{image_id}/ocr", response_model=OcrResponse)
@@ -441,6 +444,242 @@ async def start_edit(image_id: str, body: EditRequest, request: Request) -> Edit
     loop = asyncio.get_running_loop()
     loop.create_task(_run_inpaint(request, image_id, body, job_id, queue))
     return EditAccepted(job_id=job_id)
+
+
+def _decode_png_data_url(data_url: str) -> bytes:
+    if not data_url.startswith("data:image/"):
+        raise HTTPException(status_code=422, detail="result_data_url must be data:image/*")
+    try:
+        _header, payload = data_url.split(",", 1)
+        return base64.b64decode(payload, validate=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="invalid edit result data URL") from exc
+
+
+def _edit_result_file_path(edit_result_ref: str) -> Path:
+    return imagegen_output_dir() / "edits" / f"{edit_result_ref}.png"
+
+
+def _asset_file_path(asset_id: str) -> Path:
+    return imagegen_output_dir() / "assets" / f"{asset_id}.png"
+
+
+def _parse_image_target(image_id: str, body_target: ImageSaveTarget | None) -> ImageSaveTarget:
+    if body_target is not None:
+        return body_target
+    try:
+        validate_image_id(image_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    parts = image_id.split(":")
+    if parts[0] == "asset":
+        return ImageSaveTarget(kind="asset", asset_id=parts[1])
+    return ImageSaveTarget(kind="kit_slot", marketing_kit_id=int(parts[1]), slot_id=parts[2])
+
+
+@router.post("/{image_id}/edit-results", response_model=EditResultOut, status_code=201)
+def create_edit_result(
+    image_id: str,
+    body: EditResultCreate,
+    session: Session = Depends(get_session),
+) -> EditResultOut:
+    try:
+        validate_image_id(image_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    image_bytes = _decode_png_data_url(body.result_data_url)
+    if not image_bytes:
+        raise HTTPException(status_code=422, detail="edit result is empty")
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="edit result exceeds 10 MiB")
+    edit_result_ref = f"edit_{uuid.uuid4().hex}"
+    path = _edit_result_file_path(edit_result_ref)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(image_bytes)
+    session.execute(
+        text(
+            "INSERT INTO image_edit_results"
+            " (id, source_image_ref, target_image_id, result_path, status, metadata)"
+            " VALUES (:id, :source_image_ref, :target_image_id, :result_path,"
+            " 'succeeded', "
+            f"{json_param(session, 'metadata')})"
+        ),
+        {
+            "id": edit_result_ref,
+            "source_image_ref": body.source_image_ref,
+            "target_image_id": image_id,
+            "result_path": str(path),
+            "metadata": json.dumps(body.metadata, ensure_ascii=False),
+        },
+    )
+    return EditResultOut(
+        edit_result_ref=edit_result_ref,
+        result_url=f"/api/images/{image_id}/edit-results/{edit_result_ref}/image",
+        status="succeeded",
+    )
+
+
+@router.get("/{image_id}/edit-results/{edit_result_ref}/image")
+def get_edit_result_image(
+    image_id: str,
+    edit_result_ref: str,
+    session: Session = Depends(get_session),
+) -> Any:
+    row = session.execute(
+        text(
+            "SELECT result_path FROM image_edit_results"
+            " WHERE id = :id AND target_image_id = :target_image_id"
+        ),
+        {"id": edit_result_ref, "target_image_id": image_id},
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="edit result not found")
+    try:
+        path = require_within(resolve_stored_path(str(row.result_path)), imagegen_output_dir())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="edit result not found") from exc
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="edit result file missing")
+    from fastapi.responses import FileResponse
+
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+@router.post("/{image_id}/save", response_model=ImageSaveResponse)
+def save_edited_image(
+    image_id: str,
+    body: ImageSaveRequest,
+    session: Session = Depends(get_session),
+) -> ImageSaveResponse:
+    target = _parse_image_target(image_id, body.target)
+    edit_row = session.execute(
+        text("SELECT result_path FROM image_edit_results WHERE id = :id AND status = 'succeeded'"),
+        {"id": body.edit_result_ref},
+    ).first()
+    if edit_row is None:
+        raise HTTPException(status_code=404, detail="edit_result_ref not found")
+    try:
+        edit_path = require_within(resolve_stored_path(str(edit_row.result_path)), imagegen_output_dir())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="edit result file not found") from exc
+    if not edit_path.is_file():
+        raise HTTPException(status_code=404, detail="edit result file missing")
+
+    if target.kind == "asset":
+        if target.asset_id is None:
+            raise HTTPException(status_code=422, detail="asset_id is required")
+        if body.mode == "replace":
+            row = session.execute(
+                text("SELECT png_path FROM generated_assets WHERE id = :id"),
+                {"id": target.asset_id},
+            ).first()
+            if row is None:
+                raise HTTPException(status_code=404, detail="asset not found")
+            asset_path = require_within(resolve_stored_path(str(row.png_path)), imagegen_output_dir())
+            asset_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(edit_path, asset_path)
+            session.execute(
+                text("UPDATE generated_assets SET updated_at = CURRENT_TIMESTAMP WHERE id = :id"),
+                {"id": target.asset_id},
+            )
+            return ImageSaveResponse(
+                mode="replace",
+                image_id=encode_asset_image_id(target.asset_id),
+                asset_id=target.asset_id,
+                image_url=f"/api/assets/{target.asset_id}/image",
+            )
+        asset_id = f"asset_{uuid.uuid4().hex}"
+        asset_path = _asset_file_path(asset_id)
+        asset_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(edit_path, asset_path)
+        session.execute(
+            text(
+                "INSERT INTO generated_assets"
+                " (id, name, png_path, source_image_ref, metadata)"
+                " VALUES (:id, :name, :png_path, :source_image_ref, "
+                f"{json_param(session, 'metadata')})"
+            ),
+            {
+                "id": asset_id,
+                "name": f"Edited copy of {target.asset_id}",
+                "png_path": str(asset_path),
+                "source_image_ref": None,
+                "metadata": json.dumps(
+                    {"copied_from_asset_id": target.asset_id, "edit_result_ref": body.edit_result_ref},
+                    ensure_ascii=False,
+                ),
+            },
+        )
+        return ImageSaveResponse(
+            mode="copy",
+            image_id=encode_asset_image_id(asset_id),
+            asset_id=asset_id,
+            image_url=f"/api/assets/{asset_id}/image",
+        )
+
+    if target.marketing_kit_id is None or target.slot_id is None:
+        raise HTTPException(status_code=422, detail="marketing_kit_id and slot_id are required")
+    if target.slot_id.startswith("H") and int(target.slot_id[1:]) > 5:
+        raise HTTPException(status_code=422, detail="hero slot must be H1-H5")
+    if body.mode == "replace":
+        current_path = fetch_kit_slot_png_path(session, target.marketing_kit_id, target.slot_id)
+        if current_path is None:
+            current_file = (
+                imagegen_output_dir()
+                / "kits"
+                / f"kit-{target.marketing_kit_id}"
+                / ("hero" if target.slot_id.startswith("H") else "detail")
+                / f"{target.slot_id}.png"
+            )
+        else:
+            current_file = require_within(resolve_stored_path(current_path), imagegen_output_dir())
+        current_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(edit_path, current_file)
+        upsert_kit_slot_png_path(
+            session,
+            marketing_kit_id=target.marketing_kit_id,
+            slot_id=target.slot_id,
+            png_path=str(current_file),
+        )
+        return ImageSaveResponse(
+            mode="replace",
+            image_id=encode_kit_slot_image_id(target.marketing_kit_id, target.slot_id),
+            marketing_kit_id=target.marketing_kit_id,
+            slot_id=target.slot_id,
+            image_url=f"/api/generation/kits/{target.marketing_kit_id}/slots/{target.slot_id}/image",
+        )
+
+    asset_id = f"asset_{uuid.uuid4().hex}"
+    asset_path = _asset_file_path(asset_id)
+    asset_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(edit_path, asset_path)
+    session.execute(
+        text(
+            "INSERT INTO generated_assets"
+            " (id, name, png_path, metadata)"
+            " VALUES (:id, :name, :png_path, "
+            f"{json_param(session, 'metadata')})"
+        ),
+        {
+            "id": asset_id,
+            "name": f"Edited copy of kit {target.marketing_kit_id} {target.slot_id}",
+            "png_path": str(asset_path),
+            "metadata": json.dumps(
+                {
+                    "copied_from_marketing_kit_id": target.marketing_kit_id,
+                    "copied_from_slot_id": target.slot_id,
+                    "edit_result_ref": body.edit_result_ref,
+                },
+                ensure_ascii=False,
+            ),
+        },
+    )
+    return ImageSaveResponse(
+        mode="copy",
+        image_id=encode_asset_image_id(asset_id),
+        asset_id=asset_id,
+        image_url=f"/api/assets/{asset_id}/image",
+    )
 
 
 async def _run_inpaint(
