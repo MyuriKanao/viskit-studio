@@ -71,6 +71,16 @@ function buildSellingPoints(inferred: InferredSpec, userPrompt: string | null): 
   }));
 }
 
+function isFullKitPlan(plan: GenerationPlan): boolean {
+  const slots = new Set(plan.items.map((item) => item.slot_id).filter(Boolean));
+  return (
+    plan.items.length === 14 &&
+    ['H1', 'H2', 'H3', 'H4', 'H5', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'].every(
+      (slot) => slots.has(slot)
+    )
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Image drop → extract
 // ---------------------------------------------------------------------------
@@ -216,8 +226,16 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
   const createSpec = specMut.mutateAsync;
   const genKit = useGenerateKit();
   const startGenerate = genKit.start;
-  const generationJob = useGenerationJob({ onProgress });
-  const startGenerationJob = generationJob.start;
+  const {
+    phase: generationJobPhase,
+    errorMessage: generationJobErrorMessage,
+    job: generationJobSnapshot,
+    activeJobId,
+    start: startGenerationJob,
+    stop: stopGenerationJob,
+    resume: resumeGenerationJob,
+    refresh: refreshGenerationJob,
+  } = useGenerationJob({ onProgress });
 
   const handleStart = useCallback(
     async (inferred: InferredSpec, confirmedPlan?: GenerationPlan) => {
@@ -306,6 +324,14 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
         // an older local backend, preserve the legacy full-kit path instead of silently
         // dropping the user action. The durable endpoint remains the primary path.
         if (!snapshot) {
+          if (!isFullKitPlan(selectedPlan)) {
+            appendMessage({
+              role: 'ai',
+              type: 'text',
+              content: '后台生成任务创建失败，未启动旧版 14 图兼容生成以避免输出数量不匹配。',
+            });
+            return;
+          }
           const result = await startGenerate({
             kit_id: kitClientId,
             brand_color_hex: inferred.brand_color_hex.value,
@@ -381,7 +407,7 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
   );
 
   const handleStop = useCallback(async () => {
-    const stopped = await generationJob.stop();
+    const stopped = await stopGenerationJob();
     if (stopped) {
       appendMessage({
         role: 'ai',
@@ -390,28 +416,28 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
       });
     }
     return stopped;
-  }, [appendMessage, generationJob]);
+  }, [appendMessage, stopGenerationJob]);
 
   const handleResume = useCallback(
     async (jobId: string) => {
-      const snapshot = await generationJob.resume(jobId);
+      const snapshot = await resumeGenerationJob(jobId);
       if (snapshot) {
         setActiveJobId(snapshot.job_id);
       }
       return snapshot;
     },
-    [generationJob, setActiveJobId]
+    [resumeGenerationJob, setActiveJobId]
   );
 
   return {
     handleStart,
     specPhase: specMut.status,
-    genPhase: generationJob.phase,
-    job: generationJob.job,
-    activeJobId: generationJob.activeJobId,
-    errorMessage: generationJob.errorMessage,
+    genPhase: generationJobPhase,
+    job: generationJobSnapshot,
+    activeJobId,
+    errorMessage: generationJobErrorMessage,
     handleStop,
     resumeJob: handleResume,
-    refreshJob: generationJob.refresh,
+    refreshJob: refreshGenerationJob,
   };
 }
