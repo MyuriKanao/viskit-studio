@@ -24,11 +24,15 @@ export function MessageInput() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const appendMessage = useChatStore((s) => s.appendMessage);
+  const heroImage = useChatStore((s) => s.hero_image);
+  const sourceImage = useChatStore((s) => s.source_image);
+  const outputPlan = useChatStore((s) => s.output_plan);
   const confirmation_mode = useChatStore((s) => s.confirmation_mode);
 
   const { handleImageDrop, isExtracting } = useChatImageFlow();
 
   const isDisabled = confirmation_mode !== null || isExtracting;
+  const isImportedImageWaitingForPrompt = Boolean(heroImage && !outputPlan && !confirmation_mode);
   const isDisabledRef = React.useRef(isDisabled);
 
   React.useEffect(() => {
@@ -55,9 +59,18 @@ export function MessageInput() {
     [handleImageDrop, text]
   );
 
-  function handleSend() {
+  async function handleSend() {
     const trimmed = text.trim();
     if (!trimmed || isDisabled) return;
+    if (isImportedImageWaitingForPrompt && heroImage) {
+      setError(null);
+      await handleImageDrop(heroImage.url, heroImage.mime, trimmed, {
+        appendImageMessage: false,
+        sourceImage,
+      });
+      setText('');
+      return;
+    }
     appendMessage({ role: 'user', type: 'text', content: trimmed });
     setText('');
   }
@@ -65,7 +78,7 @@ export function MessageInput() {
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   }
 
@@ -176,7 +189,13 @@ export function MessageInput() {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={isDisabled}
-          placeholder={isDisabled ? '请先完成确认' : '输入消息…'}
+          placeholder={
+            isDisabled
+              ? '请先完成确认'
+              : isImportedImageWaitingForPrompt
+                ? '描述想怎么修改这张图…'
+                : '输入消息…'
+          }
           className={cn(
             'flex-1 rounded-input border border-border-subtle bg-surface-02 px-s-3 py-s-2 text-sm text-ink-primary placeholder:text-ink-faint',
             'focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1',
@@ -186,7 +205,7 @@ export function MessageInput() {
         <button
           data-testid="send-button"
           type="button"
-          onClick={handleSend}
+          onClick={() => void handleSend()}
           disabled={isDisabled || !text.trim()}
           className={cn(
             'inline-flex items-center justify-center rounded-input bg-accent px-s-4 py-s-2 text-sm font-medium text-ink-base-l',
@@ -194,7 +213,7 @@ export function MessageInput() {
             'disabled:opacity-50 disabled:pointer-events-none'
           )}
         >
-          发送
+          {isImportedImageWaitingForPrompt ? '再生成' : '发送'}
         </button>
       </div>
     </div>

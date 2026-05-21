@@ -243,13 +243,14 @@ function progressStatusFromOutput(status: GenerationOutputStatus): ProgressEvent
 }
 
 async function postSourceImage(input: SourceImageUploadInput): Promise<SourceImageRef> {
+  if (!input.imageUrl.startsWith('data:image/')) {
+    throw new Error('/api/source-images requires a data:image URL');
+  }
   const response = await fetch(`${baseUrl}/api/source-images`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      image_url: input.imageUrl,
-      mime: input.mime,
-      file_name: input.fileName ?? null,
+      data_url: input.imageUrl,
     }),
   });
   const body = asRecord(await readJsonOrThrow(response, '/api/source-images'));

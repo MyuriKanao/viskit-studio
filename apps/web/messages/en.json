@@ -101,7 +101,7 @@
     "lock_retry_label": "Retrying…"
   },
   "editor": {
-    "title": "Text Touch-up Editor",
+    "title": "Image Editor",
     "tools": {
       "select": "Select",
       "text": "Text",
@@ -173,7 +173,7 @@
     "open_image": "Open image",
     "image_preview_title": "Image preview",
     "download_image": "Download",
-    "edit_image": "Edit again",
+    "edit_image": "Send to Chat",
     "delete_image": "Delete image",
     "delete_image_confirm": "Delete {image} from {name}?",
     "delete_image_error": "Delete image failed",

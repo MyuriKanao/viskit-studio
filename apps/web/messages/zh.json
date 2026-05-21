@@ -101,7 +101,7 @@
     "lock_retry_label": "重试中…"
   },
   "editor": {
-    "title": "文本修补编辑器",
+    "title": "图片编辑器",
     "tools": {
       "select": "选择",
       "text": "文字",
@@ -173,7 +173,7 @@
     "open_image": "展开图片",
     "image_preview_title": "图片预览",
     "download_image": "下载",
-    "edit_image": "再次编辑",
+    "edit_image": "发送到 Chat 再生成",
     "delete_image": "删除图片",
     "delete_image_confirm": "删除 {name} 的 {image} 图片？",
     "delete_image_error": "删除图片失败",

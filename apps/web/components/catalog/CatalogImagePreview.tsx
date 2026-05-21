@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, PencilLine, Trash2 } from 'lucide-react';
+import { Download, Send, Trash2 } from 'lucide-react';
 import * as React from 'react';
 
 import { buttonVariants } from '@/components/ui/button';
@@ -107,7 +107,7 @@ export function CatalogImagePreview({
                       className: 'h-8 px-s-2 text-xs',
                     })}
                   >
-                    <PencilLine aria-hidden="true" className="h-3.5 w-3.5" />
+                    <Send aria-hidden="true" className="h-3.5 w-3.5" />
                     {labels.editImage}
                   </button>
                   <button

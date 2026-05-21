@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import * as React from 'react';
 
 import { MessageInput } from '@/components/chat/MessageInput';
@@ -9,6 +9,7 @@ import { GenerationJobPreview } from '@/components/generation/GenerationJobPrevi
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { useChatStartFlow } from '@/hooks/use-chat-flow';
+import { imageBytesUrl, importSourceImageFromImageId } from '@/lib/api/images';
 import { useChatStore } from '@/lib/chat/store';
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -17,9 +18,21 @@ const LAST_JOB_STORAGE_KEY = 'viskit:new-kit:last-generation-job-id';
 export default function NewKitPage() {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const resetChat = useChatStore((s) => s.reset);
+  const appendMessage = useChatStore((s) => s.appendMessage);
+  const updateMessage = useChatStore((s) => s.updateMessage);
+  const setHeroImage = useChatStore((s) => s.setHeroImage);
+  const setSourceImage = useChatStore((s) => s.setSourceImage);
+  const setUserPrompt = useChatStore((s) => s.setUserPrompt);
+  const setInferredSpec = useChatStore((s) => s.setInferredSpec);
+  const setOutputPlan = useChatStore((s) => s.setOutputPlan);
+  const setConfirmationMode = useChatStore((s) => s.setConfirmationMode);
+  const setActiveJobId = useChatStore((s) => s.setActiveJobId);
   const sourceImage = useChatStore((s) => s.source_image);
   const outputPlan = useChatStore((s) => s.output_plan);
+  const sourceImageId = searchParams.get('source_image_id');
+  const importedSourceRef = React.useRef<string | null>(null);
 
   const { handleStart, genPhase, job, activeJobId, errorMessage, handleStop, resumeJob } =
     useChatStartFlow();
@@ -29,6 +42,66 @@ export default function NewKitPage() {
   }, [resetChat]);
 
   React.useEffect(() => {
+    if (!sourceImageId || importedSourceRef.current === sourceImageId) return;
+    const imageUrl = imageBytesUrl(sourceImageId);
+    let cancelled = false;
+
+    setHeroImage({ url: imageUrl, mime: 'image/png' });
+    setSourceImage(null);
+    setUserPrompt(null);
+    setInferredSpec(null);
+    setOutputPlan(null);
+    setConfirmationMode(null);
+    setActiveJobId(null);
+    const imageMessageId = appendMessage({ role: 'user', type: 'image_ref', content: imageUrl });
+    const statusMessageId = appendMessage({
+      role: 'ai',
+      type: 'text',
+      content: '正在带入这张图…',
+    });
+
+    void importSourceImageFromImageId(sourceImageId)
+      .then((imported) => {
+        if (cancelled) return;
+        const mime = imported.mime ?? 'image/png';
+        importedSourceRef.current = sourceImageId;
+        setHeroImage({ url: imported.data_url, mime });
+        setSourceImage({
+          source_image_ref: imported.source_image_ref,
+          preview_url: imported.preview_url,
+          mime,
+        });
+        updateMessage(imageMessageId, { content: imported.data_url });
+        updateMessage(statusMessageId, {
+          content: '输入修改描述后发送即可重新生成。',
+        });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : String(err);
+        updateMessage(statusMessageId, {
+          content: `图片带入失败：${message}`,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    appendMessage,
+    setActiveJobId,
+    setConfirmationMode,
+    setHeroImage,
+    setInferredSpec,
+    setOutputPlan,
+    setSourceImage,
+    setUserPrompt,
+    sourceImageId,
+    updateMessage,
+  ]);
+
+  React.useEffect(() => {
+    if (sourceImageId) return;
     const params =
       typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
     const jobIdFromUrl = params?.get('job_id') ?? null;
@@ -37,7 +110,7 @@ export default function NewKitPage() {
     const jobId = jobIdFromUrl || storedJobId;
     if (!jobId || jobId === activeJobId) return;
     void resumeJob(jobId);
-  }, [activeJobId, resumeJob]);
+  }, [activeJobId, resumeJob, sourceImageId]);
 
   React.useEffect(() => {
     if (!activeJobId || typeof window === 'undefined') return;

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from apps.api.lib import db as db_mod
 from apps.api.lib.db import get_session
 from apps.api.routes.images import router as images_router
+from apps.api.routes.source_images import router as source_images_router
 
 
 @contextmanager
@@ -94,6 +95,7 @@ class ImagesRoutePersistenceTest(unittest.TestCase):
 
         app = FastAPI()
         app.include_router(images_router)
+        app.include_router(source_images_router)
         self.client = TestClient(app)
 
     def tearDown(self) -> None:
@@ -107,6 +109,21 @@ class ImagesRoutePersistenceTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"original png")
         self.assertEqual(response.headers["content-type"], "image/png")
+
+    def test_existing_image_can_be_imported_as_source_image(self) -> None:
+        response = self.client.post(
+            "/api/source-images/from-image",
+            json={"image_id": "kit-slot:10:H1"},
+        )
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertTrue(body["source_image_ref"].startswith("src_"))
+        self.assertEqual(body["mime_type"], "image/png")
+        self.assertEqual(body["data_url"], "data:image/png;base64,b3JpZ2luYWwgcG5n")
+
+        image_response = self.client.get(body["preview_url"])
+        self.assertEqual(image_response.status_code, 200)
+        self.assertEqual(image_response.content, b"original png")
 
     def test_save_replace_requires_explicit_mode_and_updates_current_slot(self) -> None:
         image_id = quote("kit-slot:10:H1", safe="")

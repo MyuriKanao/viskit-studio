@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.lib.db import get_session
 from apps.api.lib.generation_jobs import require_within, resolve_stored_path, source_image_dir
+from apps.api.routes.images import _load_target_bytes
 
 router = APIRouter(prefix="/api/source-images", tags=["source-images"])
 
@@ -47,6 +48,14 @@ class SourceImageOut(BaseModel):
     mime_type: str
     size_bytes: int
     sha256: str
+
+
+class SourceImageImportIn(BaseModel):
+    image_id: str = Field(min_length=1, max_length=160)
+
+
+class SourceImageImportOut(SourceImageOut):
+    data_url: str
 
 
 def _extension_for_mime(mime_type: str) -> str:
@@ -90,12 +99,7 @@ async def _read_request_image(request: Request) -> tuple[bytes, str]:
     return image_bytes, mime_type
 
 
-@router.post("", response_model=SourceImageOut, status_code=201)
-async def create_source_image(
-    request: Request,
-    session: Annotated[Session, Depends(get_session)],
-) -> SourceImageOut:
-    image_bytes, mime_type = await _read_request_image(request)
+def _store_source_image(image_bytes: bytes, mime_type: str, session: Session) -> SourceImageOut:
     source_id = f"src_{uuid.uuid4().hex}"
     digest = hashlib.sha256(image_bytes).hexdigest()
     root = source_image_dir()
@@ -123,6 +127,30 @@ async def create_source_image(
         mime_type=mime_type,
         size_bytes=len(image_bytes),
         sha256=digest,
+    )
+
+
+@router.post("", response_model=SourceImageOut, status_code=201)
+async def create_source_image(
+    request: Request,
+    session: Annotated[Session, Depends(get_session)],
+) -> SourceImageOut:
+    image_bytes, mime_type = await _read_request_image(request)
+    return _store_source_image(image_bytes, mime_type, session)
+
+
+@router.post("/from-image", response_model=SourceImageImportOut, status_code=201)
+async def create_source_image_from_existing(
+    payload: SourceImageImportIn,
+    session: Annotated[Session, Depends(get_session)],
+) -> SourceImageImportOut:
+    image_bytes = _load_target_bytes(payload.image_id, session)
+    if len(image_bytes) > _MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="source image exceeds 10 MiB")
+    stored = _store_source_image(image_bytes, "image/png", session)
+    return SourceImageImportOut(
+        **stored.model_dump(),
+        data_url=f"data:image/png;base64,{base64.b64encode(image_bytes).decode('ascii')}",
     )
 
 

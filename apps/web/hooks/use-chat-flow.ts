@@ -29,6 +29,7 @@ import type {
   GenerationJobStatus,
   GenerationPlan,
   ProductProfilePayload,
+  SourceImageRef,
 } from '@/lib/generation/types';
 
 const PRODUCT_TYPES = ['blue_hat', 'sports', 'general_food', 'other'] as const;
@@ -95,6 +96,39 @@ function isActiveGenerationStatus(status: GenerationJobStatus): boolean {
   );
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function prepareImagePayload(imageUrl: string, fallbackMime: string) {
+  if (imageUrl.startsWith('data:image/')) {
+    return { imageUrl, mime: fallbackMime };
+  }
+
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`图片读取失败 (${response.status})`);
+  }
+  const blob = await response.blob();
+  if (!blob.type.startsWith('image/')) {
+    throw new Error('图片读取失败：返回内容不是图片');
+  }
+  return {
+    imageUrl: await blobToDataUrl(blob),
+    mime: blob.type || fallbackMime,
+  };
+}
+
+type HandleImageDropOptions = {
+  appendImageMessage?: boolean;
+  sourceImage?: SourceImageRef | null;
+};
+
 // ---------------------------------------------------------------------------
 // Image drop → extract
 // ---------------------------------------------------------------------------
@@ -121,17 +155,25 @@ export function useChatImageFlow() {
   const createPlan = planMutation.mutateAsync;
 
   const handleImageDrop = useCallback(
-    async (imageUrl: string, mime: string, description?: string) => {
+    async (
+      imageUrl: string,
+      mime: string,
+      description?: string,
+      options: HandleImageDropOptions = {}
+    ) => {
       // 1. Persist hero image and optional prompt in store
       const userPrompt = description?.trim() || null;
+      const existingSourceImage = options.sourceImage ?? null;
       setHeroImage({ url: imageUrl, mime });
-      setSourceImage(null);
+      setSourceImage(existingSourceImage);
       setUserPrompt(userPrompt);
       setOutputPlan(null);
       setActiveJobId(null);
 
       // 2. Append user image bubble
-      appendMessage({ role: 'user', type: 'image_ref', content: imageUrl });
+      if (options.appendImageMessage !== false) {
+        appendMessage({ role: 'user', type: 'image_ref', content: imageUrl });
+      }
 
       // 3. Append user text bubble if description was provided
       if (userPrompt) {
@@ -147,10 +189,13 @@ export function useChatImageFlow() {
 
       // 5. Persist source image, then fire /extract and /generation/plan.
       try {
-        const sourceImage = await persistSourceImage({
-          imageUrl,
-          mime,
-        });
+        const imagePayload = await prepareImagePayload(imageUrl, mime);
+        const sourceImage =
+          existingSourceImage ??
+          (await persistSourceImage({
+            imageUrl: imagePayload.imageUrl,
+            mime: imagePayload.mime,
+          }));
         setSourceImage(sourceImage);
         updateMessage(pendingMessageId, {
           content: '源图已保存，正在推断商品信息…',
@@ -158,7 +203,7 @@ export function useChatImageFlow() {
 
         const inferred = await extract({
           kitClientId,
-          imageUrl,
+          imageUrl: imagePayload.imageUrl,
           description,
         });
 

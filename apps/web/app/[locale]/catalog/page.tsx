@@ -175,11 +175,12 @@ export default function CatalogPage() {
   );
   const handleEditImage = React.useCallback(
     (kit: KitListItem, imageId: string) => {
-      const editorImageId = encodeKitSlotImageId(kit.id, imageId);
+      const sourceImageId = encodeKitSlotImageId(kit.id, imageId);
+      const params = new URLSearchParams({ source_image_id: sourceImageId });
       const href =
         locale === 'zh'
-          ? `/editor/${encodeURIComponent(editorImageId)}`
-          : `/${locale}/editor/${encodeURIComponent(editorImageId)}`;
+          ? `/new-kit?${params.toString()}`
+          : `/${locale}/new-kit?${params.toString()}`;
       router.push(href);
     },
     [locale, router]
