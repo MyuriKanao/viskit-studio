@@ -754,6 +754,81 @@ def _build_locked_prompts(
     return out
 
 
+def _template_for_plan_item(inputs: PlannedGenerationInputs, item: OutputPlanItem) -> Template:
+    mapped = (inputs.template_by_output_id or {}).get(item.output_id)
+    if mapped is not None:
+        return mapped
+
+    kind, ref_locale, ident = parse_template_ref(item.template_ref)
+    if kind != "builtin" or ref_locale != inputs.locale:
+        raise ValueError(
+            "custom or locale-mismatched plan item templates must be supplied "
+            f"via template_by_output_id for output_id={item.output_id!r}"
+        )
+    return resolve_plan_templates(
+        OutputPlan(
+            plan_id="single-item-validation",
+            plan_source=item.source,
+            recommendation_source="none",
+            requires_confirmation=True,
+            items=(item,),
+        ),
+        locale=inputs.locale,
+    )[item.output_id]
+
+
+def _size_from_plan_item(item: OutputPlanItem) -> str:
+    return f"{item.width}x{item.height}"
+
+
+def _planned_output_path(inputs: PlannedGenerationInputs, item: OutputPlanItem) -> Path:
+    if item.destination_type == "kit_slot" and inputs.kit_id and item.slot_id:
+        return _output_path_for_section(inputs.output_dir, inputs.kit_id, item.slot_id)
+    return (
+        inputs.output_dir
+        / "generation_jobs"
+        / inputs.job_id
+        / "outputs"
+        / f"{_safe_output_filename(item.output_id)}.png"
+    )
+
+
+def _planned_public_path(inputs: PlannedGenerationInputs, item: OutputPlanItem) -> str:
+    if item.destination_type == "kit_slot" and inputs.kit_id and item.slot_id:
+        return f"/api/kits/{inputs.kit_id}/images/{item.slot_id}"
+    return f"/api/generation/jobs/{inputs.job_id}/outputs/{item.output_id}/image"
+
+
+def _build_plan_locked_prompts(
+    inputs: PlannedGenerationInputs,
+    *,
+    secondary_color_hex: str | None = None,
+) -> list[tuple[OutputPlanItem, str, Template, str]]:
+    """Render locked prompts for exactly the items in a confirmed output plan."""
+    lock = build_lock(
+        inputs.job_id,
+        brand_color_hex=inputs.brand_color_hex,
+        locale=inputs.locale,
+        style_prompt=inputs.style_prompt,
+        secondary_color_hex=secondary_color_hex,
+    )
+    out: list[tuple[OutputPlanItem, str, Template, str]] = []
+    for item in sorted(inputs.output_items, key=lambda i: i.sort_order):
+        template = _template_for_plan_item(inputs, item)
+        body = build_prompt(
+            PromptInputs(
+                template=template,
+                image_brief=item.three_piece,
+                sku_meta=inputs.sku_meta,
+                brand_color_hex=inputs.brand_color_hex,
+                style_prompt=inputs.style_prompt,
+                locale=inputs.locale,
+            )
+        )
+        out.append((item, apply_lock(lock, body), template, _size_from_plan_item(item)))
+    return out
+
+
 def _write_compliance_json(
     *,
     kit_root: Path,
