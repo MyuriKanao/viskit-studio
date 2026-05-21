@@ -10,6 +10,7 @@ import { HistoryTimeline } from '@/components/editor/HistoryTimeline';
 import { TextLayerOverlay } from '@/components/editor/TextLayerOverlay';
 import { ToolRail } from '@/components/editor/ToolRail';
 import { useInpaint } from '@/hooks/use-inpaint';
+import { imageBytesUrl, saveEditedImage, type ImageSaveMode } from '@/lib/api/images';
 import { useCommandStack } from '@/lib/editor/command-stack';
 import type { CanvasStageHandle, MaskBox } from '@/lib/editor/types';
 
@@ -35,11 +36,11 @@ const CanvasStage = dynamic(
 const CANVAS_WIDTH = 1024;
 const CANVAS_HEIGHT = 1536;
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
-
 export interface EditorRootProps {
   imageId: string;
 }
+
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export function EditorRoot({ imageId }: EditorRootProps) {
   const t = useTranslations('editor');
@@ -50,8 +51,11 @@ export function EditorRoot({ imageId }: EditorRootProps) {
   const hasMask = maskBox !== null;
   const canvasRef = useRef<CanvasStageHandle | null>(null);
   const inpaint = useInpaint();
+  const [pendingEditResultRef, setPendingEditResultRef] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const imageUrl = `${BASE_URL}/api/images/${encodeURIComponent(imageId)}/bytes`;
+  const imageUrl = imageBytesUrl(imageId);
 
   const handleInpaintStart = useCallback(() => {
     if (!maskBox) return;
@@ -80,6 +84,11 @@ export function EditorRoot({ imageId }: EditorRootProps) {
   // disables again until the next mask is committed (hasMask flips false).
   useEffect(() => {
     if (inpaint.status !== 'success') return;
+    const editResultRef =
+      inpaint.editResultRef ??
+      (typeof inpaint.lastEvent?.data.edit_result_ref === 'string'
+        ? inpaint.lastEvent.data.edit_result_ref
+        : null);
     const fab =
       typeof window !== 'undefined'
         ? (
@@ -98,14 +107,69 @@ export function EditorRoot({ imageId }: EditorRootProps) {
     });
     canvasRef.current?.clearMaskRect();
     setMaskBox(null);
+    if (editResultRef) {
+      setPendingEditResultRef(editResultRef);
+      setSaveStatus('idle');
+      setSaveError(null);
+    }
     inpaint.reset();
   }, [inpaint, imageId, maskBox]);
+
+  const handleSaveEdit = useCallback(
+    async (mode: ImageSaveMode) => {
+      if (!pendingEditResultRef || saveStatus === 'saving') return;
+      setSaveStatus('saving');
+      setSaveError(null);
+      try {
+        await saveEditedImage(imageId, {
+          edit_result_ref: pendingEditResultRef,
+          mode,
+        });
+        setPendingEditResultRef(null);
+        setSaveStatus('saved');
+      } catch (err) {
+        setSaveError((err as Error).message);
+        setSaveStatus('error');
+      }
+    },
+    [imageId, pendingEditResultRef, saveStatus]
+  );
 
   return (
     <div className="flex h-screen flex-col bg-surface-01 text-ink-primary">
       {/* Top bar */}
       <header className="flex items-center justify-between border-b border-border-subtle bg-surface-02 px-s-5 py-s-3">
         <span className="font-display text-ink-primary">{t('title')}</span>
+        <div className="flex items-center gap-s-2 text-xs">
+          {pendingEditResultRef ? (
+            <>
+              <span className="text-ink-muted">{t('save.pending')}</span>
+              <button
+                type="button"
+                disabled={saveStatus === 'saving'}
+                onClick={() => void handleSaveEdit('replace')}
+                className="rounded-input border border-border-subtle bg-surface-01 px-s-3 py-s-1 text-ink-secondary transition-colors hover:border-border-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t('save.replace')}
+              </button>
+              <button
+                type="button"
+                disabled={saveStatus === 'saving'}
+                onClick={() => void handleSaveEdit('copy')}
+                className="rounded-input bg-accent px-s-3 py-s-1 text-ink-base-l transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t('save.copy')}
+              </button>
+            </>
+          ) : saveStatus === 'saved' ? (
+            <span className="text-success">{t('save.saved')}</span>
+          ) : null}
+          {saveStatus === 'error' && saveError ? (
+            <span className="text-danger" role="alert">
+              {t('save.error')}: {saveError}
+            </span>
+          ) : null}
+        </div>
       </header>
 
       {/* Middle row: ToolRail + canvas area */}
