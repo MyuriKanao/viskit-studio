@@ -25,7 +25,7 @@ from apps.api.lib.generation_jobs import (
     imagegen_output_dir,
     require_within,
     resolve_stored_path,
-    source_image_dir,
+    fetch_kit_slot_png_path,
     upsert_kit_slot_png_path,
 )
 
@@ -486,6 +486,28 @@ def get_generation_output_image(
         raise HTTPException(status_code=404, detail="generation output image not found") from exc
     if not path.is_file():
         raise HTTPException(status_code=404, detail="generation output image missing")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+@router.get("/kits/{marketing_kit_id}/slots/{slot_id}/image")
+def get_kit_slot_output_image(
+    marketing_kit_id: int,
+    slot_id: str,
+    session: Annotated[Session, Depends(get_session)],
+) -> FileResponse:
+    if not re.fullmatch(r"[HM][1-9]", slot_id) or (
+        slot_id.startswith("H") and int(slot_id[1:]) > 5
+    ):
+        raise HTTPException(status_code=404, detail="unknown slot_id")
+    png_path = fetch_kit_slot_png_path(session, marketing_kit_id, slot_id)
+    if png_path is None:
+        raise HTTPException(status_code=404, detail="kit slot image not found")
+    try:
+        path = require_within(resolve_stored_path(png_path), imagegen_output_dir())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="kit slot image not found") from exc
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="kit slot image missing")
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
