@@ -10,7 +10,7 @@ import threading
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
@@ -58,6 +58,13 @@ DestinationType = Literal["kit_slot", "asset"]
 
 _TERMINAL_JOB_STATUSES = {"stopped", "succeeded", "failed", "partial", "interrupted"}
 _SAFE_OUTPUT_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
+
+
+def _as_job_status(value: str) -> JobStatus:
+    valid = set(JobStatus.__args__)  # type: ignore[attr-defined]
+    if value not in valid:
+        raise RuntimeError(f"unknown generation job status: {value!r}")
+    return cast(JobStatus, value)
 
 
 class GenerationEventBus:
@@ -375,7 +382,7 @@ async def start_generation_job(
     ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="generation job not found")
-    status = str(row.status)
+    status = _as_job_status(str(row.status))
     if status in _TERMINAL_JOB_STATUSES:
         raise HTTPException(status_code=409, detail=f"cannot start terminal job: {status}")
     scheduled = False
@@ -409,7 +416,7 @@ def stop_generation_job(
     ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="generation job not found")
-    status = str(row.status)
+    status = _as_job_status(str(row.status))
     if status in _TERMINAL_JOB_STATUSES:
         return GenerationJobStopResponse(job_id=job_id, status=status, cancel_requested=True)
 
@@ -529,10 +536,10 @@ def _asset_file_path(asset_id: str) -> Path:
 
 def _final_job_status(session: Session, job_id: str) -> JobStatus:
     counts = {
-        str(row.status): int(row.count)
+        str(row.status): int(row.status_count)
         for row in session.execute(
             text(
-                "SELECT status, COUNT(*) AS count FROM generation_outputs"
+                "SELECT status, COUNT(*) AS status_count FROM generation_outputs"
                 " WHERE job_id = :job_id GROUP BY status"
             ),
             {"job_id": job_id},
@@ -563,7 +570,7 @@ def _generate_image_sync(app: Any, prompt: str, size: str, job_id: str, output_i
     response = adapter.generate(prompt, size=size, n=1, kit_id=job_id, image_id=output_id)
     if not response.images:
         raise RuntimeError("image provider returned zero images")
-    return response.images[0]
+    return bytes(response.images[0])
 
 
 async def _run_generation_job(app: Any, job_id: str) -> None:
