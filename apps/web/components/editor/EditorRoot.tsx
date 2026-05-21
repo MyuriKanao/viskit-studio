@@ -156,7 +156,7 @@ export function EditorRoot({ imageId }: EditorRootProps) {
                 type="button"
                 disabled={saveStatus === 'saving'}
                 onClick={() => void handleSaveEdit('copy')}
-                className="rounded-input bg-accent px-s-3 py-s-1 text-ink-base-l transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-input bg-accent px-s-3 py-s-1 text-ink-base-l transition-colors hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t('save.copy')}
               </button>
