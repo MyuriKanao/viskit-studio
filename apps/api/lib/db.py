@@ -347,6 +347,31 @@ CREATE TABLE IF NOT EXISTS image_edits (
 CREATE INDEX IF NOT EXISTS image_edits_image_id_idx ON image_edits(hero_or_detail_image_id);
 CREATE INDEX IF NOT EXISTS image_edits_op_type_idx ON image_edits(op_type);
 
+CREATE TABLE IF NOT EXISTS generated_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    png_path TEXT NOT NULL,
+    source_kit_id INTEGER REFERENCES marketing_kits(id) ON DELETE SET NULL,
+    source_slot_id TEXT,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS generated_assets_source_kit_idx
+    ON generated_assets(source_kit_id);
+
+CREATE TABLE IF NOT EXISTS image_edit_results (
+    id TEXT PRIMARY KEY,
+    target_image_id TEXT NOT NULL,
+    result_path TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ready',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS image_edit_results_target_idx
+    ON image_edit_results(target_image_id);
+
 CREATE TABLE IF NOT EXISTS cost_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kit_id INTEGER,
