@@ -7,7 +7,7 @@
  * mapping is forgotten — Tailwind utilities then silently produce
  * `var(--undeclared-token)` (no compile error, broken at runtime).
  *
- * Usage: `node scripts/check-token-drift.mjs` — exits 0 on success, 1 on drift.
+ * Usage: `node tools/check-token-drift.mjs` — exits 0 on success, 1 on drift.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -48,7 +48,7 @@ if (missing.length > 0) {
   }
   console.error(
     '\nFix: add the missing tokens to tailwind.config.ts theme.extend, ' +
-      'OR add them to the ALLOWLIST in scripts/check-token-drift.mjs with a justification.\n'
+      'OR add them to the ALLOWLIST in tools/check-token-drift.mjs with a justification.\n'
   );
   process.exit(1);
 }

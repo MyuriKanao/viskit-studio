@@ -3,8 +3,8 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "gen:ts": "node scripts/gen-ts.mjs",
-    "gen:py": "python3 scripts/gen-py.py",
+    "gen:ts": "node tools/gen-ts.mjs",
+    "gen:py": "uv run python tools/gen-py.py",
     "gen": "pnpm gen:ts && pnpm gen:py"
   },
   "devDependencies": {

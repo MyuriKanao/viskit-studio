@@ -2,7 +2,7 @@
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { writeFileSync, readFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -14,11 +14,9 @@ const banner = "// AUTO-GENERATED from packages/schemas/openapi.yaml — do not 
 // Try programmatic API first, fall back to CLI
 let generated;
 try {
-  // openapi-typescript >= 7 exports a default async function
-  const { default: openapiTS } = await import("openapi-typescript");
+  const { default: openapiTS, astToString } = await import("openapi-typescript");
   const ast = await openapiTS(new URL(`file://${input}`));
-  // ast is a string in v7
-  generated = typeof ast === "string" ? ast : String(ast);
+  generated = typeof ast === "string" ? ast : astToString(ast);
 } catch (e) {
   // Fallback: shell out to the CLI
   const cli = resolve(root, "node_modules", ".bin", "openapi-typescript");

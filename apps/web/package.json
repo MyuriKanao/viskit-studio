@@ -8,8 +8,8 @@
     "start": "next start",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
-    "check:tokens": "node scripts/check-token-drift.mjs",
-    "gen:api": "node scripts/gen-api.mjs"
+    "check:tokens": "node tools/check-token-drift.mjs",
+    "gen:api": "node tools/gen-api.mjs"
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "^0.5.0",

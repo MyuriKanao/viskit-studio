@@ -31,7 +31,7 @@
       "components/**",
       "hooks/**",
       "lib/**",
-      "scripts/**",
+      "tools/**",
       "middleware.ts",
       "*.ts",
       "*.mjs"

@@ -3,7 +3,7 @@ import type { Config } from 'tailwindcss';
 /**
  * Tailwind theme extension — every value MUST reference a CSS variable from
  * apps/web/app/globals.css (which carries the canonical design tokens).
- * The drift guard in scripts/check-token-drift.mjs asserts that every
+ * The drift guard in tools/check-token-drift.mjs asserts that every
  * `--<token>` declared in globals.css appears at least once below.
  */
 const config: Config = {
