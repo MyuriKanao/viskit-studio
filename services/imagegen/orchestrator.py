@@ -888,6 +888,16 @@ def _score_generated_spec(inputs: KitGenerationInputs) -> ScoreResult:
     return score_spec(sections, locale=inputs.locale)
 
 
+def _score_plan_items(inputs: PlannedGenerationInputs) -> ScoreResult:
+    sections: dict[str, str] = {}
+    for item in inputs.output_items:
+        sections[f"output.{item.output_id}"] = (
+            f"{item.three_piece.visual}\n{item.three_piece.copy}\n"
+            f"{item.three_piece.design_note}"
+        )
+    return score_spec(sections, locale=inputs.locale)
+
+
 def _write_cost_json(*, kit_root: Path, events: list[dict[str, Any]]) -> Path:
     kit_root.mkdir(parents=True, exist_ok=True)
     by_role: dict[str, float] = {}
