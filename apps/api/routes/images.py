@@ -645,7 +645,10 @@ def save_edited_image(
             image_id=encode_kit_slot_image_id(target.marketing_kit_id, target.slot_id),
             marketing_kit_id=target.marketing_kit_id,
             slot_id=target.slot_id,
-            image_url=f"/api/generation/kits/{target.marketing_kit_id}/slots/{target.slot_id}/image",
+            image_url=(
+                f"/api/generation/jobs/kits/{target.marketing_kit_id}"
+                f"/slots/{target.slot_id}/image"
+            ),
         )
 
     asset_id = f"asset_{uuid.uuid4().hex}"
