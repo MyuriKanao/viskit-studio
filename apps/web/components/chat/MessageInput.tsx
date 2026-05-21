@@ -21,6 +21,7 @@ export function MessageInput() {
   const [error, setError] = React.useState<string | null>(null);
   const [isDragOver, setIsDragOver] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const appendMessage = useChatStore((s) => s.appendMessage);
   const confirmation_mode = useChatStore((s) => s.confirmation_mode);
@@ -89,6 +90,17 @@ export function MessageInput() {
     }
   }
 
+  async function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.currentTarget.files?.[0];
+    e.currentTarget.value = '';
+    if (!file || isDisabled) return;
+    if (file.type.startsWith('image/')) {
+      await handleImageFile(file);
+    } else {
+      setError('请选择图片文件');
+    }
+  }
+
   // Paste handling
   React.useEffect(() => {
     async function handlePaste(e: ClipboardEvent) {
@@ -123,10 +135,35 @@ export function MessageInput() {
         onDrop={handleDrop}
         className={cn(
           'rounded-input border-2 border-dashed px-s-3 py-s-2 text-center text-xs text-ink-faint transition-colors duration-fast',
-          isDragOver ? 'border-accent bg-accent/5 text-accent' : 'border-border-subtle'
+          isDragOver ? 'border-accent bg-accent/5 text-accent' : 'border-border-subtle',
+          isDisabled && 'opacity-50'
         )}
       >
-        拖拽或粘贴图片至此
+        <input
+          ref={fileInputRef}
+          data-testid="image-upload-input"
+          type="file"
+          accept="image/*"
+          disabled={isDisabled}
+          onChange={handleFileInputChange}
+          className="sr-only"
+        />
+        <div className="flex flex-col items-center justify-center gap-s-2 sm:flex-row">
+          <button
+            data-testid="image-upload-button"
+            type="button"
+            disabled={isDisabled}
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              'inline-flex items-center justify-center rounded-input border border-border-subtle bg-surface-02 px-s-3 py-s-1.5 text-xs font-medium text-ink-secondary',
+              'transition-colors duration-fast hover:border-accent hover:text-accent',
+              'disabled:pointer-events-none disabled:opacity-50'
+            )}
+          >
+            选择图片
+          </button>
+          <span>或拖拽 / 粘贴图片至此</span>
+        </div>
       </div>
 
       {/* Text input row */}

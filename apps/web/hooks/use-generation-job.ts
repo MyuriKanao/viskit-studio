@@ -5,9 +5,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ProgressEvent } from '@/lib/chat/types';
 import {
-  canonicalAssetImageId,
-  canonicalJobOutputImageId,
-  canonicalKitSlotImageId,
   type GenerationJobCreateRequest,
   type GenerationJobSnapshot,
   type GenerationJobStatus,
@@ -19,6 +16,9 @@ import {
   type OutputDestinationType,
   type OutputPlanSource,
   type SourceImageRef,
+  canonicalAssetImageId,
+  canonicalJobOutputImageId,
+  canonicalKitSlotImageId,
 } from '@/lib/generation/types';
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -76,7 +76,12 @@ function normalizeDestination(value: unknown): OutputDestinationType {
 }
 
 function normalizePlanSource(value: unknown): OutputPlanSource {
-  if (value === 'explicit' || value === 'recommended' || value === 'fallback' || value === 'manual') {
+  if (
+    value === 'explicit' ||
+    value === 'recommended' ||
+    value === 'fallback' ||
+    value === 'manual'
+  ) {
     return value;
   }
   return 'recommended';
@@ -298,13 +303,10 @@ async function fetchGenerationJob(jobId: string): Promise<GenerationJobSnapshot>
 }
 
 async function postStopGenerationJob(jobId: string): Promise<GenerationJobSnapshot> {
-  const response = await fetch(
-    `${baseUrl}/api/generation/jobs/${encodeURIComponent(jobId)}/stop`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-    }
-  );
+  const response = await fetch(`${baseUrl}/api/generation/jobs/${encodeURIComponent(jobId)}/stop`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+  });
   const body = await readJsonOrThrow(response, `/api/generation/jobs/${jobId}/stop`);
   const snapshot = normalizeGenerationJob(body, jobId);
   return snapshot.outputs.length > 0 ? snapshot : fetchGenerationJob(jobId);
@@ -473,4 +475,3 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}) {
     reset,
   };
 }
-

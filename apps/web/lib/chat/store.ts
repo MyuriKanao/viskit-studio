@@ -2,8 +2,8 @@
 
 import { create } from 'zustand';
 
-import type { ChatMessage, ConfirmationMode, InferredSpec } from './types';
 import type { GenerationPlan, SourceImageRef } from '@/lib/generation/types';
+import type { ChatMessage, ConfirmationMode, InferredSpec } from './types';
 
 function makeKitClientId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

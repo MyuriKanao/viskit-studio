@@ -54,13 +54,17 @@ function buildProductProfile(inferred: InferredSpec): ProductProfilePayload {
     product_type: normalizeProductType(inferred.product_type.value),
     price: inferred.price?.value ?? null,
     brand_color_hex: inferred.brand_color_hex.value,
-    selling_points: inferred.selling_points.map((sp) => sellingPointValue(sp.value)).filter(Boolean),
+    selling_points: inferred.selling_points
+      .map((sp) => sellingPointValue(sp.value))
+      .filter(Boolean),
   };
 }
 
 function buildSellingPoints(inferred: InferredSpec, userPrompt: string | null): KitSellingPoint[] {
   const promptText = userPrompt?.trim();
-  const pointTexts = inferred.selling_points.map((sp) => sellingPointValue(sp.value)).filter(Boolean);
+  const pointTexts = inferred.selling_points
+    .map((sp) => sellingPointValue(sp.value))
+    .filter(Boolean);
   const fallbackPoint =
     [inferred.brand.value, inferred.category.value, promptText].filter(Boolean).join(' ') ||
     '商品基础展示';

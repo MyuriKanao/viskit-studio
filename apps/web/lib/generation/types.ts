@@ -134,4 +134,3 @@ export function canonicalAssetImageId(assetId: string): string {
 export function canonicalKitSlotImageId(marketingKitId: number | string, slotId: string): string {
   return `kit-slot:${marketingKitId}:${slotId}`;
 }
-

@@ -533,20 +533,173 @@ export function ConfirmationCard({
         </p>
       </div>
 
+      <div
+        data-testid="output-plan-card"
+        className="rounded-input border border-border-subtle bg-surface-02 p-s-3 text-xs"
+      >
+        <div className="mb-s-3 flex flex-wrap items-center justify-between gap-s-2">
+          <div>
+            <h3 className="font-mono uppercase tracking-wider text-ink-faint">输出计划</h3>
+            <p className="mt-1 text-ink-muted">
+              {sourceLabel(plan.plan_source)} · 已选{' '}
+              {plan.items.filter((item) => item.enabled).length}/{plan.items.length} 项 ·
+              仅确认后才会开始生成
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-s-2">
+            <button
+              type="button"
+              onClick={() => addPlanItem('white_bg')}
+              className="rounded-input border border-border-subtle px-s-2 py-s-1 text-ink-secondary hover:border-accent hover:text-accent"
+            >
+              + 白底主图
+            </button>
+            <button
+              type="button"
+              onClick={() => addPlanItem('banner')}
+              className="rounded-input border border-border-subtle px-s-2 py-s-1 text-ink-secondary hover:border-accent hover:text-accent"
+            >
+              + Banner
+            </button>
+            <button
+              data-testid="add-full-kit-plan"
+              type="button"
+              onClick={addFullKitPlan}
+              className="rounded-input border border-border-subtle px-s-2 py-s-1 text-ink-secondary hover:border-accent hover:text-accent"
+            >
+              添加完整 14 图
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-s-2">
+          {plan.items.length === 0 ? (
+            <div className="rounded-input border border-dashed border-border-subtle p-s-3 text-ink-muted">
+              暂无输出项，请添加白底主图、Banner 或完整 14 图计划。
+            </div>
+          ) : (
+            plan.items.map((item, index) => (
+              <div
+                key={item.id}
+                data-testid={`output-plan-item-${item.id}`}
+                className={cn(
+                  'grid gap-s-2 rounded-input border border-border-subtle bg-surface-01 p-s-2',
+                  item.enabled ? 'opacity-100' : 'opacity-55'
+                )}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-s-2">
+                  <label className="flex min-w-0 flex-1 items-start gap-s-2">
+                    <input
+                      type="checkbox"
+                      checked={item.enabled}
+                      onChange={(e) => updatePlanItem(item.id, { enabled: e.target.checked })}
+                      className="mt-1"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-medium text-ink-primary">
+                        {index + 1}. {item.title}
+                      </span>
+                      <span className="mt-0.5 block text-ink-muted">
+                        {item.reason || '已加入输出计划'} · {item.aspect_ratio || '自适应'}
+                      </span>
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => removePlanItem(item.id)}
+                    className="text-ink-faint hover:text-danger"
+                  >
+                    移除
+                  </button>
+                </div>
+
+                <div className="grid gap-s-2 sm:grid-cols-2">
+                  <label className="flex flex-col gap-s-1">
+                    <span className="font-mono uppercase tracking-wider text-ink-faint">
+                      输出类型
+                    </span>
+                    <input
+                      type="text"
+                      value={item.output_kind}
+                      onChange={(e) => updatePlanItem(item.id, { output_kind: e.target.value })}
+                      className={FIELD_INPUT_CLS}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-s-1">
+                    <span className="font-mono uppercase tracking-wider text-ink-faint">
+                      模板 Ref
+                    </span>
+                    <input
+                      type="text"
+                      value={item.template_ref ?? ''}
+                      onChange={(e) =>
+                        updatePlanItem(item.id, { template_ref: e.target.value || null })
+                      }
+                      placeholder={item.template_name ?? '可留空使用推荐模板'}
+                      className={FIELD_INPUT_CLS}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-s-1">
+                    <span className="font-mono uppercase tracking-wider text-ink-faint">
+                      保存目标
+                    </span>
+                    <select
+                      value={item.destination_type}
+                      onChange={(e) =>
+                        updatePlanItem(item.id, {
+                          destination_type: e.target.value as OutputDestinationType,
+                          slot_id: e.target.value === 'asset' ? null : item.slot_id,
+                        })
+                      }
+                      className={FIELD_INPUT_CLS}
+                    >
+                      <option value="asset">独立资产</option>
+                      <option value="kit_slot">套包槽位</option>
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-s-1">
+                    <span className="font-mono uppercase tracking-wider text-ink-faint">
+                      槽位 / 比例
+                    </span>
+                    <input
+                      type="text"
+                      value={
+                        item.destination_type === 'kit_slot'
+                          ? (item.slot_id ?? '')
+                          : (item.aspect_ratio ?? '')
+                      }
+                      onChange={(e) =>
+                        item.destination_type === 'kit_slot'
+                          ? updatePlanItem(item.id, { slot_id: e.target.value || null })
+                          : updatePlanItem(item.id, { aspect_ratio: e.target.value || null })
+                      }
+                      placeholder={
+                        item.destination_type === 'kit_slot' ? 'H1 / M1…' : '1:1 / 16:9…'
+                      }
+                      className={FIELD_INPUT_CLS}
+                    />
+                  </label>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* ── Action row ── */}
       <div className="flex items-center gap-s-3 pt-s-2">
         <button
           data-testid="start-button"
           type="button"
           onClick={handleStart}
-          disabled={askingBlocked}
+          disabled={askingBlocked || planBlocked || isJobActive}
           className={cn(
             'inline-flex items-center justify-center rounded-input bg-accent px-s-4 py-s-2 text-sm font-medium text-ink-base-l',
             'transition-colors duration-fast hover:bg-accent-soft',
             'disabled:opacity-50 disabled:pointer-events-none'
           )}
         >
-          开始生成
+          {isJobActive ? '生成任务已启动' : '确认计划并开始生成'}
         </button>
 
         {mode === 'expanded' ? (
