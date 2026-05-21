@@ -350,21 +350,26 @@ CREATE INDEX IF NOT EXISTS image_edits_op_type_idx ON image_edits(op_type);
 CREATE TABLE IF NOT EXISTS generated_assets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    template_ref TEXT,
+    output_kind TEXT,
     png_path TEXT NOT NULL,
     source_kit_id INTEGER REFERENCES marketing_kits(id) ON DELETE SET NULL,
     source_slot_id TEXT,
+    source_job_id TEXT REFERENCES generation_jobs(id) ON DELETE SET NULL,
+    source_output_id TEXT REFERENCES generation_outputs(id) ON DELETE SET NULL,
+    source_image_ref TEXT REFERENCES source_images(id) ON DELETE SET NULL,
     metadata TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS generated_assets_source_kit_idx
-    ON generated_assets(source_kit_id);
-
 CREATE TABLE IF NOT EXISTS image_edit_results (
     id TEXT PRIMARY KEY,
+    source_image_ref TEXT,
     target_image_id TEXT NOT NULL,
     result_path TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'ready',
+    status TEXT NOT NULL DEFAULT 'ready' CHECK (
+        status IN ('pending','running','ready','succeeded','failed')
+    ),
     metadata TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TEXT
@@ -531,40 +536,6 @@ CREATE INDEX IF NOT EXISTS generation_outputs_job_id_idx ON generation_outputs(j
 CREATE INDEX IF NOT EXISTS generation_outputs_status_idx ON generation_outputs(status);
 CREATE INDEX IF NOT EXISTS generation_outputs_asset_id_idx ON generation_outputs(asset_id);
 
-CREATE TABLE IF NOT EXISTS generated_assets (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    template_ref TEXT,
-    output_kind TEXT,
-    png_path TEXT NOT NULL,
-    source_job_id TEXT REFERENCES generation_jobs(id) ON DELETE SET NULL,
-    source_output_id TEXT REFERENCES generation_outputs(id) ON DELETE SET NULL,
-    source_image_ref TEXT REFERENCES source_images(id) ON DELETE SET NULL,
-    metadata TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS generated_assets_source_job_id_idx
-    ON generated_assets(source_job_id);
-CREATE INDEX IF NOT EXISTS generated_assets_source_output_id_idx
-    ON generated_assets(source_output_id);
-CREATE INDEX IF NOT EXISTS generated_assets_source_image_ref_idx
-    ON generated_assets(source_image_ref);
-
-CREATE TABLE IF NOT EXISTS image_edit_results (
-    id TEXT PRIMARY KEY,
-    source_image_ref TEXT,
-    target_image_id TEXT,
-    result_path TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'succeeded' CHECK (
-        status IN ('pending','running','succeeded','failed')
-    ),
-    metadata TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expires_at TEXT
-);
-CREATE INDEX IF NOT EXISTS image_edit_results_source_image_ref_idx
-    ON image_edit_results(source_image_ref);
 CREATE INDEX IF NOT EXISTS image_edit_results_target_image_id_idx
     ON image_edit_results(target_image_id);
 """
@@ -580,11 +551,53 @@ def _mark_all_sqlite_migrations(engine: Engine) -> None:
             )
 
 
+def _ensure_sqlite_compat_columns(engine: Engine) -> None:
+    """Additive compatibility for local SQLite DBs created before table unification."""
+    additions = {
+        "generated_assets": {
+            "template_ref": "TEXT",
+            "output_kind": "TEXT",
+            "source_kit_id": "INTEGER",
+            "source_slot_id": "TEXT",
+            "source_job_id": "TEXT",
+            "source_output_id": "TEXT",
+            "source_image_ref": "TEXT",
+        },
+        "image_edit_results": {
+            "source_image_ref": "TEXT",
+        },
+    }
+    indexes = [
+        "CREATE INDEX IF NOT EXISTS generated_assets_source_kit_idx"
+        " ON generated_assets(source_kit_id)",
+        "CREATE INDEX IF NOT EXISTS generated_assets_source_job_id_idx"
+        " ON generated_assets(source_job_id)",
+        "CREATE INDEX IF NOT EXISTS generated_assets_source_output_id_idx"
+        " ON generated_assets(source_output_id)",
+        "CREATE INDEX IF NOT EXISTS generated_assets_source_image_ref_idx"
+        " ON generated_assets(source_image_ref)",
+        "CREATE INDEX IF NOT EXISTS image_edit_results_source_image_ref_idx"
+        " ON image_edit_results(source_image_ref)",
+    ]
+    with engine.begin() as conn:
+        for table, columns in additions.items():
+            existing = {
+                str(row[1])
+                for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+            }
+            for column, ddl in columns.items():
+                if column not in existing:
+                    conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+        for sql in indexes:
+            conn.exec_driver_sql(sql)
+
+
 def _ensure_sqlite_schema(engine: Engine) -> None:
     parsed = make_url(str(engine.url))
     if parsed.database not in {None, "", ":memory:"}:
         Path(str(parsed.database)).parent.mkdir(parents=True, exist_ok=True)
     _execute_script(engine, _SQLITE_SCHEMA)
+    _ensure_sqlite_compat_columns(engine)
     _mark_all_sqlite_migrations(engine)
 
 

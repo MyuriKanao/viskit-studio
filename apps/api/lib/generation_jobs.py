@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 ImageTargetKind = Literal["asset", "kit_slot"]
 
-_IMAGE_ID_RE = re.compile(r"^(asset:[A-Za-z0-9_-]{1,80}|kit:\d+:[HM][1-9])$")
+_IMAGE_ID_RE = re.compile(r"^(asset:[A-Za-z0-9_-]{1,80}|kit-slot:\d+:[HM][1-9])$")
 
 
 def repo_root() -> Path:
@@ -34,12 +34,14 @@ def encode_asset_image_id(asset_id: str) -> str:
 
 
 def encode_kit_slot_image_id(marketing_kit_id: int, slot_id: str) -> str:
-    return f"kit:{marketing_kit_id}:{slot_id}"
+    return f"kit-slot:{marketing_kit_id}:{slot_id}"
 
 
 def validate_image_id(image_id: str) -> str:
     if not _IMAGE_ID_RE.fullmatch(image_id):
-        raise ValueError("image_id must be asset:<asset_id> or kit:<marketing_kit_id>:<H/M slot>")
+        raise ValueError(
+            "image_id must be asset:<asset_id> or kit-slot:<marketing_kit_id>:<H/M slot>"
+        )
     return image_id
 
 

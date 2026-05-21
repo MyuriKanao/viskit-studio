@@ -698,24 +698,24 @@ async def _run_generation_job(app: Any, job_id: str) -> None:
                             prompt=str(output.prompt),
                         )
                 else:
-                    asset_id = f"asset_{uuid.uuid4().hex}"
-                    asset_path = _asset_file_path(asset_id)
+                    asset_file_token = f"asset_{uuid.uuid4().hex}"
+                    asset_path = _asset_file_path(asset_file_token)
                     asset_path.parent.mkdir(parents=True, exist_ok=True)
                     asset_path.write_bytes(png_bytes)
                     png_path = str(asset_path)
                     with session_scope() as session:
-                        session.execute(
+                        row = session.execute(
                             text(
                                 "INSERT INTO generated_assets"
-                                " (id, name, template_ref, output_kind, png_path,"
+                                " (name, template_ref, output_kind, png_path,"
                                 "  source_job_id, source_output_id, source_image_ref, metadata)"
-                                " SELECT :id, :name, :template_ref, :output_kind, :png_path,"
+                                " SELECT :name, :template_ref, :output_kind, :png_path,"
                                 "  gj.id, :output_id, gj.source_image_ref, "
                                 f"{json_param(session, 'metadata')}"
                                 " FROM generation_jobs gj WHERE gj.id = :job_id"
+                                " RETURNING id"
                             ),
                             {
-                                "id": asset_id,
                                 "name": str(output.output_key),
                                 "template_ref": output.template_ref,
                                 "output_kind": output.output_kind,
@@ -724,7 +724,10 @@ async def _run_generation_job(app: Any, job_id: str) -> None:
                                 "job_id": job_id,
                                 "metadata": json.dumps({"job_id": job_id}, ensure_ascii=False),
                             },
-                        )
+                        ).first()
+                        if row is None:
+                            raise RuntimeError("asset insert returned no id")
+                        asset_id = str(row.id)
                 with session_scope() as session:
                     session.execute(
                         text(

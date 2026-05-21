@@ -1,5 +1,97 @@
 components:
   schemas:
+    AssetEditContext:
+      properties:
+        asset_id:
+          title: Asset Id
+          type: string
+        image_id:
+          title: Image Id
+          type: string
+        image_url:
+          title: Image Url
+          type: string
+        target:
+          additionalProperties:
+            type: string
+          title: Target
+          type: object
+      required:
+        - asset_id
+        - image_id
+        - image_url
+        - target
+      title: AssetEditContext
+      type: object
+    AssetListResponse:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/AssetOut'
+          title: Items
+          type: array
+        total:
+          title: Total
+          type: integer
+      required:
+        - items
+        - total
+      title: AssetListResponse
+      type: object
+    AssetOut:
+      properties:
+        download_url:
+          title: Download Url
+          type: string
+        id:
+          title: Id
+          type: string
+        image_id:
+          title: Image Id
+          type: string
+        image_url:
+          title: Image Url
+          type: string
+        metadata:
+          additionalProperties: true
+          title: Metadata
+          type: object
+        name:
+          title: Name
+          type: string
+        output_kind:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Output Kind
+        source_image_ref:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Source Image Ref
+        source_job_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Source Job Id
+        source_output_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Source Output Id
+        template_ref:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Template Ref
+      required:
+        - id
+        - name
+        - image_id
+        - image_url
+        - download_url
+      title: AssetOut
+      type: object
     ComplianceOut:
       properties:
         advisory:
@@ -180,6 +272,42 @@ components:
         - mask_box
         - new_text
       title: EditRequest
+      type: object
+    EditResultCreate:
+      properties:
+        metadata:
+          additionalProperties: true
+          title: Metadata
+          type: object
+        result_data_url:
+          maxLength: 14000000
+          title: Result Data Url
+          type: string
+        source_image_ref:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Source Image Ref
+      required:
+        - result_data_url
+      title: EditResultCreate
+      type: object
+    EditResultOut:
+      properties:
+        edit_result_ref:
+          title: Edit Result Ref
+          type: string
+        result_url:
+          title: Result Url
+          type: string
+        status:
+          title: Status
+          type: string
+      required:
+        - edit_result_ref
+        - result_url
+        - status
+      title: EditResultOut
       type: object
     EndpointSecretResponse:
       properties:
@@ -364,6 +492,389 @@ components:
         - color_lock_summary
         - needs_review
       title: GenerateResponse
+      type: object
+    GenerationJobCreate:
+      properties:
+        client_job_id:
+          anyOf:
+            - maxLength: 120
+              type: string
+            - type: 'null'
+          title: Client Job Id
+        locale:
+          default: zh
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+        marketing_kit_id:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Marketing Kit Id
+        outputs:
+          items:
+            $ref: '#/components/schemas/GenerationOutputCreate'
+          maxItems: 100
+          minItems: 1
+          title: Outputs
+          type: array
+        planner_payload:
+          additionalProperties: true
+          title: Planner Payload
+          type: object
+        source_image_ref:
+          title: Source Image Ref
+          type: string
+        user_prompt:
+          default: ''
+          maxLength: 20000
+          title: User Prompt
+          type: string
+      required:
+        - source_image_ref
+        - outputs
+      title: GenerationJobCreate
+      type: object
+    GenerationJobCreated:
+      properties:
+        job_id:
+          title: Job Id
+          type: string
+        output_count:
+          title: Output Count
+          type: integer
+        status:
+          enum:
+            - planned
+            - queued
+            - running
+            - stopping
+            - stopped
+            - succeeded
+            - failed
+            - partial
+            - interrupted
+          title: Status
+          type: string
+      required:
+        - job_id
+        - status
+        - output_count
+      title: GenerationJobCreated
+      type: object
+    GenerationJobOut:
+      properties:
+        cancel_requested:
+          title: Cancel Requested
+          type: boolean
+        client_job_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Client Job Id
+        created_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Created At
+        error_message:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Error Message
+        finished_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Finished At
+        id:
+          title: Id
+          type: string
+        locale:
+          title: Locale
+          type: string
+        marketing_kit_id:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Marketing Kit Id
+        outputs:
+          items:
+            $ref: '#/components/schemas/GenerationOutputOut'
+          title: Outputs
+          type: array
+        planner_payload:
+          additionalProperties: true
+          title: Planner Payload
+          type: object
+        source_image_ref:
+          title: Source Image Ref
+          type: string
+        started_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Started At
+        status:
+          enum:
+            - planned
+            - queued
+            - running
+            - stopping
+            - stopped
+            - succeeded
+            - failed
+            - partial
+            - interrupted
+          title: Status
+          type: string
+        updated_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Updated At
+        user_prompt:
+          title: User Prompt
+          type: string
+      required:
+        - id
+        - client_job_id
+        - status
+        - cancel_requested
+        - source_image_ref
+        - user_prompt
+        - locale
+        - marketing_kit_id
+        - planner_payload
+        - created_at
+        - updated_at
+        - started_at
+        - finished_at
+        - error_message
+        - outputs
+      title: GenerationJobOut
+      type: object
+    GenerationJobStartResponse:
+      properties:
+        job_id:
+          title: Job Id
+          type: string
+        scheduled:
+          title: Scheduled
+          type: boolean
+        status:
+          enum:
+            - planned
+            - queued
+            - running
+            - stopping
+            - stopped
+            - succeeded
+            - failed
+            - partial
+            - interrupted
+          title: Status
+          type: string
+      required:
+        - job_id
+        - status
+        - scheduled
+      title: GenerationJobStartResponse
+      type: object
+    GenerationJobStopResponse:
+      properties:
+        cancel_requested:
+          title: Cancel Requested
+          type: boolean
+        job_id:
+          title: Job Id
+          type: string
+        status:
+          enum:
+            - planned
+            - queued
+            - running
+            - stopping
+            - stopped
+            - succeeded
+            - failed
+            - partial
+            - interrupted
+          title: Status
+          type: string
+      required:
+        - job_id
+        - status
+        - cancel_requested
+      title: GenerationJobStopResponse
+      type: object
+    GenerationOutputCreate:
+      properties:
+        aspect_ratio:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Aspect Ratio
+        destination_type:
+          default: asset
+          enum:
+            - kit_slot
+            - asset
+          title: Destination Type
+          type: string
+        height:
+          default: 1024
+          exclusiveMinimum: 0
+          maximum: 4096
+          title: Height
+          type: integer
+        marketing_kit_id:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Marketing Kit Id
+        output_key:
+          pattern: ^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$
+          title: Output Key
+          type: string
+        output_kind:
+          default: custom
+          enum:
+            - product_main
+            - white_bg
+            - solid_bg
+            - banner
+            - poster
+            - hero
+            - detail
+            - custom
+          title: Output Kind
+          type: string
+        prompt:
+          maxLength: 20000
+          minLength: 1
+          title: Prompt
+          type: string
+        slot_id:
+          anyOf:
+            - pattern: ^[HM][1-9]$
+              type: string
+            - type: 'null'
+          title: Slot Id
+        template_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Template Name
+        template_ref:
+          title: Template Ref
+          type: string
+        width:
+          default: 1024
+          exclusiveMinimum: 0
+          maximum: 4096
+          title: Width
+          type: integer
+      required:
+        - output_key
+        - template_ref
+        - prompt
+      title: GenerationOutputCreate
+      type: object
+    GenerationOutputOut:
+      properties:
+        aspect_ratio:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Aspect Ratio
+        asset_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Asset Id
+        destination_type:
+          title: Destination Type
+          type: string
+        error_message:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Error Message
+        height:
+          title: Height
+          type: integer
+        id:
+          title: Id
+          type: string
+        image_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Image Id
+        image_url:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Image Url
+        marketing_kit_id:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Marketing Kit Id
+        output_key:
+          title: Output Key
+          type: string
+        output_kind:
+          title: Output Kind
+          type: string
+        prompt:
+          title: Prompt
+          type: string
+        slot_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Slot Id
+        sort_order:
+          title: Sort Order
+          type: integer
+        status:
+          title: Status
+          type: string
+        template_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Template Name
+        template_ref:
+          title: Template Ref
+          type: string
+        width:
+          title: Width
+          type: integer
+      required:
+        - id
+        - output_key
+        - output_kind
+        - template_ref
+        - template_name
+        - aspect_ratio
+        - width
+        - height
+        - prompt
+        - status
+        - destination_type
+        - marketing_kit_id
+        - slot_id
+        - asset_id
+        - image_id
+        - image_url
+        - error_message
+        - sort_order
+      title: GenerationOutputOut
       type: object
     HTTPValidationError:
       properties:
@@ -1144,6 +1655,31 @@ components:
         - price
       title: SkuMetaIn
       type: object
+    SourceImageOut:
+      properties:
+        mime_type:
+          title: Mime Type
+          type: string
+        preview_url:
+          title: Preview Url
+          type: string
+        sha256:
+          title: Sha256
+          type: string
+        size_bytes:
+          title: Size Bytes
+          type: integer
+        source_image_ref:
+          title: Source Image Ref
+          type: string
+      required:
+        - source_image_ref
+        - preview_url
+        - mime_type
+        - size_bytes
+        - sha256
+      title: SourceImageOut
+      type: object
     Sparks:
       properties:
         compliance:
@@ -1736,10 +2272,309 @@ info:
   version: 0.1.0
 openapi: 3.1.0
 paths:
+  /api/assets:
+    get:
+      operationId: list_assets_api_assets_get
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            title: Limit
+            type: integer
+        - in: query
+          name: offset
+          required: false
+          schema:
+            default: 0
+            title: Offset
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetListResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Assets
+      tags:
+        - assets
+  /api/assets/{asset_id}/download:
+    get:
+      operationId: download_asset_api_assets__asset_id__download_get
+      parameters:
+        - in: path
+          name: asset_id
+          required: true
+          schema:
+            title: Asset Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Download Asset
+      tags:
+        - assets
+  /api/assets/{asset_id}/edit:
+    post:
+      operationId: get_asset_edit_context_api_assets__asset_id__edit_post
+      parameters:
+        - in: path
+          name: asset_id
+          required: true
+          schema:
+            title: Asset Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetEditContext'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Asset Edit Context
+      tags:
+        - assets
+  /api/assets/{asset_id}/image:
+    get:
+      operationId: get_asset_image_api_assets__asset_id__image_get
+      parameters:
+        - in: path
+          name: asset_id
+          required: true
+          schema:
+            title: Asset Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Asset Image
+      tags:
+        - assets
+  /api/generation/jobs:
+    post:
+      operationId: create_generation_job_api_generation_jobs_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationJobCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationJobCreated'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Generation Job
+      tags:
+        - generation-jobs
+  /api/generation/jobs/kits/{marketing_kit_id}/slots/{slot_id}/image:
+    get:
+      operationId: get_kit_slot_output_image_api_generation_jobs_kits__marketing_kit_id__slots__slot_id__image_get
+      parameters:
+        - in: path
+          name: marketing_kit_id
+          required: true
+          schema:
+            title: Marketing Kit Id
+            type: integer
+        - in: path
+          name: slot_id
+          required: true
+          schema:
+            title: Slot Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Kit Slot Output Image
+      tags:
+        - generation-jobs
+  /api/generation/jobs/{job_id}:
+    get:
+      operationId: get_generation_job_api_generation_jobs__job_id__get
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            title: Job Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationJobOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Generation Job
+      tags:
+        - generation-jobs
+  /api/generation/jobs/{job_id}/events:
+    get:
+      operationId: generation_job_events_api_generation_jobs__job_id__events_get
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            title: Job Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Generation Job Events
+      tags:
+        - generation-jobs
+  /api/generation/jobs/{job_id}/outputs/{output_id}/image:
+    get:
+      operationId: get_generation_output_image_api_generation_jobs__job_id__outputs__output_id__image_get
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            title: Job Id
+            type: string
+        - in: path
+          name: output_id
+          required: true
+          schema:
+            title: Output Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Generation Output Image
+      tags:
+        - generation-jobs
+  /api/generation/jobs/{job_id}/start:
+    post:
+      operationId: start_generation_job_api_generation_jobs__job_id__start_post
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            title: Job Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationJobStartResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Start Generation Job
+      tags:
+        - generation-jobs
+  /api/generation/jobs/{job_id}/stop:
+    post:
+      operationId: stop_generation_job_api_generation_jobs__job_id__stop_post
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            title: Job Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationJobStopResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Stop Generation Job
+      tags:
+        - generation-jobs
   /api/images/{image_id}/bytes:
     get:
-      description: Serve canonical editor image bytes for kit slots and generated assets.
-      operationId: image_bytes_api_images__image_id__bytes_get
+      operationId: get_image_bytes_api_images__image_id__bytes_get
       parameters:
         - in: path
           name: image_id
@@ -1759,7 +2594,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
-      summary: Image Bytes
+      summary: Get Image Bytes
       tags:
         - editor
   /api/images/{image_id}/edit:
@@ -1792,6 +2627,69 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Start Edit
+      tags:
+        - editor
+  /api/images/{image_id}/edit-results:
+    post:
+      operationId: create_edit_result_api_images__image_id__edit_results_post
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditResultCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditResultOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Edit Result
+      tags:
+        - editor
+  /api/images/{image_id}/edit-results/{edit_result_ref}/image:
+    get:
+      operationId: get_edit_result_image_api_images__image_id__edit_results__edit_result_ref__image_get
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+        - in: path
+          name: edit_result_ref
+          required: true
+          schema:
+            title: Edit Result Ref
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Edit Result Image
       tags:
         - editor
   /api/images/{image_id}/edit/events:
@@ -2673,6 +3571,44 @@ paths:
       summary: Post Settings
       tags:
         - settings
+  /api/source-images:
+    post:
+      operationId: create_source_image_api_source_images_post
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceImageOut'
+          description: Successful Response
+      summary: Create Source Image
+      tags:
+        - source-images
+  /api/source-images/{source_image_ref}/image:
+    get:
+      operationId: get_source_image_api_source_images__source_image_ref__image_get
+      parameters:
+        - in: path
+          name: source_image_ref
+          required: true
+          schema:
+            title: Source Image Ref
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Source Image
+      tags:
+        - source-images
   /api/templates:
     get:
       operationId: get_templates_api_templates_get
