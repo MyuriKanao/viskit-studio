@@ -17,6 +17,16 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from apps.api.lib.db import get_session, json_param
+from apps.api.lib.generation_jobs import (
+    encode_asset_image_id,
+    encode_kit_slot_image_id,
+    fetch_kit_slot_png_path,
+    imagegen_output_dir,
+    require_within,
+    resolve_stored_path,
+    upsert_kit_slot_png_path,
+    validate_image_id,
+)
 
 router = APIRouter(prefix="/api/images", tags=["editor"])
 
@@ -361,44 +371,38 @@ class EditAccepted(BaseModel):
     job_id: str
 
 
-class SaveImageRequest(BaseModel):
-    edit_result_ref: str = Field(..., pattern=r"^edit-result:[A-Za-z0-9_-]{1,64}$")
-    mode: Literal["replace", "copy"]
+class EditResultCreate(BaseModel):
+    result_data_url: str = Field(max_length=14_000_000)
+    source_image_ref: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class SaveImageResponse(BaseModel):
-    mode: Literal["replace", "copy"]
+class EditResultOut(BaseModel):
+    edit_result_ref: str
+    result_url: str
+    status: str
+
+
+class ImageSaveTarget(BaseModel):
+    kind: str = Field(pattern=r"^(asset|kit_slot)$")
+    asset_id: str | None = None
+    marketing_kit_id: int | None = None
+    slot_id: str | None = Field(default=None, pattern=r"^[HM][1-9]$")
+
+
+class ImageSaveRequest(BaseModel):
+    edit_result_ref: str
+    mode: str = Field(pattern=r"^(replace|copy)$")
+    target: ImageSaveTarget | None = None
+
+
+class ImageSaveResponse(BaseModel):
+    mode: str
     image_id: str
+    asset_id: str | None = None
+    marketing_kit_id: int | None = None
+    slot_id: str | None = None
     image_url: str
-    asset_id: int | None = None
-    replaced: bool
-
-
-@router.get("/{image_id}/bytes")
-def image_bytes(
-    image_id: str,
-    request: Request,
-    session: Annotated[Session, Depends(get_session)],
-) -> FileResponse:
-    """Serve canonical editor image bytes for kit slots and generated assets."""
-    try:
-        target = _resolve_image_target(image_id, session)
-        path = _resolve_stored_png_path(target.png_path)
-    except HTTPException as exc:
-        image_loader = getattr(request.app.state, "image_loader", None)
-        if image_loader is None:
-            raise exc
-        # Legacy test/integration loader fallback. It cannot produce a stable file
-        # path for FileResponse, so write a short-lived cache under edit-results.
-        try:
-            data = image_loader(image_id)
-        except FileNotFoundError as e:
-            raise exc from e
-        safe_image_id = re.sub(r"[^A-Za-z0-9_-]", "_", image_id)
-        path = _edit_results_dir() / "loader-cache" / f"{safe_image_id}.png"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
 @router.post("/{image_id}/ocr", response_model=OcrResponse)
