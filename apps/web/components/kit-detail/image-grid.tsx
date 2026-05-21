@@ -72,11 +72,10 @@ export function ImageGrid({ images, kitId, className }: ImageGridProps) {
     };
   }, [kitId]);
 
-  // Split into hero (H*) and detail (M*) buckets.
-  const heroes = state.filter((m) => m.image_id.startsWith('H')).slice(0, 5);
-  const details = state.filter((m) => m.image_id.startsWith('M')).slice(0, 9);
-  while (heroes.length < 5) heroes.push({ image_id: `H${heroes.length + 1}`, png_path: null });
-  while (details.length < 9) details.push({ image_id: `M${details.length + 1}`, png_path: null });
+  // Split into hero (H*) and detail (M*) buckets. Deleted slots are stored as
+  // NULL png_path rows; hide those empty slots so the remaining images collapse.
+  const heroes = state.filter((m) => m.image_id.startsWith('H') && shouldShowTile(m)).slice(0, 5);
+  const details = state.filter((m) => m.image_id.startsWith('M') && shouldShowTile(m)).slice(0, 9);
 
   return (
     <div className={cn('flex flex-col gap-s-4', className)}>
@@ -102,6 +101,10 @@ export function ImageGrid({ images, kitId, className }: ImageGridProps) {
       </section>
     </div>
   );
+}
+
+function shouldShowTile(img: ImageMeta): boolean {
+  return Boolean(img.png_path || img.status);
 }
 
 function Tile({ img, index, aspect }: { img: ImageMeta; index: number; aspect: string }) {
