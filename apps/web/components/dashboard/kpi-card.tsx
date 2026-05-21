@@ -1,6 +1,8 @@
 import * as React from 'react';
 
 import { Sparkline } from '@/components/atoms/sparkline';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 export interface KPICardProps {
@@ -36,28 +38,40 @@ export function KPICard({
   const deltaCls =
     delta?.startsWith('-') || delta?.startsWith('−')
       ? downward
-        ? 'text-success'
-        : 'text-danger'
+        ? 'border-success text-success'
+        : 'border-danger text-danger'
       : downward
-        ? 'text-danger'
-        : 'text-success';
+        ? 'border-danger text-danger'
+        : 'border-success text-success';
   return (
-    <section
+    <Card
       aria-label={label}
       className={cn(
-        'flex flex-col gap-s-2 rounded-card border border-border-subtle bg-surface-01 p-s-4',
+        'overflow-hidden transition-colors duration-fast hover:border-border-strong hover:bg-surface-02',
         className
       )}
     >
-      <span className="font-mono text-xs uppercase tracking-wider text-ink-faint">{label}</span>
-      <div className="flex items-baseline gap-s-2">
-        <span className="font-display text-3xl text-ink-primary">{value}</span>
-        {unit ? <span className="font-mono text-xs text-ink-muted">{unit}</span> : null}
-      </div>
-      {delta ? <span className={cn('font-mono text-xs', deltaCls)}>{delta}</span> : null}
-      {sparkData && sparkData.length > 0 ? (
-        <Sparkline data={sparkData} color={color} className="mt-s-1" />
-      ) : null}
-    </section>
+      <CardContent className="flex min-h-[148px] flex-col gap-s-3 p-s-4">
+        <span className="font-mono text-xs uppercase text-ink-faint">{label}</span>
+        <div className="flex items-end justify-between gap-s-3">
+          <div className="flex items-baseline gap-s-2">
+            <span className="font-display text-3xl leading-none text-ink-primary">{value}</span>
+            {unit ? <span className="font-mono text-xs text-ink-muted">{unit}</span> : null}
+          </div>
+          {delta ? (
+            <Badge variant="outline" className={cn('font-mono', deltaCls)}>
+              {delta}
+            </Badge>
+          ) : null}
+        </div>
+        <div className="mt-auto min-h-8">
+          {sparkData && sparkData.length > 0 ? (
+            <Sparkline data={sparkData} color={color} />
+          ) : (
+            <span aria-hidden="true" className="block h-px w-full bg-border-hair" />
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

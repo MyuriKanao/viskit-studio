@@ -55,6 +55,14 @@ function Cell({ src }: { src: string | null | undefined }) {
 export function KitCard({ kit, locale, onClick, onImageClick, openImageLabel }: KitCardProps) {
   const displayName = locale === 'zh' ? kit.name : (kit.name_en ?? kit.name);
   const thumbs = normalizeKitThumbs(kit.thumbs);
+  const availableThumbs = thumbs
+    .map((src, index) => ({ src, index, imageId: imageIdForIndex(index) }))
+    .filter((thumb): thumb is { src: string; index: number; imageId: string } =>
+      Boolean(thumb.src)
+    );
+  const emptyThumbs = thumbs
+    .map((src, index) => ({ src, imageId: imageIdForIndex(index) }))
+    .filter((thumb) => !thumb.src);
   const localeBadge: 'zh' | 'en' = (kit.locale ?? '').toLowerCase().startsWith('en') ? 'en' : 'zh';
   const kind = statusKind(kit.status);
   return (
@@ -64,26 +72,36 @@ export function KitCard({ kit, locale, onClick, onImageClick, openImageLabel }: 
       )}
     >
       <div className="grid grid-cols-7 grid-rows-2 gap-s-1 overflow-hidden rounded-input border border-border-hair">
-        {thumbs.map((t, i) => {
-          const imageId = imageIdForIndex(i);
-          const handleImageClick = t && onImageClick ? () => onImageClick(i) : onClick;
+        {availableThumbs.map((thumb) => {
+          const handleImageClick = onImageClick ? () => onImageClick(thumb.index) : onClick;
           return (
             <button
-              key={imageId}
+              key={thumb.imageId}
               type="button"
               aria-label={
-                t && onImageClick
-                  ? `${openImageLabel ?? 'Open image'} ${imageId}`
+                onImageClick
+                  ? `${openImageLabel ?? 'Open image'} ${thumb.imageId}`
                   : `${displayName} ${kit.sku}`
               }
               onClick={handleImageClick}
-              disabled={!handleImageClick}
               className="aspect-square overflow-hidden bg-surface-02 transition-opacity duration-fast hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset disabled:cursor-default"
             >
-              <Cell src={t} />
+              <Cell src={thumb.src} />
             </button>
           );
         })}
+        {emptyThumbs.map((thumb) => (
+          <button
+            key={thumb.imageId}
+            type="button"
+            aria-label={`${displayName} ${kit.sku}`}
+            onClick={onClick}
+            disabled={!onClick}
+            className="aspect-square overflow-hidden bg-surface-02 transition-opacity duration-fast hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset disabled:cursor-default"
+          >
+            <Cell src={null} />
+          </button>
+        ))}
       </div>
       <button
         type="button"
