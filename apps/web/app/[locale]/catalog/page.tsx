@@ -28,6 +28,7 @@ import type {
   CatalogSortOrder,
 } from '@/hooks/use-kits-catalog';
 import type { KitListItem } from '@/hooks/use-recent-kits';
+import { encodeKitSlotImageId } from '@/lib/api/images';
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 24;
@@ -171,6 +172,17 @@ export default function CatalogPage() {
       );
     },
     [deleteImage, t]
+  );
+  const handleEditImage = React.useCallback(
+    (kit: KitListItem, imageId: string) => {
+      const editorImageId = encodeKitSlotImageId(kit.id, imageId);
+      const href =
+        locale === 'zh'
+          ? `/editor/${encodeURIComponent(editorImageId)}`
+          : `/${locale}/editor/${encodeURIComponent(editorImageId)}`;
+      router.push(href);
+    },
+    [locale, router]
   );
 
   const selectedSku: CatalogDrawerSku | null = React.useMemo(() => {
@@ -395,6 +407,9 @@ export default function CatalogPage() {
         }
         onDeleteImage={(imageId) => {
           if (selectedPreviewKit) handleDeleteImage(selectedPreviewKit, imageId);
+        }}
+        onEditImage={(imageId) => {
+          if (selectedPreviewKit) handleEditImage(selectedPreviewKit, imageId);
         }}
       />
     </div>
