@@ -1066,7 +1066,13 @@ async def orchestrate_output_plan(
             skipped_output_ids=(),
             compliance_path=compliance_path,
             cost_path=cost_path,
-            color_lock_summary={"ok": 0, "out_of_tolerance": 0, "error": 0, "failed": 0, "skipped": 0},
+            color_lock_summary={
+                "ok": 0,
+                "out_of_tolerance": 0,
+                "error": 0,
+                "failed": 0,
+                "skipped": 0,
+            },
             needs_review=True,
             abort_reason=abort_reason,
             max_concurrent_observed=0,
@@ -1113,7 +1119,8 @@ async def orchestrate_output_plan(
     )
 
     outcomes_by_id = {outcome.image_id: outcome for outcome in outcomes}
-    ordered_ids = [item.output_id for item in sorted(inputs.output_items, key=lambda i: i.sort_order)]
+    ordered_items = sorted(inputs.output_items, key=lambda i: i.sort_order)
+    ordered_ids = [item.output_id for item in ordered_items]
     summary: dict[str, int] = {
         "ok": 0,
         "out_of_tolerance": 0,

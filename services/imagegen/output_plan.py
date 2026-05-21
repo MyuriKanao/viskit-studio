@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
-from typing import Any, Literal
+from typing import Literal
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -25,7 +25,7 @@ from services.imagegen.template_library import (
     parse_template_ref,
     resolve_template_ref,
 )
-from services.imagegen.template_loader import Template, list_templates, load_template
+from services.imagegen.template_loader import Template, TemplateLoadError, load_template
 
 __all__ = [
     "OutputDestination",
@@ -189,7 +189,8 @@ def _brief_for_prompt(
     design_note: str | None = None,
 ) -> ThreePiece:
     visual_text = (visual or prompt or template_name).strip()
-    note = (design_note or reason or f"Generate {template_name} from the confirmed product image.").strip()
+    fallback_note = f"Generate {template_name} from the confirmed product image."
+    note = (design_note or reason or fallback_note).strip()
     copy_text = (copy or "").strip()
     if output_kind in {"poster", "banner"} and not copy_text:
         copy_text = "促销亮点" if re.search(r"[\u4e00-\u9fff]", prompt) else "Promotion highlight"
@@ -197,13 +198,57 @@ def _brief_for_prompt(
 
 
 _EXPLICIT_KEYWORDS: tuple[tuple[tuple[str, ...], str, OutputKind, str], ...] = (
-    (("白底", "纯色底", "产品主图", "主图", "white background", "solid background", "main image", "product main"), "hero-image", "white_bg", "User explicitly requested a product-main/white-background output."),
-    (("促销海报", "海报", "banner", "poster", "促销", "campaign"), "poster-banner", "banner", "User explicitly requested a poster/banner output."),
-    (("细节", "微距", "detail", "macro", "close-up", "closeup"), "detail-macro", "detail", "User explicitly requested a detail/macro output."),
-    (("社交媒体", "小红书", "social", "instagram", "rednote"), "social-media", "custom", "User explicitly requested a social-media output."),
-    (("ugc", "买家秀", "user generated", "user-generated"), "ugc-style", "custom", "User explicitly requested a UGC/buyer-show output."),
-    (("对比", "before after", "before-after"), "before-after", "custom", "User explicitly requested a before/after output."),
-    (("包装", "packaging"), "packaging", "custom", "User explicitly requested a packaging output."),
+    (
+        (
+            "白底",
+            "纯色底",
+            "产品主图",
+            "主图",
+            "white background",
+            "solid background",
+            "main image",
+            "product main",
+        ),
+        "hero-image",
+        "white_bg",
+        "User explicitly requested a product-main/white-background output.",
+    ),
+    (
+        ("促销海报", "海报", "banner", "poster", "促销", "campaign"),
+        "poster-banner",
+        "banner",
+        "User explicitly requested a poster/banner output.",
+    ),
+    (
+        ("细节", "微距", "detail", "macro", "close-up", "closeup"),
+        "detail-macro",
+        "detail",
+        "User explicitly requested a detail/macro output.",
+    ),
+    (
+        ("社交媒体", "小红书", "social", "instagram", "rednote"),
+        "social-media",
+        "custom",
+        "User explicitly requested a social-media output.",
+    ),
+    (
+        ("ugc", "买家秀", "user generated", "user-generated"),
+        "ugc-style",
+        "custom",
+        "User explicitly requested a UGC/buyer-show output.",
+    ),
+    (
+        ("对比", "before after", "before-after"),
+        "before-after",
+        "custom",
+        "User explicitly requested a before/after output.",
+    ),
+    (
+        ("包装", "packaging"),
+        "packaging",
+        "custom",
+        "User explicitly requested a packaging output.",
+    ),
 )
 
 
@@ -279,7 +324,10 @@ def _fallback_candidates(prompt: str, *, locale: Locale) -> tuple[Recommendation
                 template_ref=builtin_ref(locale, "detail-macro"),
                 output_kind="detail",
                 title=_template_name_by_id(locale, "detail-macro"),
-                reason="Prompt mentions detail/texture language, so a macro detail image is useful.",
+                reason=(
+                    "Prompt mentions detail/texture language, "
+                    "so a macro detail image is useful."
+                ),
             )
         )
     if len(candidates) == 1:
@@ -312,7 +360,10 @@ def _candidate_to_item(
     sort_order: int,
 ) -> OutputPlanItem:
     template_ref = _candidate_template_ref(locale, candidate)
-    resolved = resolve_template_ref(session, template_ref, locale=locale)
+    try:
+        resolved = resolve_template_ref(session, template_ref, locale=locale)
+    except TemplateLoadError as exc:
+        raise TemplateLibraryError(str(exc)) from exc
     slot_id = _validate_slot(candidate.slot_id)
     destination = _coerce_destination(candidate.destination_type)
     template_id = resolved.template.id
@@ -350,7 +401,9 @@ def build_output_plan(
     prompt: str,
     locale: Locale,
     session: Session | None = None,
-    recommendation_candidates: tuple[RecommendationCandidate, ...] | list[RecommendationCandidate] | None = None,
+    recommendation_candidates: (
+        tuple[RecommendationCandidate, ...] | list[RecommendationCandidate] | None
+    ) = None,
     plan_id: str | None = None,
 ) -> OutputPlan:
     """Build a confirmation-only output plan from user prompt/recommendations.
@@ -475,19 +528,19 @@ def build_full_kit_output_plan(
 ) -> OutputPlan:
     """Return the legacy H1-H5/M1-M9 preset as an explicit output plan."""
     items: list[OutputPlanItem] = []
-    for section in spec.hero_sections:
+    for hero_section in spec.hero_sections:
         items.append(
             _section_to_full_kit_item(
-                section,
+                hero_section,
                 locale=spec.locale,
                 scheme=scheme,
                 sort_order=len(items),
             )
         )
-    for section in spec.detail_sections:
+    for detail_section in spec.detail_sections:
         items.append(
             _section_to_full_kit_item(
-                section,
+                detail_section,
                 locale=spec.locale,
                 scheme=scheme,
                 sort_order=len(items),
@@ -515,7 +568,10 @@ def resolve_plan_templates(
     """Validate all item template refs and return templates keyed by output ID."""
     templates: dict[str, Template] = {}
     for item in plan.items:
-        resolved = resolve_template_ref(session, item.template_ref, locale=locale)
+        try:
+            resolved = resolve_template_ref(session, item.template_ref, locale=locale)
+        except TemplateLoadError as exc:
+            raise TemplateLibraryError(str(exc)) from exc
         templates[item.output_id] = resolved.template
     return templates
 
@@ -536,7 +592,10 @@ def validate_output_plan(
         slot_id = _validate_slot(item.slot_id)
         if item.destination_type == "kit_slot" and slot_id is None:
             raise TemplateLibraryError(f"kit_slot output {item.output_id!r} must include slot_id")
-        resolved = resolve_template_ref(session, item.template_ref, locale=locale)
+        try:
+            resolved = resolve_template_ref(session, item.template_ref, locale=locale)
+        except TemplateLoadError as exc:
+            raise TemplateLibraryError(str(exc)) from exc
         updated.append(
             replace(
                 item,
