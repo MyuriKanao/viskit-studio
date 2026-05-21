@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 
 import { QueryProvider } from '@/components/providers/query-provider';
 import { ThemeProvider } from '@/components/providers/theme-provider';
+import { WorkspaceThemeProvider } from '@/components/providers/workspace-theme-provider';
 import { CommandPalette } from '@/components/shell/command-palette';
 import { routing } from '../i18n/routing';
 import '../globals.css';
@@ -28,8 +29,10 @@ export default async function LocaleLayout({ children, params }: Props) {
         <NextIntlClientProvider messages={messages}>
           <QueryProvider>
             <ThemeProvider>
-              {children}
-              <CommandPalette />
+              <WorkspaceThemeProvider>
+                {children}
+                <CommandPalette />
+              </WorkspaceThemeProvider>
             </ThemeProvider>
           </QueryProvider>
         </NextIntlClientProvider>

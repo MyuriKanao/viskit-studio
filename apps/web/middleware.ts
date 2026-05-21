@@ -15,6 +15,11 @@ const API_BASE =
   'http://localhost:8000';
 
 function resolveLocale(request: NextRequest): string {
+  const localeCookie = request.cookies.get('NEXT_LOCALE')?.value;
+  if (localeCookie === 'zh' || localeCookie === 'en') {
+    return localeCookie;
+  }
+
   const acceptLanguage = request.headers.get('accept-language') ?? '';
   const languages = acceptLanguage
     .split(',')

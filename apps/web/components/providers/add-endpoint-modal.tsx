@@ -5,6 +5,7 @@ import { Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import * as React from 'react';
 
+import { providerRoleDescriptionKey } from '@/components/providers/role-descriptions';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useProviderProbe } from '@/hooks/use-provider-probe';
@@ -91,14 +92,6 @@ const EMPTY: FormState = {
 };
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
-
-function roleDescriptionKey(role: string): string {
-  if (role === 'vision') return 'role_description_vision';
-  if (role === 'llm') return 'role_description_llm';
-  if (role === 'image') return 'role_description_image';
-  if (role === 'compliance_screen') return 'role_description_compliance_screen';
-  return 'role_description_custom';
-}
 
 function imageAdapterInfo(adapter: string): (typeof IMAGE_ADAPTERS)[number] {
   return IMAGE_ADAPTERS.find((item) => item.value === adapter) ?? IMAGE_ADAPTERS[2];
@@ -440,7 +433,7 @@ export function AddEndpointModal({
             </select>
             <span className="leading-relaxed text-ink-faint">
               {hasAvailableRole
-                ? t(roleDescriptionKey(form.role))
+                ? t(providerRoleDescriptionKey(form.role))
                 : '核心角色都已绑定。要替换 chatgpt2api，请在表格里编辑 image 角色。'}
             </span>
           </label>

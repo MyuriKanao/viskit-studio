@@ -1,13 +1,17 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
 
+import { pathnameForLocale, setLocaleCookie } from '@/components/shell/locale-toggle-helpers';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { type Settings, useSettings, useSettingsSave } from '@/hooks/use-settings';
+import { applyBrandAccent } from '@/lib/brand-theme';
 
 const FIELD_LABEL_CLS = 'flex flex-col gap-s-1 text-xs text-ink-muted';
 const FIELD_HEAD_CLS = 'font-mono uppercase tracking-wider text-ink-faint';
@@ -53,6 +57,9 @@ function settingsToForm(
 
 export default function SettingsPage() {
   const t = useTranslations('settings');
+  const locale = useLocale() as LocaleOpt;
+  const pathname = usePathname() ?? '/settings';
+  const router = useRouter();
   const query = useSettings();
   const save = useSettingsSave();
 
@@ -93,11 +100,17 @@ export default function SettingsPage() {
     try {
       await save.mutateAsync(patch);
       setBaseline(form);
+      applyBrandAccent(form.brand_color);
+      if (patch.default_locale && patch.default_locale !== locale) {
+        const nextLocale = form.default_locale;
+        setLocaleCookie(nextLocale);
+        router.replace(pathnameForLocale(pathname, nextLocale));
+      }
       setToast({ kind: 'success', text: t('save_success') });
     } catch {
       setToast({ kind: 'error', text: t('save_error') });
     }
-  }, [form, baseline, save, t]);
+  }, [form, baseline, locale, pathname, router, save, t]);
 
   const endpointsCount = query.data?.endpoints_count ?? 0;
 
