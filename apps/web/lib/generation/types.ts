@@ -48,6 +48,8 @@ export type GenerationJobStatus =
   | 'running'
   | 'stopping'
   | 'stopped'
+  | 'succeeded'
+  | 'partial'
   | 'ready'
   | 'failed'
   | 'needs_review'

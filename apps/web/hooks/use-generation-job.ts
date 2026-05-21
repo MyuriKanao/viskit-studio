@@ -113,6 +113,8 @@ function normalizeJobStatus(value: unknown): GenerationJobStatus {
     value === 'running' ||
     value === 'stopping' ||
     value === 'stopped' ||
+    value === 'succeeded' ||
+    value === 'partial' ||
     value === 'ready' ||
     value === 'failed' ||
     value === 'needs_review' ||
@@ -225,9 +227,9 @@ function normalizeGenerationJob(raw: unknown, fallbackJobId?: string): Generatio
 }
 
 function jobPhaseFromStatus(status: GenerationJobStatus): GenerationJobPhase {
-  if (status === 'ready') return 'success';
+  if (status === 'ready' || status === 'succeeded') return 'success';
   if (status === 'stopping') return 'stopping';
-  if (status === 'stopped' || status === 'interrupted') return 'stopped';
+  if (status === 'stopped' || status === 'interrupted' || status === 'partial') return 'stopped';
   if (status === 'failed' || status === 'needs_review') return 'error';
   if (status === 'running' || status === 'queued' || status === 'planned') return 'running';
   return 'idle';

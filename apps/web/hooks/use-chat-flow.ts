@@ -25,7 +25,11 @@ import type { KitSellingPoint, KitSkuMetaPayload } from '@/hooks/use-kit-pipelin
 import { LOW_CONF_THRESHOLD } from '@/lib/chat/constants';
 import { useChatStore } from '@/lib/chat/store';
 import type { InferredSpec, ProgressEvent } from '@/lib/chat/types';
-import type { GenerationPlan, ProductProfilePayload } from '@/lib/generation/types';
+import type {
+  GenerationJobStatus,
+  GenerationPlan,
+  ProductProfilePayload,
+} from '@/lib/generation/types';
 
 const PRODUCT_TYPES = ['blue_hat', 'sports', 'general_food', 'other'] as const;
 type ProductType = (typeof PRODUCT_TYPES)[number];
@@ -85,6 +89,12 @@ function isFullKitPlan(plan: GenerationPlan): boolean {
   );
 }
 
+function isActiveGenerationStatus(status: GenerationJobStatus): boolean {
+  return (
+    status === 'planned' || status === 'queued' || status === 'running' || status === 'stopping'
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Image drop → extract
 // ---------------------------------------------------------------------------
@@ -102,6 +112,7 @@ export function useChatImageFlow() {
   const setInferredSpec = useChatStore((s) => s.setInferredSpec);
   const setOutputPlan = useChatStore((s) => s.setOutputPlan);
   const setConfirmationMode = useChatStore((s) => s.setConfirmationMode);
+  const setActiveJobId = useChatStore((s) => s.setActiveJobId);
   const extractMutation = useExtract();
   const extract = extractMutation.mutateAsync;
   const persistSourceImageMutation = usePersistSourceImage();
@@ -117,6 +128,7 @@ export function useChatImageFlow() {
       setSourceImage(null);
       setUserPrompt(userPrompt);
       setOutputPlan(null);
+      setActiveJobId(null);
 
       // 2. Append user image bubble
       appendMessage({ role: 'user', type: 'image_ref', content: imageUrl });
@@ -192,6 +204,7 @@ export function useChatImageFlow() {
       locale,
       persistSourceImage,
       setConfirmationMode,
+      setActiveJobId,
       setHeroImage,
       setInferredSpec,
       setOutputPlan,
@@ -379,7 +392,7 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
           return;
         }
 
-        setActiveJobId(snapshot.job_id);
+        setActiveJobId(isActiveGenerationStatus(snapshot.status) ? snapshot.job_id : null);
         appendMessage({
           role: 'ai',
           type: 'text',
@@ -413,6 +426,7 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
   const handleStop = useCallback(async () => {
     const stopped = await stopGenerationJob();
     if (stopped) {
+      setActiveJobId(null);
       appendMessage({
         role: 'ai',
         type: 'text',
@@ -420,13 +434,13 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
       });
     }
     return stopped;
-  }, [appendMessage, stopGenerationJob]);
+  }, [appendMessage, setActiveJobId, stopGenerationJob]);
 
   const handleResume = useCallback(
     async (jobId: string) => {
       const snapshot = await resumeGenerationJob(jobId);
       if (snapshot) {
-        setActiveJobId(snapshot.job_id);
+        setActiveJobId(isActiveGenerationStatus(snapshot.status) ? snapshot.job_id : null);
       }
       return snapshot;
     },

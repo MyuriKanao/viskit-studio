@@ -30,6 +30,7 @@ function statusLabel(status: string | null | undefined): string {
   if (status === 'running') return '生成中';
   if (status === 'stopping') return '停止中';
   if (status === 'stopped' || status === 'cancelled') return '已停止';
+  if (status === 'partial') return '部分完成';
   if (status === 'failed' || status === 'needs_review') return '待处理';
   if (status === 'succeeded' || status === 'success' || status === 'ready') return '完成';
   return status;
