@@ -39,8 +39,8 @@ class EditRequest(BaseModel):
     kit_id: str | None = Field(
         default=None,
         pattern=r"^[A-Za-z0-9_-]{1,64}$",
-        description="Optional kit id for MinIO sidecar write; "
-        "safe-character allowlist guards the object-store path.",
+        description="Optional kit id for local edit context; "
+        "safe-character allowlist keeps sidecar references portable.",
     )
 
 
@@ -107,7 +107,6 @@ async def _run_inpaint(
         )
         image_loader = request.app.state.image_loader
         registry = request.app.state.registry
-        minio = getattr(request.app.state, "minio_client", None)
         image_bytes = await asyncio.to_thread(image_loader, image_id)
         from services.editor.inpaint_text import inpaint_region
         from services.editor.types import MaskBox
@@ -121,16 +120,6 @@ async def _run_inpaint(
             registry=registry,
             kit_id=body.kit_id,
         )
-        if minio is not None and body.kit_id is not None:
-            from services.editor.composite import composite_to_minio
-
-            await asyncio.to_thread(
-                composite_to_minio,
-                kit_id=body.kit_id,
-                image_id=image_id,
-                edited_bytes=edited,
-                minio_client=minio,
-            )
         await queue.put(
             {
                 "event": "success",

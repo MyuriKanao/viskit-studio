@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from apps.api.lib.db import get_session
+from apps.api.lib.db import get_session, json_param
 from services.copywriter.compliance.scorer import score_spec
 from services.copywriter.sop import (
     DetailSection,
@@ -113,6 +113,14 @@ def _resolve_generated_png(png_path: str | None) -> Path | None:
     except ValueError:
         return None
     return resolved
+
+
+def _iso_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return str(value.isoformat())
+    return str(value)
 
 
 def _unlink_generated_png(png_path: str | None) -> bool:
@@ -245,8 +253,7 @@ class GenerateRequest(BaseModel):
     brand_color_hex: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
     style_prompt: str | None = None
     locale: Literal["zh", "en"]
-    # EPIC-9 Phase 4a: Milvus PKs of the references picked in Step 3.
-    # Persisted as a sidecar so the Catalog drawer can render the
+    # Reference ids picked in Step 3. Persisted as a sidecar so the Catalog drawer can render the
     # "上次检索到的 bestsellers" subsection later. Default-empty keeps the
     # contract backward-compatible for callers that don't track ids.
     retrieved_bestseller_ids: list[int] = Field(default_factory=list)
@@ -501,7 +508,8 @@ def _persist_kit(
                 text(
                     "INSERT INTO kit_template_snapshots"
                     " (marketing_kit_id, scheme_ref, scheme_name, snapshot)"
-                    " VALUES (:kit_id, :scheme_ref, :scheme_name, CAST(:snapshot AS JSONB))"
+                    " VALUES (:kit_id, :scheme_ref, :scheme_name, "
+                    f"{json_param(session, 'snapshot')})"
                     " ON CONFLICT (marketing_kit_id) DO NOTHING"
                 ),
                 {
@@ -736,7 +744,7 @@ def delete_generated_image(
 
     if png_path is not None:
         session.execute(
-            text("UPDATE marketing_kits SET updated_at = NOW() WHERE id = :kit_id"),
+            text("UPDATE marketing_kits SET updated_at = CURRENT_TIMESTAMP WHERE id = :kit_id"),
             {"kit_id": db_kit_id},
         )
     file_deleted = _unlink_generated_png(str(png_path) if png_path is not None else None)
@@ -846,7 +854,7 @@ def list_kits(
             " FROM marketing_kits mk"
             " JOIN product_catalogs pc ON pc.id = mk.product_catalog_id"
             f" {where_clause}"
-            f" ORDER BY {sort_col} {order_sql} NULLS LAST, mk.id DESC"
+            f" ORDER BY {sort_col} IS NULL ASC, {sort_col} {order_sql}, mk.id DESC"
             " LIMIT :limit OFFSET :offset"
         ),
         params,
@@ -892,7 +900,7 @@ def list_kits(
                 score=int(row.score) if row.score is not None else None,
                 locale=row.locale,
                 category=getattr(row, "category", None),
-                updated_at=updated_at.isoformat() if updated_at is not None else None,
+                updated_at=_iso_or_none(updated_at),
                 thumbs=hero_thumbs + detail_thumbs,
             )
         )

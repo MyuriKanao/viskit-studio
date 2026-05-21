@@ -57,6 +57,14 @@ def _sniff_media_type(data: bytes) -> str:
     return "image/png"
 
 
+def _append_v1(base_url: str, endpoint: str) -> str:
+    """Build an Anthropic-compatible v1 endpoint without duplicating ``/v1``."""
+    base = base_url.rstrip("/")
+    if base.endswith("/v1"):
+        return f"{base}{endpoint}"
+    return f"{base}/v1{endpoint}"
+
+
 def _rate_for_model(model: str) -> tuple[float, float]:
     """Return (in_rate, out_rate) for *model*, falling back to default."""
     for prefix, rates in _RATE_MAP.items():
@@ -118,7 +126,7 @@ class AnthropicCompatibleAdapter:
         }
 
     def _post(self, body: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self.base_url}/v1/messages"
+        url = _append_v1(self.base_url, "/messages")
         response = self._session.post(url, headers=self._headers(), json=body)
         response.raise_for_status()
         data: dict[str, Any] = response.json()
@@ -321,7 +329,7 @@ class AnthropicCompatibleAdapter:
                 ok=False, latency_ms=0, models=[],
                 error=f"{self.api_key_env} unset",
             )
-        url = f"{self.base_url}/v1/models"
+        url = _append_v1(self.base_url, "/models")
         headers = {
             "x-api-key": api_key,
             "anthropic-version": _ANTHROPIC_VERSION,

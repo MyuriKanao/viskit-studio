@@ -1,0 +1,67 @@
+# Viskit Studio — single-container deployment (FastAPI + Next.js + SQLite/local files)
+#
+# Database default:
+# - SQLite is enabled by default and persists at ${VISKIT_DATA_DIR:-./data}/viskit.db.
+#
+# Optional PostgreSQL mode is documented below but commented out on purpose.
+# To enable it:
+# 1. Set these values in .env:
+#      UV_EXTRAS=--extra postgres
+#      VISKIT_DATABASE_URL=postgresql+psycopg://viskit:viskit@postgres:5432/viskit
+# 2. Uncomment the app.depends_on block and the postgres service block.
+# 3. Run: docker compose up -d --build
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
+        UV_EXTRAS: ${UV_EXTRAS:-}
+    environment:
+      DATABASE_URL: ${VISKIT_DATABASE_URL:-sqlite:////app/data/viskit.db}
+      CONFIG_PATH: /app/data/config.yaml
+      IMAGEGEN_OUTPUT_DIR: /app/data/imagegen
+      VISKIT_AUTO_MIGRATE: "1"
+      VISKIT_BOOTSTRAP_WORKSPACE: "1"
+      CORS_ALLOW_ORIGINS: http://localhost:${VISKIT_WEB_PORT:-3068},http://127.0.0.1:${VISKIT_WEB_PORT:-3068}
+      NEXT_SERVER_API_BASE_URL: http://127.0.0.1:8000
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      APIMART_API_KEY: ${APIMART_API_KEY:-}
+      COMPLIANCE_SCREEN_API_KEY: ${COMPLIANCE_SCREEN_API_KEY:-}
+    ports:
+      - "0.0.0.0:${VISKIT_WEB_PORT:-3068}:3000"
+    volumes:
+      - ${VISKIT_DATA_DIR:-./data}:/app/data
+    # Optional PostgreSQL dependency. Keep commented for default SQLite mode.
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Optional PostgreSQL database. Disabled by default.
+  #
+  # Use this only when SQLite is not enough, for example multi-user/high-concurrency
+  # deployments or when you already operate PostgreSQL backups/monitoring.
+  #
+  # postgres:
+  #   image: postgres:17-alpine
+  #   environment:
+  #     POSTGRES_DB: ${POSTGRES_DB:-viskit}
+  #     POSTGRES_USER: ${POSTGRES_USER:-viskit}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-viskit}
+  #   volumes:
+  #     - ${VISKIT_POSTGRES_DATA_DIR:-./postgres-data}:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-viskit} -d $${POSTGRES_DB:-viskit}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
+  #   restart: unless-stopped

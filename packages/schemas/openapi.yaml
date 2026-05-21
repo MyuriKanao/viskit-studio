@@ -52,6 +52,11 @@ components:
       type: object
     CreateEndpointRequest:
       properties:
+        adapter:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Adapter
         api_key:
           title: Api Key
           type: string
@@ -68,6 +73,7 @@ components:
           enum:
             - openai_compatible
             - anthropic_compatible
+            - image_generation
           title: Protocol
           type: string
       required:
@@ -159,7 +165,7 @@ components:
             - pattern: ^[A-Za-z0-9_-]{1,64}$
               type: string
             - type: 'null'
-          description: Optional kit id for MinIO sidecar write; safe-character allowlist guards the object-store path.
+          description: Optional kit id for local edit context; safe-character allowlist keeps sidecar references portable.
           title: Kit Id
         mask_box:
           additionalProperties:
@@ -175,8 +181,22 @@ components:
         - new_text
       title: EditRequest
       type: object
+    EndpointSecretResponse:
+      properties:
+        api_key:
+          title: Api Key
+          type: string
+      required:
+        - api_key
+      title: EndpointSecretResponse
+      type: object
     EndpointStanza:
       properties:
+        adapter:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Adapter
         api_key_env:
           title: Api Key Env
           type: string
@@ -604,6 +624,11 @@ components:
       type: object
     ProbeCandidateRequest:
       properties:
+        adapter:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Adapter
         api_key:
           anyOf:
             - type: string
@@ -621,6 +646,7 @@ components:
           enum:
             - openai_compatible
             - anthropic_compatible
+            - image_generation
           title: Protocol
           type: string
       required:
@@ -1542,6 +1568,11 @@ components:
       type: object
     UpdateEndpointRequest:
       properties:
+        adapter:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Adapter
         api_key:
           anyOf:
             - type: string
@@ -1560,6 +1591,7 @@ components:
           enum:
             - openai_compatible
             - anthropic_compatible
+            - image_generation
           title: Protocol
           type: string
       required:
@@ -2319,6 +2351,38 @@ paths:
       summary: Update Endpoint
       tags:
         - providers
+  /api/providers/endpoints/{role}/secret:
+    get:
+      description: |-
+        Return the locally saved secret for *role*.
+
+        Only keys saved through ``data/secrets.json`` are revealable.  If the
+        endpoint is backed by a shell/environment variable, the UI can still probe
+        it via ``api_key_env`` but the plaintext value is not exposed here.
+      operationId: get_endpoint_secret_api_providers_endpoints__role__secret_get
+      parameters:
+        - in: path
+          name: role
+          required: true
+          schema:
+            title: Role
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointSecretResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Endpoint Secret
+      tags:
+        - providers
   /api/providers/health:
     get:
       description: |-
@@ -2729,7 +2793,7 @@ paths:
         - templates
   /health:
     get:
-      description: Probe Postgres, Redis, MinIO concurrently with a 2s timeout each.
+      description: Probe the configured database with a 2s timeout.
       operationId: health_health_get
       responses:
         '200':

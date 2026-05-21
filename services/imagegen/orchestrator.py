@@ -91,7 +91,7 @@ _BRAND_COLOR_LOCKED_FLOOR = 12
 class ProviderBinding:
     """One row of a :class:`RoutingSnapshot` — env-var NAMES only, no secrets."""
 
-    protocol: Literal["openai_compatible", "anthropic_compatible"]
+    protocol: Literal["openai_compatible", "anthropic_compatible", "image_generation"]
     base_url: str
     api_key_env_var: str
     model: str
@@ -168,7 +168,7 @@ def capture_snapshot(registry: Any, *, cap: int = 4) -> RoutingSnapshot:
     providers: dict[str, ProviderBinding] = {}
     for role, entry in raw.get("providers", {}).items():
         protocol = entry.get("protocol")
-        if protocol not in {"openai_compatible", "anthropic_compatible"}:
+        if protocol not in {"openai_compatible", "anthropic_compatible", "image_generation"}:
             # ERR-PROV-002 covers snapshot-shape integrity (peer to the
             # secret-leak check below); ERR-PROV-003 is reserved for
             # env-var-missing-at-worker per ADR-011 v2.
@@ -185,7 +185,10 @@ def capture_snapshot(registry: Any, *, cap: int = 4) -> RoutingSnapshot:
                     role=role,
                 )
         providers[role] = ProviderBinding(
-            protocol=cast(Literal["openai_compatible", "anthropic_compatible"], protocol),
+            protocol=cast(
+                Literal["openai_compatible", "anthropic_compatible", "image_generation"],
+                protocol,
+            ),
             base_url=entry["base_url"],
             api_key_env_var=entry["api_key_env"],
             model=entry["model"],

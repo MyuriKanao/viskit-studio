@@ -13,6 +13,10 @@ from services.providers.base import (
     VisionLLM,
     VisionResponse,
 )
+from services.providers.image_generation import (
+    IMAGE_ADAPTER_TYPES,
+    UniversalImageGenerationAdapter,
+)
 
 __all__ = [
     "ContentPart",
@@ -24,4 +28,6 @@ __all__ = [
     "VisionLLM",
     "ImageGen",
     "Embedding",
+    "IMAGE_ADAPTER_TYPES",
+    "UniversalImageGenerationAdapter",
 ]

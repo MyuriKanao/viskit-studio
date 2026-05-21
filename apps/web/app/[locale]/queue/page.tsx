@@ -17,8 +17,8 @@ import { useQueueActive } from '@/hooks/use-queue-active';
  *
  * Pause/resume is INTENTIONALLY out of scope. The orchestrator runs
  * jobs in-process via `KitEventBus` (see services/imagegen) rather than
- * the arq dependency declared in `pyproject.toml`, and adding pause
- * controls would require re-architecting around a Redis-backed worker
+ * the in-process queue used by this repository, and adding pause
+ * controls would require re-architecting around a durable worker
  * pool. Acceptable for a single-tenant self-hosted tool; revisit only
  * if a real multi-operator workflow emerges.
  */

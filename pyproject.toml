@@ -7,10 +7,6 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic[email]>=2.5",
     "sqlalchemy>=2",
-    "psycopg[binary]",
-    "redis",
-    "minio",
-    "arq",
     "bcrypt",
     "pyyaml",
     "python-multipart",
@@ -22,6 +18,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+postgres = [
+    "psycopg[binary]",
+]
+
 dev = [
     "ruff",
     "mypy",
@@ -43,9 +43,6 @@ python_version = "3.12"
 
 [[tool.mypy.overrides]]
 module = [
-    "minio.*",
-    "redis.*",
-    "redis.asyncio.*",
     "colormath.*",
     "colorthief.*",
 ]

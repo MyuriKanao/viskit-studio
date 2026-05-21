@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.lib import secrets_store
+from apps.api.lib.db import migrate_from_env
 from apps.api.routes.copywriter import router as copywriter_router
 from apps.api.routes.extract import router as extract_router
 from apps.api.routes.health import router as health_router
@@ -73,6 +74,7 @@ def _bootstrap_config_if_missing(path: Path) -> None:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Viskit API starting; config_path=%s", _config_path)
     _bootstrap_config_if_missing(_config_path)
+    migrate_from_env()
     injected = secrets_store.load_into_env()
     if injected:
         logger.info("Loaded %d secrets from %s into env", injected, secrets_store.secrets_path())

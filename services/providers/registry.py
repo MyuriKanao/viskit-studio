@@ -23,6 +23,7 @@ import yaml
 
 from apps.api.lib import config_io
 from services.providers.anthropic_compatible import AnthropicCompatibleAdapter
+from services.providers.image_generation import UniversalImageGenerationAdapter
 from services.providers.openai_compatible import OpenAICompatibleAdapter
 
 __all__ = [
@@ -144,6 +145,8 @@ class Registry:
                 "api_key_env": adapter.api_key_env,  # type: ignore[attr-defined]
                 "model": adapter.model,  # type: ignore[attr-defined]
             }
+            if isinstance(adapter, UniversalImageGenerationAdapter):
+                entry["adapter"] = adapter.adapter
             for key, value in entry.items():
                 if isinstance(value, str) and _SECRET_PATTERN.match(value):
                     raise ProviderConfigError(
@@ -222,6 +225,24 @@ def _build_from_mapping(providers: dict[str, Any]) -> Registry:
                 model=model,
                 role=role,
             )
+        elif protocol == "image_generation":
+            extra = spec.get("extra")
+            adapters[role] = UniversalImageGenerationAdapter(
+                base_url=base_url,
+                api_key_env=api_key_env,
+                model=model,
+                role=role,
+                provider_alias=role,
+                adapter=str(
+                    spec.get("adapter")
+                    or spec.get("adapter_type")
+                    or spec.get("provider")
+                    or "openai"
+                ),
+                timeout=float(spec.get("timeout") or 180.0),
+                max_retry_attempts=int(spec.get("max_retry_attempts") or 3),
+                extra=extra if isinstance(extra, dict) else None,
+            )
         else:
             raise ProviderConfigError(
                 "ERR-PROV-003",
@@ -237,6 +258,8 @@ def _adapter_protocol(adapter: object) -> str:
         return "openai_compatible"
     if isinstance(adapter, AnthropicCompatibleAdapter):
         return "anthropic_compatible"
+    if isinstance(adapter, UniversalImageGenerationAdapter):
+        return "image_generation"
     raise ProviderConfigError(
         "ERR-PROV-003",
         f"unknown adapter class {type(adapter).__name__!r}",

@@ -61,6 +61,23 @@ def _twelve_week_starts(today: date) -> list[date]:
     return [this_monday - timedelta(weeks=11 - i) for i in range(12)]
 
 
+def _row_date(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        normalized = value.replace("Z", "+00:00")
+        try:
+            return datetime.fromisoformat(normalized).date()
+        except ValueError:
+            try:
+                return date.fromisoformat(value[:10])
+            except ValueError:
+                return None
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Route
 # ---------------------------------------------------------------------------
@@ -92,7 +109,7 @@ def get_weekly_metrics(
     # Current-week avg compliance — JOIN copywriting_specs -> compliance_checks
     avg_compliance_row = session.execute(
         text(
-            "SELECT AVG(cc.score)::float FROM compliance_checks cc"
+            "SELECT AVG(cc.score) FROM compliance_checks cc"
             " JOIN copywriting_specs cs ON cs.id = cc.copywriting_spec_id"
             " JOIN marketing_kits mk ON mk.id = cs.marketing_kit_id"
             " WHERE mk.created_at >= :start AND mk.created_at < :end"
@@ -106,57 +123,75 @@ def get_weekly_metrics(
     # MTD api spend
     spend_row = session.execute(
         text(
-            "SELECT COALESCE(SUM(cost_usd), 0)::float FROM cost_events"
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM cost_events"
             " WHERE ts >= :start AND ts < :end"
         ),
         {"start": month_start, "end": today + timedelta(days=1)},
     ).scalar()
     api_spend_usd_mtd = float(spend_row or 0.0)
 
-    # 12-week sparks — gather per-week aggregates, then index into starts list.
-    # Kits per week
+    # 12-week sparks — gather rows with portable SQL, then group in Python so
+    # both PostgreSQL and SQLite avoid dialect-specific date_trunc/:: casts.
     kit_rows = session.execute(
         text(
-            "SELECT date_trunc('week', created_at)::date AS wk, COUNT(*) AS n"
+            "SELECT created_at"
             " FROM marketing_kits"
             " WHERE created_at >= :start AND created_at < :end"
-            " GROUP BY wk"
         ),
         {"start": window_start, "end": window_end_exclusive},
     ).all()
-    kit_map: dict[date, int] = {row.wk: int(row.n) for row in kit_rows}
+    kit_map: dict[date, int] = {}
+    for row in kit_rows:
+        row_day = _row_date(row.created_at)
+        if row_day is None:
+            continue
+        wk = _iso_week_start(row_day)
+        kit_map[wk] = kit_map.get(wk, 0) + 1
     sparks_kits = [kit_map.get(s, 0) for s in starts]
 
-    # Compliance per week — average of scored kits per week
     comp_rows = session.execute(
         text(
-            "SELECT date_trunc('week', mk.created_at)::date AS wk,"
-            " AVG(cc.score)::float AS avg_score"
+            "SELECT mk.created_at, cc.score"
             " FROM compliance_checks cc"
             " JOIN copywriting_specs cs ON cs.id = cc.copywriting_spec_id"
             " JOIN marketing_kits mk ON mk.id = cs.marketing_kit_id"
             " WHERE mk.created_at >= :start AND mk.created_at < :end"
-            " GROUP BY wk"
         ),
         {"start": window_start, "end": window_end_exclusive},
     ).all()
-    comp_map: dict[date, float] = {
-        row.wk: float(row.avg_score) for row in comp_rows if row.avg_score is not None
+    comp_values: dict[date, list[float]] = {}
+    for row in comp_rows:
+        if row.score is None:
+            continue
+        row_day = _row_date(row.created_at)
+        if row_day is None:
+            continue
+        wk = _iso_week_start(row_day)
+        comp_values.setdefault(wk, []).append(float(row.score))
+    comp_map = {
+        wk: sum(values) / len(values)
+        for wk, values in comp_values.items()
+        if values
     }
     sparks_compliance = [comp_map.get(s, 0.0) for s in starts]
 
-    # Cost per week
     cost_rows = session.execute(
         text(
-            "SELECT date_trunc('week', ts)::date AS wk,"
-            " COALESCE(SUM(cost_usd), 0)::float AS total"
+            "SELECT ts, cost_usd"
             " FROM cost_events"
             " WHERE ts >= :start AND ts < :end"
-            " GROUP BY wk"
         ),
         {"start": window_start, "end": window_end_exclusive},
     ).all()
-    cost_map: dict[date, float] = {row.wk: float(row.total) for row in cost_rows}
+    cost_map: dict[date, float] = {}
+    for row in cost_rows:
+        if row.cost_usd is None:
+            continue
+        row_day = _row_date(row.ts)
+        if row_day is None:
+            continue
+        wk = _iso_week_start(row_day)
+        cost_map[wk] = cost_map.get(wk, 0.0) + float(row.cost_usd)
     sparks_cost = [cost_map.get(s, 0.0) for s in starts]
 
     return WeeklyMetricsResponse(

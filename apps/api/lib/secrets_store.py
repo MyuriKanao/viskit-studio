@@ -18,7 +18,7 @@ import os
 import re
 from pathlib import Path
 
-__all__ = ["secrets_path", "load_into_env", "put", "derive_env_name"]
+__all__ = ["secrets_path", "load_into_env", "put", "get", "derive_env_name"]
 
 
 def secrets_path() -> Path:
@@ -97,3 +97,12 @@ def put(name: str, value: str, path: Path | None = None) -> None:
     tmp.chmod(0o600)
     tmp.replace(target)
     os.environ[name] = value
+
+
+def get(name: str, path: Path | None = None) -> str | None:
+    """Return a secret saved through the local secrets file, if present.
+
+    Deliberately does not fall back to ``os.environ``: shell-provided
+    credentials stay write-only from the web UI.
+    """
+    return _read(path or secrets_path()).get(name)

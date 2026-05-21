@@ -6,8 +6,8 @@ Provides fire-and-forget helpers to record provider call costs into the
 Design notes:
 - Uses ``apps.api.lib.db._get_engine()`` — never creates its own engine.
 - All SQL is parametrised via ``sqlalchemy.text()`` — no f-string SQL.
-- No vendor names: provider_name values use protocol-family identifiers
-  such as ``openai_compatible@<alias>`` or ``anthropic_compatible@<alias>``.
+- No vendor secrets: provider_name values use protocol/adapter identifiers
+  such as ``openai_compatible@<alias>`` or ``image_generation.openai@image``.
 """
 
 from __future__ import annotations

@@ -388,6 +388,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/providers/endpoints/{role}/secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Endpoint Secret
+         * @description Return the locally saved secret for *role*.
+         *
+         *     Only keys saved through ``data/secrets.json`` are revealable.  If the
+         *     endpoint is backed by a shell/environment variable, the UI can still probe
+         *     it via ``api_key_env`` but the plaintext value is not exposed here.
+         */
+        get: operations["get_endpoint_secret_api_providers_endpoints__role__secret_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/providers/health": {
         parameters: {
             query?: never;
@@ -667,7 +691,7 @@ export interface paths {
         };
         /**
          * Health
-         * @description Probe Postgres, Redis, MinIO concurrently with a 2s timeout each.
+         * @description Probe the configured database with a 2s timeout.
          */
         get: operations["health_health_get"];
         put?: never;
@@ -709,6 +733,8 @@ export interface components {
         };
         /** CreateEndpointRequest */
         CreateEndpointRequest: {
+            /** Adapter */
+            adapter?: string | null;
             /** Api Key */
             api_key: string;
             /** Base Url */
@@ -721,7 +747,7 @@ export interface components {
              * Protocol
              * @enum {string}
              */
-            protocol: "openai_compatible" | "anthropic_compatible";
+            protocol: "openai_compatible" | "anthropic_compatible" | "image_generation";
         };
         /** DeleteKitImageResponse */
         DeleteKitImageResponse: {
@@ -761,7 +787,7 @@ export interface components {
         EditRequest: {
             /**
              * Kit Id
-             * @description Optional kit id for MinIO sidecar write; safe-character allowlist guards the object-store path.
+             * @description Optional kit id for local edit context; safe-character allowlist keeps sidecar references portable.
              */
             kit_id?: string | null;
             /**
@@ -774,8 +800,15 @@ export interface components {
             /** New Text */
             new_text: string;
         };
+        /** EndpointSecretResponse */
+        EndpointSecretResponse: {
+            /** Api Key */
+            api_key: string;
+        };
         /** EndpointStanza */
         EndpointStanza: {
+            /** Adapter */
+            adapter?: string | null;
             /** Api Key Env */
             api_key_env: string;
             /** Base Url */
@@ -1008,6 +1041,8 @@ export interface components {
         };
         /** ProbeCandidateRequest */
         ProbeCandidateRequest: {
+            /** Adapter */
+            adapter?: string | null;
             /** Api Key */
             api_key?: string | null;
             /** Api Key Env */
@@ -1018,7 +1053,7 @@ export interface components {
              * Protocol
              * @enum {string}
              */
-            protocol: "openai_compatible" | "anthropic_compatible";
+            protocol: "openai_compatible" | "anthropic_compatible" | "image_generation";
         };
         /** ProbeCandidateResponse */
         ProbeCandidateResponse: {
@@ -1484,6 +1519,8 @@ export interface components {
         };
         /** UpdateEndpointRequest */
         UpdateEndpointRequest: {
+            /** Adapter */
+            adapter?: string | null;
             /** Api Key */
             api_key?: string | null;
             /** Base Url */
@@ -1496,7 +1533,7 @@ export interface components {
              * Protocol
              * @enum {string}
              */
-            protocol: "openai_compatible" | "anthropic_compatible";
+            protocol: "openai_compatible" | "anthropic_compatible" | "image_generation";
         };
         /** ValidationError */
         ValidationError: {
@@ -2148,6 +2185,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SaveEndpointsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_endpoint_secret_api_providers_endpoints__role__secret_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EndpointSecretResponse"];
                 };
             };
             /** @description Validation Error */
