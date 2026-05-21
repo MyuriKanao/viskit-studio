@@ -47,7 +47,11 @@ test-results/
 # Non-runtime development artifacts kept out of the remote repo
 demo/
 docs/adr/
-docs/assets/
+docs/assets/*
+!docs/assets/brand/
+!docs/assets/brand/**
+!docs/assets/intro/
+!docs/assets/intro/**
 apps/**/README.md
 tests/
 **/tests/

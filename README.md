@@ -1,6 +1,10 @@
 # Viskit Studio
 
+![Viskit Studio logo](docs/assets/brand/viskit-logo.svg)
+
 Viskit Studio 是一个自托管商品视觉套包生产工作台，面向单运营账号生成商品营销图、详情图、文案规格与服务商配置。
+
+![Viskit Studio 商品视觉套包示例](docs/assets/intro/marketing-kit-overview.jpg)
 
 ## 项目内容
 
@@ -15,7 +19,15 @@ packages/schemas/      OpenAPI、TypeScript 与 Python 共享模型
 infra/                 Docker Compose 与 SQL 迁移
 ```
 
-仓库只保留运行源码、配置样例、迁移和必要静态资源；
+仓库只保留运行源码、配置样例、迁移、必要静态资源、品牌 Logo 和项目介绍图片；本地编排状态、Demo、测试资产、开发文档和维护脚本不进入远端仓库。
+
+## 项目介绍图片
+
+| 商品首图 | 详情模块 |
+| --- | --- |
+| ![Viskit Studio 商品首图示例](docs/assets/intro/hero-cover.jpg) | ![Viskit Studio 商品详情模块示例](docs/assets/intro/detail-module.jpg) |
+
+
 ## 本地运行
 
 ```bash

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360" role="img" aria-labelledby="title desc">
+  <title id="title">Viskit Studio</title>
+  <desc id="desc">Viskit Studio brand logo for the e-commerce visual kit production workspace.</desc>
+  <defs>
+    <linearGradient id="viskit-mark" x1="220" y1="86" x2="428" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B24CFF"/>
+      <stop offset="0.45" stop-color="#3437FF"/>
+      <stop offset="1" stop-color="#1887FF"/>
+    </linearGradient>
+    <linearGradient id="viskit-chip" x1="301" y1="279" x2="448" y2="279" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#B24CFF"/>
+      <stop offset="1" stop-color="#125EFF"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="360" fill="#FFFFFF"/>
+  <g transform="translate(283 64)">
+    <path
+      d="M41 42c0-18.2 14.8-33 33-33h78c13.4 0 25.5 8.1 30.5 20.5l62.9 154.3c7.1 17.4-5.7 36.2-24.5 36.2h-42.4c-15.6 0-29.7-9.3-35.8-23.7L44 66.8A32.8 32.8 0 0 1 41 42Z"
+      fill="url(#viskit-mark)"
+    />
+    <path
+      d="M387 42c0-18.2-14.8-33-33-33h-78c-13.4 0-25.5 8.1-30.5 20.5l-62.9 154.3c-7.1 17.4 5.7 36.2 24.5 36.2h42.4c15.6 0 29.7-9.3 35.8-23.7L384 66.8a32.8 32.8 0 0 0 3-24.8Z"
+      fill="url(#viskit-mark)"
+    />
+    <path
+      d="M345 0 359.6 27.4 387 42 359.6 56.6 345 84 330.4 56.6 303 42 330.4 27.4 345 0Z"
+      fill="#3F69FF"
+    />
+  </g>
+  <g fill="#121722">
+    <text x="185" y="252" font-family="Inter, Arial, sans-serif" font-size="82" font-weight="800" letter-spacing="0">Viskit</text>
+    <text x="483" y="252" font-family="Inter, Arial, sans-serif" font-size="82" font-weight="400" letter-spacing="0">Studio</text>
+  </g>
+  <g transform="translate(225 285)">
+    <rect width="142" height="42" rx="21" fill="url(#viskit-chip)"/>
+    <text x="71" y="30" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800" fill="#FFFFFF">Viskit</text>
+    <rect x="183" y="5" width="1.5" height="32" fill="#79818F"/>
+    <text x="207" y="30" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="400" letter-spacing="8" fill="#717988">商品视觉套包AI生产台</text>
+  </g>
+</svg>
