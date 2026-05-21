@@ -127,10 +127,7 @@ export function useInpaint(): UseInpaintResult {
             const parsed = parseSseFrame(frame);
             if (!parsed) continue;
             setLastEvent(parsed);
-            if (
-              parsed.event === 'success' &&
-              typeof parsed.data.edit_result_ref === 'string'
-            ) {
+            if (parsed.event === 'success' && typeof parsed.data.edit_result_ref === 'string') {
               setEditResultRef(parsed.data.edit_result_ref);
             }
             terminal = TERMINAL_EVENTS[parsed.event];

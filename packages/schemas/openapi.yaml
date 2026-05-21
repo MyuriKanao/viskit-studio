@@ -874,6 +874,52 @@ components:
         - new_sha256
       title: SaveEndpointsResponse
       type: object
+    SaveImageRequest:
+      properties:
+        edit_result_ref:
+          pattern: ^edit-result:[A-Za-z0-9_-]{1,64}$
+          title: Edit Result Ref
+          type: string
+        mode:
+          enum:
+            - replace
+            - copy
+          title: Mode
+          type: string
+      required:
+        - edit_result_ref
+        - mode
+      title: SaveImageRequest
+      type: object
+    SaveImageResponse:
+      properties:
+        asset_id:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Asset Id
+        image_id:
+          title: Image Id
+          type: string
+        image_url:
+          title: Image Url
+          type: string
+        mode:
+          enum:
+            - replace
+            - copy
+          title: Mode
+          type: string
+        replaced:
+          title: Replaced
+          type: boolean
+      required:
+        - mode
+        - image_id
+        - image_url
+        - replaced
+      title: SaveImageResponse
+      type: object
     SchemePayload:
       properties:
         description:
@@ -1690,6 +1736,32 @@ info:
   version: 0.1.0
 openapi: 3.1.0
 paths:
+  /api/images/{image_id}/bytes:
+    get:
+      description: Serve canonical editor image bytes for kit slots and generated assets.
+      operationId: image_bytes_api_images__image_id__bytes_get
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Image Bytes
+      tags:
+        - editor
   /api/images/{image_id}/edit:
     post:
       operationId: start_edit_api_images__image_id__edit_post
@@ -1777,6 +1849,39 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Ocr Image
+      tags:
+        - editor
+  /api/images/{image_id}/save:
+    post:
+      description: Persist an edit result via an explicit replace-or-copy choice.
+      operationId: save_edited_image_api_images__image_id__save_post
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveImageRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveImageResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Save Edited Image
       tags:
         - editor
   /api/kits:

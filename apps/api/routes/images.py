@@ -9,7 +9,7 @@ import shutil
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
@@ -186,12 +186,14 @@ def _load_image_bytes(image_id: str, request: Request, session: Session) -> byte
         if image_loader is None:
             raise exc
         try:
-            return image_loader(image_id)
+            return cast(bytes, image_loader(image_id))
         except FileNotFoundError as e:
             raise exc from e
 
 
-def _store_edit_result(session: Session, *, image_id: str, edited: bytes, metadata: dict[str, Any]) -> str:
+def _store_edit_result(
+    session: Session, *, image_id: str, edited: bytes, metadata: dict[str, Any]
+) -> str:
     result_id = metadata["job_id"]
     path = _edit_results_dir() / f"{result_id}.png"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -201,7 +203,8 @@ def _store_edit_result(session: Session, *, image_id: str, edited: bytes, metada
         text(
             "INSERT INTO image_edit_results"
             " (id, target_image_id, result_path, status, metadata)"
-            f" VALUES (:id, :target_image_id, :result_path, 'ready', {json_param(session, 'metadata')})"
+            " VALUES (:id, :target_image_id, :result_path, 'ready', "
+            f"{json_param(session, 'metadata')})"
             " ON CONFLICT (id) DO UPDATE SET"
             " target_image_id = EXCLUDED.target_image_id,"
             " result_path = EXCLUDED.result_path,"
@@ -242,7 +245,9 @@ def _resolve_edit_result(session: Session, edit_result_ref: str) -> Path:
     return resolved
 
 
-def _replace_target(session: Session, target: ImageTarget, edit_path: Path, edit_result_ref: str) -> SaveImageResponse:
+def _replace_target(
+    session: Session, target: ImageTarget, edit_path: Path, edit_result_ref: str
+) -> SaveImageResponse:
     existing = _resolve_stored_png_path(target.png_path)
     existing.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(edit_path, existing)
@@ -281,7 +286,9 @@ def _replace_target(session: Session, target: ImageTarget, edit_path: Path, edit
     )
 
 
-def _copy_to_asset(session: Session, target: ImageTarget, edit_path: Path, edit_result_ref: str) -> SaveImageResponse:
+def _copy_to_asset(
+    session: Session, target: ImageTarget, edit_path: Path, edit_result_ref: str
+) -> SaveImageResponse:
     import uuid
 
     asset_uuid = uuid.uuid4().hex[:16]
@@ -300,7 +307,8 @@ def _copy_to_asset(session: Session, target: ImageTarget, edit_path: Path, edit_
         text(
             "INSERT INTO generated_assets"
             " (name, png_path, source_kit_id, source_slot_id, metadata)"
-            f" VALUES (:name, :png_path, :source_kit_id, :source_slot_id, {json_param(session, 'metadata')})"
+            " VALUES (:name, :png_path, :source_kit_id, :source_slot_id, "
+            f"{json_param(session, 'metadata')})"
             " RETURNING id"
         ),
         {
@@ -387,7 +395,8 @@ def image_bytes(
             data = image_loader(image_id)
         except FileNotFoundError as e:
             raise exc from e
-        path = _edit_results_dir() / "loader-cache" / f"{re.sub(r'[^A-Za-z0-9_-]', '_', image_id)}.png"
+        safe_image_id = re.sub(r"[^A-Za-z0-9_-]", "_", image_id)
+        path = _edit_results_dir() / "loader-cache" / f"{safe_image_id}.png"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})

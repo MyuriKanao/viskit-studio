@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/images/{image_id}/bytes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Image Bytes
+         * @description Serve canonical editor image bytes for kit slots and generated assets.
+         */
+        get: operations["image_bytes_api_images__image_id__bytes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/images/{image_id}/edit": {
         parameters: {
             query?: never;
@@ -49,6 +69,26 @@ export interface paths {
         put?: never;
         /** Ocr Image */
         post: operations["ocr_image_api_images__image_id__ocr_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/images/{image_id}/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Edited Image
+         * @description Persist an edit result via an explicit replace-or-copy choice.
+         */
+        post: operations["save_edited_image_api_images__image_id__save_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1150,6 +1190,32 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** SaveImageRequest */
+        SaveImageRequest: {
+            /** Edit Result Ref */
+            edit_result_ref: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "replace" | "copy";
+        };
+        /** SaveImageResponse */
+        SaveImageResponse: {
+            /** Asset Id */
+            asset_id?: number | null;
+            /** Image Id */
+            image_id: string;
+            /** Image Url */
+            image_url: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "replace" | "copy";
+            /** Replaced */
+            replaced: boolean;
+        };
         /** SchemePayload */
         SchemePayload: {
             /** Description */
@@ -1585,6 +1651,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    image_bytes_api_images__image_id__bytes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_edit_api_images__image_id__edit_post: {
         parameters: {
             query?: never;
@@ -1671,6 +1768,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OcrResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_edited_image_api_images__image_id__save_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveImageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveImageResponse"];
                 };
             };
             /** @description Validation Error */

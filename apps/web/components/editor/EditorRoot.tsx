@@ -10,7 +10,7 @@ import { HistoryTimeline } from '@/components/editor/HistoryTimeline';
 import { TextLayerOverlay } from '@/components/editor/TextLayerOverlay';
 import { ToolRail } from '@/components/editor/ToolRail';
 import { useInpaint } from '@/hooks/use-inpaint';
-import { imageBytesUrl, saveEditedImage, type ImageSaveMode } from '@/lib/api/images';
+import { type ImageSaveMode, imageBytesUrl, saveEditedImage } from '@/lib/api/images';
 import { useCommandStack } from '@/lib/editor/command-stack';
 import type { CanvasStageHandle, MaskBox } from '@/lib/editor/types';
 
