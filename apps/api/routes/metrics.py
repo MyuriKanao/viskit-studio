@@ -1,8 +1,8 @@
 """GET /api/metrics/weekly — Dashboard KPI strip aggregations.
 
-Aggregates LIVE from ``marketing_kits`` + ``compliance_checks`` + ``cost_events``
-tables (no separate ``weekly_metrics`` cache).  Returns the current ISO-week
-bucket (Mon-Sun) along with 12-week sparkline arrays for kits/compliance/cost.
+Aggregates LIVE from ``marketing_kits`` + ``cost_events`` tables (no separate
+``weekly_metrics`` cache).  Returns the current ISO-week bucket (Mon-Sun) along
+with 12-week sparkline arrays for kits/compliance/cost.
 
 ``avg_manual_edit_min`` is NULL for v1 — no edit-time tracking surface yet.
 """
@@ -106,13 +106,13 @@ def get_weekly_metrics(
     ).scalar()
     kits_this_week = int(kits_this_week_row or 0)
 
-    # Current-week avg compliance — JOIN copywriting_specs -> compliance_checks
+    # Current-week avg compliance. Generated kits persist the canonical score on
+    # marketing_kits; legacy copywriting tables may be absent for image-only kits.
     avg_compliance_row = session.execute(
         text(
-            "SELECT AVG(cc.score) FROM compliance_checks cc"
-            " JOIN copywriting_specs cs ON cs.id = cc.copywriting_spec_id"
-            " JOIN marketing_kits mk ON mk.id = cs.marketing_kit_id"
-            " WHERE mk.created_at >= :start AND mk.created_at < :end"
+            "SELECT AVG(score) FROM marketing_kits"
+            " WHERE created_at >= :start AND created_at < :end"
+            " AND score IS NOT NULL"
         ),
         {"start": week_start, "end": week_end_exclusive},
     ).scalar()
@@ -151,11 +151,10 @@ def get_weekly_metrics(
 
     comp_rows = session.execute(
         text(
-            "SELECT mk.created_at, cc.score"
-            " FROM compliance_checks cc"
-            " JOIN copywriting_specs cs ON cs.id = cc.copywriting_spec_id"
-            " JOIN marketing_kits mk ON mk.id = cs.marketing_kit_id"
-            " WHERE mk.created_at >= :start AND mk.created_at < :end"
+            "SELECT created_at, score"
+            " FROM marketing_kits"
+            " WHERE created_at >= :start AND created_at < :end"
+            " AND score IS NOT NULL"
         ),
         {"start": window_start, "end": window_end_exclusive},
     ).all()
