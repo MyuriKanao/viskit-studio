@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 
 import type { ChatMessage, ConfirmationMode, InferredSpec } from './types';
+import type { GenerationPlan, SourceImageRef } from '@/lib/generation/types';
 
 function makeKitClientId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -14,17 +15,23 @@ function makeKitClientId(): string {
 export interface ChatState {
   messages: ChatMessage[];
   hero_image: { url: string; mime: string } | null;
+  source_image: SourceImageRef | null;
   user_prompt: string | null;
   inferred_spec: InferredSpec | null;
+  output_plan: GenerationPlan | null;
   confirmation_mode: ConfirmationMode | null;
   kit_client_id: string;
+  active_job_id: string | null;
 
   appendMessage: (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => string;
   updateMessage: (id: string, patch: Partial<Omit<ChatMessage, 'id' | 'timestamp'>>) => void;
   setHeroImage: (image: { url: string; mime: string } | null) => void;
+  setSourceImage: (image: SourceImageRef | null) => void;
   setUserPrompt: (prompt: string | null) => void;
   setInferredSpec: (spec: InferredSpec | null) => void;
+  setOutputPlan: (plan: GenerationPlan | null) => void;
   setConfirmationMode: (mode: ConfirmationMode | null) => void;
+  setActiveJobId: (jobId: string | null) => void;
   reset: () => void;
 }
 
@@ -33,17 +40,23 @@ const initialState = (): Omit<
   | 'appendMessage'
   | 'updateMessage'
   | 'setHeroImage'
+  | 'setSourceImage'
   | 'setUserPrompt'
   | 'setInferredSpec'
+  | 'setOutputPlan'
   | 'setConfirmationMode'
+  | 'setActiveJobId'
   | 'reset'
 > => ({
   messages: [],
   hero_image: null,
+  source_image: null,
   user_prompt: null,
   inferred_spec: null,
+  output_plan: null,
   confirmation_mode: null,
   kit_client_id: makeKitClientId(),
+  active_job_id: null,
 });
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -73,11 +86,17 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setHeroImage: (image) => set({ hero_image: image }),
 
+  setSourceImage: (image) => set({ source_image: image }),
+
   setUserPrompt: (prompt) => set({ user_prompt: prompt }),
 
   setInferredSpec: (spec) => set({ inferred_spec: spec }),
 
+  setOutputPlan: (plan) => set({ output_plan: plan }),
+
   setConfirmationMode: (mode) => set({ confirmation_mode: mode }),
+
+  setActiveJobId: (jobId) => set({ active_job_id: jobId }),
 
   reset: () => set({ ...initialState() }),
 }));
