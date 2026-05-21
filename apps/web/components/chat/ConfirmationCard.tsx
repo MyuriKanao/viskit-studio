@@ -7,6 +7,11 @@ import { useTemplateSchemes } from '@/hooks/use-templates';
 import { LOW_CONF_THRESHOLD } from '@/lib/chat/constants';
 import { useChatStore } from '@/lib/chat/store';
 import type { ConfirmationMode, FieldInference, InferredSpec } from '@/lib/chat/types';
+import type {
+  GenerationPlan,
+  GenerationPlanItem,
+  OutputDestinationType,
+} from '@/lib/generation/types';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -14,7 +19,8 @@ import { cn } from '@/lib/utils';
 // ---------------------------------------------------------------------------
 export interface ConfirmationCardProps {
   inferred: InferredSpec;
-  onStart: (spec: InferredSpec) => void;
+  outputPlan: GenerationPlan;
+  onStart: (spec: InferredSpec, plan: GenerationPlan) => void;
   onModeChange: (mode: ConfirmationMode) => void;
 }
 
@@ -29,6 +35,23 @@ const PRODUCT_TYPE_OPTIONS = [
   { value: 'sports', label: '运动' },
   { value: 'general_food', label: '普通食品' },
   { value: 'other', label: '其他' },
+] as const;
+
+const FULL_KIT_SLOTS = [
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'M1',
+  'M2',
+  'M3',
+  'M4',
+  'M5',
+  'M6',
+  'M7',
+  'M8',
+  'M9',
 ] as const;
 
 function normalizeProductType(value: string): string {
@@ -51,6 +74,44 @@ function ConfidenceBadge({ field }: { field: FieldInference<unknown> }) {
       ?
     </span>
   );
+}
+
+function makeFullKitPlanItem(slotId: string): GenerationPlanItem {
+  const isHero = slotId.startsWith('H');
+  return {
+    id: `full-kit-${slotId}`,
+    output_kind: isHero ? 'hero' : 'detail',
+    title: `${slotId} · ${isHero ? '主图' : '详情图'}`,
+    reason: '完整 14 图兼容模式',
+    template_ref: null,
+    template_name: null,
+    aspect_ratio: isHero ? '1:1' : '3:4',
+    destination_type: 'kit_slot',
+    slot_id: slotId,
+    enabled: true,
+  };
+}
+
+function makeManualPlanItem(kind: 'white_bg' | 'banner'): GenerationPlanItem {
+  return {
+    id: `manual-${kind}-${Date.now().toString(36)}`,
+    output_kind: kind,
+    title: kind === 'white_bg' ? '白底产品主图' : '促销海报 / Banner',
+    reason: '用户手动添加',
+    template_ref: null,
+    template_name: null,
+    aspect_ratio: kind === 'white_bg' ? '1:1' : '16:9',
+    destination_type: 'asset',
+    slot_id: null,
+    enabled: true,
+  };
+}
+
+function sourceLabel(source: GenerationPlan['plan_source']): string {
+  if (source === 'explicit') return '用户指定';
+  if (source === 'fallback') return '规则兜底';
+  if (source === 'manual') return '手动编辑';
+  return '智能推荐';
 }
 
 // ---------------------------------------------------------------------------
