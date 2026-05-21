@@ -193,13 +193,21 @@ function ColorSwatch({ hex }: { hex: string }) {
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-export function ConfirmationCard({ inferred, onStart, onModeChange }: ConfirmationCardProps) {
+export function ConfirmationCard({
+  inferred,
+  outputPlan,
+  onStart,
+  onModeChange,
+}: ConfirmationCardProps) {
   const locale = useLocale() as 'zh' | 'en';
   const confirmation_mode = useChatStore((s) => s.confirmation_mode);
   const setConfirmationMode = useChatStore((s) => s.setConfirmationMode);
+  const setOutputPlan = useChatStore((s) => s.setOutputPlan);
+  const activeJobId = useChatStore((s) => s.active_job_id);
 
   // Local editable copy of spec fields
   const [spec, setSpec] = React.useState<InferredSpec>(() => inferred);
+  const [plan, setPlan] = React.useState<GenerationPlan>(() => outputPlan);
   const [guardNote, setGuardNote] = React.useState<string | null>(null);
   const schemesQuery = useTemplateSchemes(locale);
   const schemes = schemesQuery.data ?? [];
@@ -207,6 +215,10 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
 
   // Determine effective mode — default to minimal when store is null
   const mode: ConfirmationMode = confirmation_mode ?? 'minimal';
+
+  React.useEffect(() => {
+    setPlan(outputPlan);
+  }, [outputPlan]);
 
   // Low-confidence fields for "asking" mode
   const lowConfFields = React.useMemo(() => {
@@ -246,6 +258,62 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
     });
   }
 
+  function commitPlan(nextPlan: GenerationPlan) {
+    setGuardNote(null);
+    setPlan(nextPlan);
+    setOutputPlan(nextPlan);
+  }
+
+  function updatePlanItem(
+    id: string,
+    patch: Partial<
+      Pick<
+        GenerationPlanItem,
+        | 'enabled'
+        | 'title'
+        | 'template_ref'
+        | 'destination_type'
+        | 'slot_id'
+        | 'output_kind'
+        | 'aspect_ratio'
+      >
+    >
+  ) {
+    commitPlan({
+      ...plan,
+      plan_source: plan.plan_source === 'recommended' ? 'manual' : plan.plan_source,
+      items: plan.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    });
+  }
+
+  function removePlanItem(id: string) {
+    commitPlan({
+      ...plan,
+      plan_source: 'manual',
+      items: plan.items.filter((item) => item.id !== id),
+    });
+  }
+
+  function addPlanItem(kind: 'white_bg' | 'banner') {
+    commitPlan({
+      ...plan,
+      plan_source: 'manual',
+      items: [...plan.items, makeManualPlanItem(kind)],
+    });
+  }
+
+  function addFullKitPlan() {
+    const existingIds = new Set(plan.items.map((item) => item.id));
+    const fullKitItems = FULL_KIT_SLOTS.map((slot) => makeFullKitPlanItem(slot)).filter(
+      (item) => !existingIds.has(item.id)
+    );
+    commitPlan({
+      ...plan,
+      plan_source: 'manual',
+      items: [...plan.items, ...fullKitItems],
+    });
+  }
+
   // Polish Queue #1 — onStart guard
   function handleStart() {
     if (
@@ -256,11 +324,23 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
       setGuardNote('请先确认品牌或品类');
       return;
     }
-    onStart({
-      ...spec,
-      template_scheme_ref: selectedSchemeRef || 'builtin:default',
-      template_slot_overrides: spec.template_slot_overrides ?? {},
-    });
+    const selectedItems = plan.items.filter((item) => item.enabled);
+    if (selectedItems.length === 0) {
+      setGuardNote('请至少保留一个输出项');
+      return;
+    }
+    onStart(
+      {
+        ...spec,
+        template_scheme_ref: selectedSchemeRef || 'builtin:default',
+        template_slot_overrides: spec.template_slot_overrides ?? {},
+      },
+      {
+        ...plan,
+        items: selectedItems,
+        requires_confirmation: true,
+      }
+    );
   }
 
   // Check if asking mode still has unresolved low-conf fields
@@ -270,6 +350,8 @@ export function ConfirmationCard({ inferred, onStart, onModeChange }: Confirmati
       spec.category.confidence < LOW_CONF_THRESHOLD ||
       spec.product_type.confidence < LOW_CONF_THRESHOLD ||
       spec.brand_color_hex.confidence < LOW_CONF_THRESHOLD);
+  const planBlocked = plan.items.filter((item) => item.enabled).length === 0;
+  const isJobActive = Boolean(activeJobId);
 
   // ---------------------------------------------------------------------------
   // Render
