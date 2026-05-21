@@ -929,6 +929,76 @@ def _write_cost_json(*, kit_root: Path, events: list[dict[str, Any]]) -> Path:
     return path
 
 
+async def _publish_skipped_payloads(
+    *,
+    bus: KitEventBus | None,
+    channel_id: str,
+    payloads: Iterable[JobPayload],
+) -> tuple[str, ...]:
+    skipped: list[str] = []
+    for payload in payloads:
+        skipped.append(payload.image_id)
+        await _publish(
+            bus,
+            channel_id,
+            {
+                "image_id": payload.image_id,
+                "status": "skipped",
+                "progress": 0,
+                "brand_color_locked": False,
+                "png_path": None,
+                "reason": "stop_requested_before_start",
+            },
+        )
+    return tuple(skipped)
+
+
+async def _run_payloads_with_stop(
+    payloads: list[JobPayload],
+    *,
+    output_dir: Path,
+    adapter_factory: AdapterFactory,
+    counter: _ConcurrencyCounter,
+    bus: KitEventBus | None,
+    channel_id: str,
+    batch_size: int,
+    stop_checker: StopChecker | None = None,
+) -> tuple[list[JobOutcome], tuple[str, ...]]:
+    """Run payloads while honoring stop-before-schedule semantics.
+
+    The stop checker is consulted before each batch is scheduled.  Already
+    in-flight provider calls are allowed to finish; unscheduled payloads are
+    marked skipped and never call the provider.
+    """
+    outcomes: list[JobOutcome] = []
+    skipped: tuple[str, ...] = ()
+    effective_batch_size = max(1, batch_size)
+    for start in range(0, len(payloads), effective_batch_size):
+        if stop_checker is not None and stop_checker():
+            skipped = await _publish_skipped_payloads(
+                bus=bus,
+                channel_id=channel_id,
+                payloads=payloads[start:],
+            )
+            break
+        batch = payloads[start : start + effective_batch_size]
+        outcomes.extend(
+            await asyncio.gather(
+                *(
+                    _run_one_image_with_retry(
+                        p,
+                        output_dir=output_dir,
+                        adapter_factory=adapter_factory,
+                        counter=counter,
+                        bus=bus,
+                    )
+                    for p in batch
+                )
+            )
+        )
+    return outcomes, skipped
+
+
 async def orchestrate_kit(
     inputs: KitGenerationInputs,
     *,
