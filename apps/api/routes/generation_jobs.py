@@ -22,10 +22,10 @@ from apps.api.lib.db import get_session, json_param, session_scope
 from apps.api.lib.generation_jobs import (
     encode_asset_image_id,
     encode_kit_slot_image_id,
+    fetch_kit_slot_png_path,
     imagegen_output_dir,
     require_within,
     resolve_stored_path,
-    fetch_kit_slot_png_path,
     upsert_kit_slot_png_path,
 )
 
@@ -111,7 +111,7 @@ class GenerationOutputCreate(BaseModel):
     slot_id: str | None = Field(default=None, pattern=r"^[HM][1-9]$")
 
     @model_validator(mode="after")
-    def _validate_destination(self) -> "GenerationOutputCreate":
+    def _validate_destination(self) -> GenerationOutputCreate:
         if self.destination_type == "kit_slot":
             if self.marketing_kit_id is None:
                 raise ValueError("marketing_kit_id is required for kit_slot outputs")
@@ -388,6 +388,7 @@ async def start_generation_job(
             {"id": job_id, "cancel": False},
         )
         status = "queued"
+        session.commit()
 
     task = _TASKS.get(job_id)
     if task is None or task.done():
@@ -445,6 +446,7 @@ def stop_generation_job(
             {"id": job_id, "cancel": True},
         )
         status = "stopping"
+    session.commit()
     return GenerationJobStopResponse(job_id=job_id, status=status, cancel_requested=True)
 
 
@@ -457,10 +459,10 @@ async def generation_job_events(job_id: str) -> StreamingResponse:
         yield (
             "event: snapshot\n"
             f"data: {json.dumps(snapshot, ensure_ascii=False)}\n\n"
-        ).encode("utf-8")
+        ).encode()
         async for event in _EVENT_BUS.subscribe(job_id):
             payload = json.dumps(event, ensure_ascii=False)
-            yield f"event: update\ndata: {payload}\n\n".encode("utf-8")
+            yield f"event: update\ndata: {payload}\n\n".encode()
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
 

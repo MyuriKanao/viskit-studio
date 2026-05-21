@@ -14,8 +14,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.lib import secrets_store
 from apps.api.lib.db import migrate_from_env
+from apps.api.lib.generation_jobs import mark_stale_generation_jobs_interrupted
+from apps.api.routes.assets import router as assets_router
 from apps.api.routes.copywriter import router as copywriter_router
 from apps.api.routes.extract import router as extract_router
+from apps.api.routes.generation_jobs import router as generation_jobs_router
 from apps.api.routes.health import router as health_router
 from apps.api.routes.images import router as images_router
 from apps.api.routes.kits import router as kits_router
@@ -24,6 +27,7 @@ from apps.api.routes.onboarding import router as onboarding_router
 from apps.api.routes.providers import router as providers_router
 from apps.api.routes.queue import router as queue_router
 from apps.api.routes.settings import router as settings_router
+from apps.api.routes.source_images import router as source_images_router
 from apps.api.routes.templates import router as templates_router
 from services.imagegen.orchestrator import KitEventBus
 from services.providers.registry import ProviderConfigError
@@ -75,6 +79,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Viskit API starting; config_path=%s", _config_path)
     _bootstrap_config_if_missing(_config_path)
     migrate_from_env()
+    mark_stale_generation_jobs_interrupted()
     injected = secrets_store.load_into_env()
     if injected:
         logger.info("Loaded %d secrets from %s into env", injected, secrets_store.secrets_path())
@@ -123,6 +128,9 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(copywriter_router)
 app.include_router(images_router)
+app.include_router(source_images_router)
+app.include_router(generation_jobs_router)
+app.include_router(assets_router)
 app.include_router(kits_router)
 # extract_router shares the /api/kits prefix (intentional — see extract.py).
 # Registered AFTER kits_router and copywriter_router; FastAPI disambiguates

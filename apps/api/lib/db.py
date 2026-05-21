@@ -10,8 +10,8 @@ The runtime supports both PostgreSQL and SQLite:
 from __future__ import annotations
 
 import os
-from contextlib import contextmanager
 from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 

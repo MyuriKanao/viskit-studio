@@ -6,7 +6,6 @@ import base64
 import hashlib
 import re
 import uuid
-from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
