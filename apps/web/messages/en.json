@@ -123,6 +123,13 @@
     "ocr": {
       "loading": "Detecting text…",
       "error": "OCR failed"
+    },
+    "save": {
+      "pending": "Save this edit as:",
+      "replace": "Replace current",
+      "copy": "Save as copy",
+      "saved": "Edit saved",
+      "error": "Save failed"
     }
   },
   "catalog": {

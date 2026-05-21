@@ -123,6 +123,13 @@
     "ocr": {
       "loading": "正在识别文字…",
       "error": "文字识别失败"
+    },
+    "save": {
+      "pending": "保存本次编辑：",
+      "replace": "替换当前图",
+      "copy": "另存为副本",
+      "saved": "编辑已保存",
+      "error": "保存失败"
     }
   },
   "catalog": {
