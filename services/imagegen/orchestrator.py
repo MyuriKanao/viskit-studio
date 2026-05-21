@@ -999,6 +999,252 @@ async def _run_payloads_with_stop(
     return outcomes, skipped
 
 
+async def orchestrate_output_plan(
+    inputs: PlannedGenerationInputs,
+    *,
+    registry: Any,
+    snapshot: RoutingSnapshot | None = None,
+    cap: int = 1,
+    color_lock_threshold: float = DEFAULT_THRESHOLD,
+    adapter_factory: AdapterFactory | None = None,
+    event_bus: KitEventBus | None = None,
+    stop_checker: StopChecker | None = None,
+    secondary_color_hex: str | None = None,
+) -> PlannedOrchestratorResult:
+    """Drive a confirmed variable-output plan.
+
+    The function runs exactly ``inputs.output_items``.  It does not create a
+    plan, mutate API state, or infer additional outputs.  Stop semantics are
+    intentionally soft: the checker prevents unscheduled outputs from starting
+    while allowing already in-flight provider calls to finish.
+    """
+    if not inputs.output_items:
+        raise ValueError("planned generation requires at least one output item")
+    if snapshot is None:
+        snapshot = capture_snapshot(registry, cap=cap)
+
+    factory = adapter_factory or default_adapter_factory(registry)
+    job_root = inputs.output_dir / "generation_jobs" / inputs.job_id
+
+    rendered = _build_plan_locked_prompts(inputs, secondary_color_hex=secondary_color_hex)
+    prompt_strs = [body for (_, body, _, _) in rendered]
+
+    preflight_result = run_preflight(prompt_strs, registry=registry, locale=inputs.locale)
+    preflight_event = _build_preflight_cost_event(
+        kit_id=inputs.job_id,
+        cost_usd=preflight_result.cost_estimate_usd,
+        passed=preflight_result.passed,
+    )
+
+    if not preflight_result.passed:
+        rule_ids = sorted({v.rule_id for v in preflight_result.violations})
+        abort_reason = "preflight_failed:" + ",".join(rule_ids)
+        compliance_path = _write_compliance_json(
+            kit_root=job_root,
+            preflight_passed=False,
+            violations=preflight_result.violations,
+            scorecard=_score_plan_items(inputs),
+            key_resolution=None,
+        )
+        cost_path = _write_cost_json(kit_root=job_root, events=[preflight_event])
+        await _publish(
+            event_bus,
+            inputs.job_id,
+            {
+                "image_id": "*",
+                "status": "preflight_failed",
+                "progress": 0,
+                "brand_color_locked": False,
+            },
+        )
+        if event_bus is not None:
+            event_bus.close(inputs.job_id)
+        return PlannedOrchestratorResult(
+            job_id=inputs.job_id,
+            png_paths=(),
+            image_paths_by_id={item.output_id: None for item in inputs.output_items},
+            skipped_output_ids=(),
+            compliance_path=compliance_path,
+            cost_path=cost_path,
+            color_lock_summary={"ok": 0, "out_of_tolerance": 0, "error": 0, "failed": 0, "skipped": 0},
+            needs_review=True,
+            abort_reason=abort_reason,
+            max_concurrent_observed=0,
+            template_snapshot=inputs.template_snapshot,
+        )
+
+    image_role = "image" if "image" in snapshot.providers else "image_gen"
+    image_binding = snapshot.providers.get(image_role)
+    if image_binding is None:
+        raise ProviderConfigError(
+            "ERR-PROV-001",
+            "snapshot missing role 'image' or legacy role 'image_gen'",
+            role="image",
+        )
+
+    payloads: list[JobPayload] = []
+    for item, prompt, template, size in rendered:
+        payloads.append(
+            JobPayload(
+                kit_id=inputs.job_id,
+                image_id=item.output_id,
+                template_id=template.id,
+                role=image_role,
+                size=size,
+                prompt=prompt,
+                brand_color_hex=inputs.brand_color_hex,
+                snapshot=snapshot,
+                color_lock_threshold=color_lock_threshold,
+                output_path=_planned_output_path(inputs, item),
+                public_path=_planned_public_path(inputs, item),
+            )
+        )
+
+    counter = _ConcurrencyCounter()
+    outcomes, skipped = await _run_payloads_with_stop(
+        payloads,
+        output_dir=inputs.output_dir,
+        adapter_factory=factory,
+        counter=counter,
+        bus=event_bus,
+        channel_id=inputs.job_id,
+        batch_size=max(1, min(cap, image_binding.cap)),
+        stop_checker=stop_checker,
+    )
+
+    outcomes_by_id = {outcome.image_id: outcome for outcome in outcomes}
+    ordered_ids = [item.output_id for item in sorted(inputs.output_items, key=lambda i: i.sort_order)]
+    summary: dict[str, int] = {
+        "ok": 0,
+        "out_of_tolerance": 0,
+        "error": 0,
+        "failed": 0,
+        "skipped": len(skipped),
+    }
+    cost_events: list[dict[str, Any]] = [preflight_event]
+    png_paths_list: list[Path] = []
+    image_paths_by_id: dict[str, Path | None] = {}
+    needs_review_job = False
+    key_resolution: dict[str, Any] | None = None
+
+    for image_id in ordered_ids:
+        outcome = outcomes_by_id.get(image_id)
+        if outcome is None:
+            image_paths_by_id[image_id] = None
+            continue
+        image_paths_by_id[image_id] = outcome.png_path
+        if outcome.png_path is not None:
+            png_paths_list.append(outcome.png_path)
+        if outcome.cost_event is not None:
+            cost_events.append(outcome.cost_event)
+        summary[outcome.color_lock_status] += 1
+        if outcome.needs_review:
+            needs_review_job = True
+        if (
+            outcome.error_code == "ERR-PROV-003"
+            and outcome.cost_event is not None
+            and key_resolution is None
+        ):
+            key_resolution = {
+                "failed_role": outcome.cost_event.get("role"),
+                "env_var_name": outcome.cost_event.get("env_var_missing"),
+                "reason": "env_var_missing",
+            }
+
+    compliance_path = _write_compliance_json(
+        kit_root=job_root,
+        preflight_passed=True,
+        violations=preflight_result.violations,
+        scorecard=_score_plan_items(inputs),
+        key_resolution=key_resolution,
+    )
+    cost_path = _write_cost_json(kit_root=job_root, events=cost_events)
+    final_status = "stopped" if skipped else "done"
+    await _publish(
+        event_bus,
+        inputs.job_id,
+        {
+            "image_id": "*",
+            "status": final_status,
+            "progress": len(outcomes),
+            "brand_color_locked": summary["ok"] == len(outcomes) and bool(outcomes),
+            "skipped": len(skipped),
+        },
+    )
+    if event_bus is not None:
+        event_bus.close(inputs.job_id)
+
+    return PlannedOrchestratorResult(
+        job_id=inputs.job_id,
+        png_paths=tuple(png_paths_list),
+        image_paths_by_id=image_paths_by_id,
+        skipped_output_ids=skipped,
+        compliance_path=compliance_path,
+        cost_path=cost_path,
+        color_lock_summary=summary,
+        needs_review=needs_review_job,
+        abort_reason="stopped" if skipped else None,
+        max_concurrent_observed=counter.max_observed,
+        template_snapshot=inputs.template_snapshot,
+    )
+
+
+async def orchestrate_full_kit_plan(
+    inputs: KitGenerationInputs,
+    *,
+    registry: Any,
+    plan: OutputPlan | None = None,
+    snapshot: RoutingSnapshot | None = None,
+    cap: int = 1,
+    color_lock_threshold: float = DEFAULT_THRESHOLD,
+    adapter_factory: AdapterFactory | None = None,
+    event_bus: KitEventBus | None = None,
+    stop_checker: StopChecker | None = None,
+    secondary_color_hex: str | None = None,
+) -> OrchestratorResult:
+    """Compatibility wrapper that executes the full H1-H5/M1-M9 kit as a plan."""
+    full_plan = plan or build_full_kit_output_plan(inputs.spec)
+    template_by_output_id = dict(inputs.template_by_section or {})
+    if not template_by_output_id:
+        template_by_output_id = resolve_plan_templates(full_plan, locale=inputs.locale)
+    planned_inputs = PlannedGenerationInputs(
+        job_id=inputs.kit_id,
+        kit_id=inputs.kit_id,
+        output_items=full_plan.items,
+        sku_meta=inputs.sku_meta,
+        brand_color_hex=inputs.brand_color_hex,
+        style_prompt=inputs.style_prompt,
+        output_dir=inputs.output_dir,
+        locale=inputs.locale,
+        template_by_output_id=template_by_output_id,
+        template_snapshot=inputs.template_snapshot,
+    )
+    planned_result = await orchestrate_output_plan(
+        planned_inputs,
+        registry=registry,
+        snapshot=snapshot,
+        cap=cap,
+        color_lock_threshold=color_lock_threshold,
+        adapter_factory=adapter_factory,
+        event_bus=event_bus,
+        stop_checker=stop_checker,
+        secondary_color_hex=secondary_color_hex,
+    )
+    summary = {k: v for k, v in planned_result.color_lock_summary.items() if k != "skipped"}
+    return OrchestratorResult(
+        kit_id=inputs.kit_id,
+        png_paths=planned_result.png_paths,
+        image_paths_by_id=planned_result.image_paths_by_id,
+        compliance_path=planned_result.compliance_path,
+        cost_path=planned_result.cost_path,
+        color_lock_summary=summary,
+        needs_review=planned_result.needs_review,
+        abort_reason=planned_result.abort_reason,
+        max_concurrent_observed=planned_result.max_concurrent_observed,
+        template_snapshot=planned_result.template_snapshot,
+    )
+
+
 async def orchestrate_kit(
     inputs: KitGenerationInputs,
     *,
