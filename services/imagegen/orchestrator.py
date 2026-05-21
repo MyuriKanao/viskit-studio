@@ -461,6 +461,17 @@ def _output_path_for_section(output_dir: Path, kit_id: str, image_id: str) -> Pa
     return output_dir / "kits" / kit_id / sub / f"{image_id}.png"
 
 
+def _safe_output_filename(output_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", output_id).strip("._")
+    return safe or "output"
+
+
+def _output_path_for_payload(output_dir: Path, payload: JobPayload) -> Path:
+    if payload.output_path is not None:
+        return payload.output_path
+    return _output_path_for_section(output_dir, payload.kit_id, payload.image_id)
+
+
 def _call_generate(
     adapter: Any,
     prompt: str,
@@ -487,6 +498,14 @@ def _call_generate(
 def _public_image_path(kit_id: str, image_id: str, path: Path) -> str:
     version = path.stat().st_mtime_ns if path.exists() else time.time_ns()
     return f"/api/kits/{kit_id}/images/{image_id}?v={version}"
+
+
+def _public_payload_image_path(payload: JobPayload, path: Path) -> str:
+    if payload.public_path is not None:
+        sep = "&" if "?" in payload.public_path else "?"
+        version = path.stat().st_mtime_ns if path.exists() else time.time_ns()
+        return f"{payload.public_path}{sep}v={version}"
+    return _public_image_path(payload.kit_id, payload.image_id, path)
 
 
 async def _publish(bus: KitEventBus | None, kit_id: str, event: dict[str, Any]) -> None:
@@ -540,7 +559,7 @@ async def _run_one_image_with_retry(
 
     # Real factory call returns the adapter for this binding.
     adapter = adapter_factory(binding, payload.role)
-    output_path = _output_path_for_section(output_dir, payload.kit_id, payload.image_id)
+    output_path = _output_path_for_payload(output_dir, payload)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     await _publish(
@@ -665,7 +684,7 @@ async def _run_one_image_with_retry(
             "progress": 0,
             "brand_color_locked": color_lock.status == "ok",
             "png_path": (
-                _public_image_path(payload.kit_id, payload.image_id, output_path)
+                _public_payload_image_path(payload, output_path)
                 if color_lock.status == "ok" and output_path.exists()
                 else None
             ),
