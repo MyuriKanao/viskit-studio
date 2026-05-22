@@ -202,10 +202,24 @@ export default function CatalogPage() {
     },
     [deleteImage, t]
   );
-  const handleEditImage = React.useCallback(
+  const resolveEditableImageId = React.useCallback(
+    (kit: KitListItem, imageId: string) =>
+      kit.source_type === 'asset' ? imageId : encodeKitSlotImageId(kit.id, imageId),
+    []
+  );
+
+  const handleOpenEditor = React.useCallback(
     (kit: KitListItem, imageId: string) => {
-      const sourceImageId =
-        kit.source_type === 'asset' ? imageId : encodeKitSlotImageId(kit.id, imageId);
+      const editableImageId = resolveEditableImageId(kit, imageId);
+      const prefix = locale === 'zh' ? '' : `/${locale}`;
+      router.push(`${prefix}/editor/${encodeURIComponent(editableImageId)}`);
+    },
+    [locale, resolveEditableImageId, router]
+  );
+
+  const handleSendToChat = React.useCallback(
+    (kit: KitListItem, imageId: string) => {
+      const sourceImageId = resolveEditableImageId(kit, imageId);
       const params = new URLSearchParams({ source_image_id: sourceImageId });
       const href =
         locale === 'zh'
@@ -213,7 +227,7 @@ export default function CatalogPage() {
           : `/${locale}/new-kit?${params.toString()}`;
       router.push(href);
     },
-    [locale, router]
+    [locale, resolveEditableImageId, router]
   );
 
   const selectedSku: CatalogDrawerSku | null = React.useMemo(() => {
@@ -427,7 +441,8 @@ export default function CatalogPage() {
           openImage: t('open_image'),
           downloadImage: t('download_image'),
           deleteImage: t('delete_image'),
-          editImage: t('edit_image'),
+          openEditor: t('edit_image'),
+          sendToChat: t('send_to_chat'),
         }}
         isDeleting={deleteImage.isPending}
         onOpenChange={(open) => {
@@ -439,8 +454,11 @@ export default function CatalogPage() {
         onDeleteImage={(imageId) => {
           if (selectedPreviewKit) handleDeleteImage(selectedPreviewKit, imageId);
         }}
-        onEditImage={(imageId) => {
-          if (selectedPreviewKit) handleEditImage(selectedPreviewKit, imageId);
+        onOpenEditor={(imageId) => {
+          if (selectedPreviewKit) handleOpenEditor(selectedPreviewKit, imageId);
+        }}
+        onSendToChat={(imageId) => {
+          if (selectedPreviewKit) handleSendToChat(selectedPreviewKit, imageId);
         }}
       />
     </div>

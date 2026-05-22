@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Send, Trash2 } from 'lucide-react';
+import { Download, Pencil, Send, Trash2 } from 'lucide-react';
 import * as React from 'react';
 
 import { buttonVariants } from '@/components/ui/button';
@@ -21,7 +21,8 @@ export interface CatalogImagePreviewLabels {
   openImage: string;
   downloadImage: string;
   deleteImage: string;
-  editImage: string;
+  openEditor: string;
+  sendToChat: string;
 }
 
 export interface CatalogImagePreviewProps {
@@ -33,7 +34,8 @@ export interface CatalogImagePreviewProps {
   onOpenChange: (open: boolean) => void;
   onSelectImage: (imageIndex: number) => void;
   onDeleteImage: (imageId: string) => void;
-  onEditImage?: (imageId: string) => void;
+  onOpenEditor?: (imageId: string) => void;
+  onSendToChat?: (imageId: string) => void;
 }
 
 export function CatalogImagePreview({
@@ -45,7 +47,8 @@ export function CatalogImagePreview({
   onOpenChange,
   onSelectImage,
   onDeleteImage,
-  onEditImage,
+  onOpenEditor,
+  onSendToChat,
 }: CatalogImagePreviewProps) {
   const thumbs = normalizeKitThumbs(kit?.thumbs);
   const selectedSrc = thumbs[imageIndex] ?? null;
@@ -84,8 +87,32 @@ export function CatalogImagePreview({
             )}
 
             {selectedSrc ? (
-              <div className="pointer-events-none absolute left-s-3 right-s-3 top-s-3 flex justify-end opacity-100 transition-opacity duration-std sm:opacity-0 sm:group-hover/preview:opacity-100 sm:group-focus-within/preview:opacity-100">
+              <div className="pointer-events-none absolute left-s-3 right-s-3 top-s-3 flex justify-end">
                 <div className="pointer-events-auto flex flex-wrap items-center gap-s-2 rounded-card border border-border-subtle bg-ink-base/80 p-s-2 shadow-lift backdrop-blur">
+                  <button
+                    type="button"
+                    onClick={() => onOpenEditor?.(selectedImageId)}
+                    className={buttonVariants({
+                      variant: 'default',
+                      size: 'sm',
+                      className: 'h-8 px-s-2 text-xs',
+                    })}
+                  >
+                    <Pencil aria-hidden="true" className="h-3.5 w-3.5" />
+                    {labels.openEditor}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSendToChat?.(selectedImageId)}
+                    className={buttonVariants({
+                      variant: 'secondary',
+                      size: 'sm',
+                      className: 'h-8 px-s-2 text-xs',
+                    })}
+                  >
+                    <Send aria-hidden="true" className="h-3.5 w-3.5" />
+                    {labels.sendToChat}
+                  </button>
                   <a
                     href={resolvedSrc}
                     download={`${kit.sku}-${selectedImageId}.png`}
@@ -98,18 +125,6 @@ export function CatalogImagePreview({
                     <Download aria-hidden="true" className="h-3.5 w-3.5" />
                     {labels.downloadImage}
                   </a>
-                  <button
-                    type="button"
-                    onClick={() => onEditImage?.(selectedImageId)}
-                    className={buttonVariants({
-                      variant: 'secondary',
-                      size: 'sm',
-                      className: 'h-8 px-s-2 text-xs',
-                    })}
-                  >
-                    <Send aria-hidden="true" className="h-3.5 w-3.5" />
-                    {labels.editImage}
-                  </button>
                   <button
                     type="button"
                     disabled={isDeleting}

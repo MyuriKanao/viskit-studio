@@ -120,11 +120,11 @@
       "aborted": "已取消",
       "cancel": "取消"
     },
-  "ocr": {
-    "loading": "正在识别文字…",
-    "error": "文字识别失败",
-    "empty": "未检测到 OCR 文字区域"
-  },
+    "ocr": {
+      "loading": "正在识别文字…",
+      "error": "文字识别失败",
+      "empty": "未检测到 OCR 文字区域"
+    },
     "save": {
       "pending": "保存本次编辑：",
       "replace": "替换当前图",
@@ -241,7 +241,7 @@
     "open_image": "展开图片",
     "image_preview_title": "图片预览",
     "download_image": "下载",
-    "edit_image": "发送到 Chat 再生成",
+    "edit_image": "打开编辑器",
     "delete_image": "删除图片",
     "delete_image_confirm": "删除 {name} 的 {image} 图片？",
     "delete_image_error": "删除图片失败",
@@ -253,7 +253,8 @@
     "drawer_bestsellers_empty": "本 Kit 未记录检索快照",
     "drawer_open_kit_cta": "查看套包",
     "drawer_kit_status": "状态",
-    "drawer_kit_score": "合规分"
+    "drawer_kit_score": "合规分",
+    "send_to_chat": "发送到 Chat 再生成"
   },
   "onboarding": {
     "page_title": "欢迎使用",

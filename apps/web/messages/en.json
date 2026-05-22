@@ -120,11 +120,11 @@
       "aborted": "Aborted",
       "cancel": "Cancel"
     },
-  "ocr": {
-    "loading": "Detecting text…",
-    "error": "OCR failed",
-    "empty": "No OCR text regions detected"
-  },
+    "ocr": {
+      "loading": "Detecting text…",
+      "error": "OCR failed",
+      "empty": "No OCR text regions detected"
+    },
     "save": {
       "pending": "Save this edit as:",
       "replace": "Replace current",
@@ -241,7 +241,7 @@
     "open_image": "Open image",
     "image_preview_title": "Image preview",
     "download_image": "Download",
-    "edit_image": "Send to Chat",
+    "edit_image": "Open editor",
     "delete_image": "Delete image",
     "delete_image_confirm": "Delete {image} from {name}?",
     "delete_image_error": "Delete image failed",
@@ -253,7 +253,8 @@
     "drawer_bestsellers_empty": "This kit has no retrieval snapshot recorded",
     "drawer_open_kit_cta": "View kit",
     "drawer_kit_status": "Status",
-    "drawer_kit_score": "Compliance"
+    "drawer_kit_score": "Compliance",
+    "send_to_chat": "Send to Chat"
   },
   "onboarding": {
     "page_title": "Welcome",
