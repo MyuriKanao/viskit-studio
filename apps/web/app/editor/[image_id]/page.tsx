@@ -8,11 +8,7 @@ export const metadata: Metadata = {
   title: 'Editor — Viskit Studio',
 };
 
-export default async function EditorPage({
-  params,
-}: {
-  params: { locale: string; image_id: string };
-}) {
+export default function DefaultLocaleEditorPage({ params }: { params: { image_id: string } }) {
   const imageId = decodeEditorRouteImageId(params.image_id);
   if (!imageId) notFound();
   return <MiniPaintEditor imageId={imageId} />;

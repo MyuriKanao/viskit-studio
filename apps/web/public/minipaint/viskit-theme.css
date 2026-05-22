@@ -1,0 +1,399 @@
+body.viskit-minipaint-body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--ink-base, #0b0b0e);
+  color: var(--text-primary, #f0e8dd);
+  font-family: var(--font-sans, "Inter", "PingFang SC", "Noto Sans SC", system-ui, sans-serif);
+}
+
+.viskit-minipaint-shell {
+  --background: var(--ink-base, #0b0b0e);
+  --text-color: var(--text-primary, #f0e8dd);
+  --text-color-muted: var(--text-muted, #948a7e);
+  --text-color-red: var(--danger, #a23e2f);
+  --text-color-green: var(--success, #6b8e5a);
+  --text-color-blue: var(--info, #4a6f8e);
+  --link-color: var(--accent-soft, #d97757);
+  --section-background-color: var(--surface-01, #131318);
+  --area-background-color: var(--surface-02, #1c1c24);
+  --block-background-color: var(--surface-02, #1c1c24);
+  --header-background-color: var(--surface-03, #23232d);
+  --button-background-color: var(--surface-02, #1c1c24);
+  --button-background-color-hover: var(--surface-03, #23232d);
+  --button-background-color-active: var(--accent-wash, rgba(196, 81, 58, 0.1));
+  --button-shadow-color: rgba(0, 0, 0, 0.3);
+  --button-text-color-active: var(--accent-soft, #d97757);
+  --button-border-radius: var(--r-input, 4px);
+  --button-toggle-background-color: var(--surface-03, #23232d);
+  --button-toggle-background-color-hover: var(--surface-03, #23232d);
+  --input-background-color: var(--ink-base, #0b0b0e);
+  --input-background-color-hover: var(--surface-02, #1c1c24);
+  --input-text-color: var(--text-primary, #f0e8dd);
+  --input-border-color: var(--border-strong, #34343f);
+  --input-border-color-active: var(--accent, #c4513a);
+  --input-border-radius: var(--r-input, 4px);
+  --input-group-border-color: var(--border-subtle, #26262f);
+  --menu-background-color: var(--surface-01, #131318);
+  --menu-icons-filter: invert(0.85) sepia(0.18) saturate(0.55);
+  --menu-icons-filter-active: invert(0.82) sepia(0.65) saturate(1.8) hue-rotate(330deg);
+  --menu-text-color: var(--text-secondary, #c6bba9);
+  --menu-dropdown-background-color: var(--surface-02, #1c1c24);
+  --menu-dropdown-border-color: var(--border-strong, #34343f);
+  --menu-dropdown-text-color: var(--text-primary, #f0e8dd);
+  --menu-dropdown-text-muted-color: var(--text-muted, #948a7e);
+  --menu-dropdown-hover-background-color: var(--accent-wash, rgba(196, 81, 58, 0.1));
+  --menu-dropdown-hover-text-color: var(--accent-soft, #d97757);
+  --menu-dropdown-divider-color: var(--border-subtle, #26262f);
+  --background-color-active: var(--accent-wash, rgba(196, 81, 58, 0.1));
+  --background-color-hover: var(--surface-03, #23232d);
+  --text-color-active: var(--accent-soft, #d97757);
+  --border-color: var(--border-subtle, #26262f);
+  --scrollbar-track-color: var(--ink-base, #0b0b0e);
+  --scrollbar-thumb-color: var(--border-strong, #34343f);
+  --mobile-menu-toggle-filter: invert(0.85) sepia(0.18) saturate(0.55);
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--text-color);
+  font-family: var(--font-sans, "Inter", "PingFang SC", "Noto Sans SC", system-ui, sans-serif);
+}
+
+.viskit-minipaint-shell *,
+.viskit-minipaint-shell *::before,
+.viskit-minipaint-shell *::after {
+  letter-spacing: 0;
+}
+
+.viskit-minipaint-shell .main_menu {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 40;
+  border-bottom: 1px solid var(--border-subtle, #26262f);
+}
+
+.viskit-minipaint-shell .main_menu > ul.menu_bar {
+  height: 38px;
+  padding-right: 430px;
+  padding-left: 10px;
+  background: var(--surface-01, #131318);
+}
+
+.viskit-minipaint-shell .main_menu > ul.menu_bar > li > a {
+  height: 38px;
+  padding: 0 12px;
+  color: var(--text-secondary, #c6bba9);
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 13px;
+}
+
+.viskit-minipaint-shell .main_menu > ul.menu_bar > li > a:focus,
+.viskit-minipaint-shell .main_menu > ul.menu_bar > li > a:hover,
+.viskit-minipaint-shell .main_menu > ul.menu_bar > li > a[aria-expanded="true"] {
+  background: var(--accent-wash, rgba(196, 81, 58, 0.1));
+  color: var(--accent-soft, #d97757);
+  box-shadow: inset 0 -1px 0 var(--accent, #c4513a);
+}
+
+.viskit-minipaint-shell .main_menu > ul.menu_dropdown {
+  border: 1px solid var(--border-strong, #34343f);
+  border-radius: var(--r-input, 4px);
+  box-shadow: var(--shadow-lift, 0 12px 32px rgba(0, 0, 0, 0.4));
+  overflow: hidden auto;
+}
+
+.viskit-minipaint-shell .main_menu > ul.menu_dropdown > li > a {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.viskit-minipaint-shell .wrapper {
+  position: absolute;
+  inset: 38px 0 0 0;
+  display: grid;
+  height: auto;
+  margin: 0;
+  overflow: hidden;
+  grid-template-rows: 44px 1fr;
+  grid-template-columns: 54px minmax(0, 1fr) 286px;
+  grid-template-areas:
+    "submenu submenu submenu"
+    "sidebar_left main sidebar_right";
+  background: var(--ink-base, #0b0b0e);
+}
+
+.viskit-minipaint-shell .submenu {
+  margin: 0;
+  border-bottom: 1px solid var(--border-subtle, #26262f);
+  background: var(--surface-01, #131318);
+}
+
+.viskit-minipaint-shell .logo {
+  width: 172px;
+  height: 44px;
+  margin: 0;
+  padding: 13px 12px 12px 42px;
+  color: var(--text-primary, #f0e8dd);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.viskit-minipaint-shell .logo::after {
+  top: 7px;
+  left: 8px;
+  filter: var(--menu-icons-filter);
+}
+
+.viskit-minipaint-shell .attributes {
+  min-height: 32px;
+  width: calc(100% - 180px);
+  margin: 6px 8px 6px 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle, #26262f);
+  background: var(--ink-base, #0b0b0e);
+  border-radius: var(--r-input, 4px);
+}
+
+.viskit-minipaint-shell .sidebar_left {
+  grid-area: sidebar_left;
+  width: 54px;
+  padding: 8px 6px;
+  overflow: hidden auto;
+  border-right: 1px solid var(--border-subtle, #26262f);
+  background: var(--surface-01, #131318);
+}
+
+.viskit-minipaint-shell .sidebar_left button,
+.viskit-minipaint-shell .sidebar_left input[type="button"] {
+  width: 40px;
+  height: 40px;
+  margin: 0 0 6px;
+  border-radius: var(--r-input, 4px);
+}
+
+.viskit-minipaint-shell .middle_area {
+  grid-area: main;
+  background:
+    linear-gradient(rgba(240, 232, 221, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240, 232, 221, 0.03) 1px, transparent 1px),
+    var(--ink-base, #0b0b0e);
+  background-size: 28px 28px;
+}
+
+.viskit-minipaint-shell .main_wrapper {
+  background: transparent;
+}
+
+.viskit-minipaint-shell .canvas_wrapper {
+  border: 1px solid rgba(240, 232, 221, 0.08);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.viskit-minipaint-shell .ruler_left,
+.viskit-minipaint-shell .ruler_top {
+  filter: saturate(0.7) brightness(0.85);
+}
+
+.viskit-minipaint-shell .sidebar_right {
+  grid-area: sidebar_right;
+  width: 286px;
+  padding: 8px;
+  overflow: hidden auto;
+  border-left: 1px solid var(--border-subtle, #26262f);
+  background: var(--surface-01, #131318);
+}
+
+.viskit-minipaint-shell .block,
+.viskit-minipaint-shell .sidebar_right .block {
+  margin-bottom: 8px;
+  border: 1px solid var(--border-subtle, #26262f);
+  border-radius: var(--r-input, 4px);
+  background: var(--surface-02, #1c1c24);
+  box-shadow: none;
+}
+
+.viskit-minipaint-shell .block h2 {
+  min-height: 30px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--border-subtle, #26262f);
+  background: var(--surface-03, #23232d);
+  color: var(--text-secondary, #c6bba9);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  border-radius: var(--r-input, 4px) var(--r-input, 4px) 0 0;
+}
+
+.viskit-minipaint-shell .block .content {
+  padding: 8px;
+}
+
+.viskit-minipaint-shell button,
+.viskit-minipaint-shell input[type="button"] {
+  min-height: 28px;
+  border: 1px solid var(--border-strong, #34343f);
+  background: var(--surface-02, #1c1c24);
+  color: var(--text-secondary, #c6bba9);
+  box-shadow: none;
+  transition: background 160ms var(--ease, ease), border-color 160ms var(--ease, ease), color 160ms var(--ease, ease);
+}
+
+.viskit-minipaint-shell button:hover,
+.viskit-minipaint-shell input[type="button"]:hover {
+  border-color: var(--accent, #c4513a);
+  background: var(--accent-wash, rgba(196, 81, 58, 0.1));
+  color: var(--text-primary, #f0e8dd);
+}
+
+.viskit-minipaint-shell button[aria-pressed="true"],
+.viskit-minipaint-shell input[type="button"][aria-pressed="true"] {
+  border-color: var(--accent, #c4513a);
+  background: var(--accent-wash, rgba(196, 81, 58, 0.1));
+  color: var(--accent-soft, #d97757);
+  box-shadow: inset 0 0 0 1px var(--accent, #c4513a);
+}
+
+.viskit-minipaint-shell input[type="text"],
+.viskit-minipaint-shell input[type="number"],
+.viskit-minipaint-shell select,
+.viskit-minipaint-shell textarea {
+  min-height: 28px;
+  border: 1px solid var(--border-strong, #34343f);
+  background: var(--ink-base, #0b0b0e);
+  color: var(--text-primary, #f0e8dd);
+  border-radius: var(--r-input, 4px);
+}
+
+.viskit-minipaint-shell input:focus,
+.viskit-minipaint-shell select:focus,
+.viskit-minipaint-shell textarea:focus,
+.viskit-minipaint-shell button:focus {
+  outline: 2px solid rgba(196, 81, 58, 0.38);
+  outline-offset: 1px;
+}
+
+.viskit-minipaint-shell .viskit-editor-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 38px;
+  max-width: 430px;
+  padding: 5px 10px 5px 0;
+  background: transparent;
+}
+
+.viskit-minipaint-shell .viskit-editor-actions button,
+.viskit-minipaint-shell .viskit-editor-actions .viskit-editor-home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 8px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary, #c6bba9);
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: none;
+}
+
+.viskit-minipaint-shell .viskit-editor-actions button:hover,
+.viskit-minipaint-shell .viskit-editor-actions .viskit-editor-home:hover {
+  border-color: var(--border-subtle, #26262f);
+  background: var(--surface-02, #1c1c24);
+  color: var(--text-primary, #f0e8dd);
+}
+
+.viskit-minipaint-shell .viskit-editor-actions button.is-primary {
+  border-color: var(--accent, #c4513a);
+  background: var(--accent-wash, rgba(196, 81, 58, 0.1));
+  color: var(--accent-soft, #d97757);
+}
+
+.viskit-minipaint-shell .viskit-editor-actions button:disabled {
+  visibility: visible;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.viskit-minipaint-shell .viskit-editor-status {
+  max-width: 124px;
+  overflow: hidden;
+  color: var(--text-muted, #948a7e);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viskit-minipaint-shell .viskit-editor-status.is-ready {
+  color: var(--success, #6b8e5a);
+}
+
+.viskit-minipaint-shell .viskit-editor-status.is-error {
+  color: var(--danger, #a23e2f);
+}
+
+.viskit-minipaint-shell .viskit-editor-saved-id {
+  margin-left: 6px;
+  color: var(--text-secondary, #c6bba9);
+}
+
+.viskit-minipaint-shell #popups,
+.viskit-minipaint-shell .alertify {
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+
+@media screen and (max-width: 900px) {
+  .viskit-minipaint-shell .main_menu {
+    right: 0;
+  }
+
+  .viskit-minipaint-shell .main_menu > ul.menu_bar {
+    padding-right: 10px;
+  }
+
+  .viskit-minipaint-shell .viskit-editor-actions {
+    top: 38px;
+    right: 0;
+    left: 0;
+    max-width: none;
+    padding-right: 8px;
+    border-bottom: 1px solid var(--border-subtle, #26262f);
+    background: var(--surface-01, #131318);
+    justify-content: flex-end;
+  }
+
+  .viskit-minipaint-shell .wrapper {
+    top: 76px;
+    grid-template-columns: 54px minmax(0, 1fr);
+    grid-template-areas:
+      "submenu submenu"
+      "sidebar_left main";
+  }
+
+  .viskit-minipaint-shell .sidebar_right {
+    position: absolute;
+    top: 44px;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    transform: translateX(100%);
+    transition: transform 180ms var(--ease, ease);
+  }
+
+  .viskit-minipaint-shell .sidebar_right.active {
+    transform: translateX(0);
+  }
+}

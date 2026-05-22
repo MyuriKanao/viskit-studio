@@ -6,6 +6,6 @@ export const metadata: Metadata = {
   title: 'Editor - Viskit Studio',
 };
 
-export default function EditorIndexPage() {
+export default function DefaultEditorIndexPage() {
   return <MiniPaintEditor />;
 }
