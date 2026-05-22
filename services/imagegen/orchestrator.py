@@ -91,6 +91,7 @@ _SECRET_PATTERN = re.compile(r"^(sk-|sk_|pk-|xoxb-|AKIA)[A-Za-z0-9_-]{20,}$")
 # AC #1 floor: ≥12/14 color-locked images for a kit to count as
 # brand-color-locked at the kit level (kit-done SSE event).
 _BRAND_COLOR_LOCKED_FLOOR = 12
+_MAX_EVENT_QUEUE_SIZE = 100
 
 
 # ---------------------------------------------------------------------------
@@ -330,37 +331,63 @@ class KitEventBus:
     _CLOSE_SENTINEL: dict[str, Any] = {"__sentinel__": True}
 
     def __init__(self) -> None:
-        self._queues: dict[str, asyncio.Queue[dict[str, Any]]] = {}
+        self._subscribers: dict[str, set[asyncio.Queue[dict[str, Any]]]] = {}
+        self._known: set[str] = set()
+        self._closed: set[str] = set()
         self._lock = threading.Lock()
 
-    def _queue_for(self, kit_id: str) -> asyncio.Queue[dict[str, Any]]:
-        with self._lock:
-            queue = self._queues.get(kit_id)
-            if queue is None:
-                queue = asyncio.Queue()
-                self._queues[kit_id] = queue
-            return queue
+    @staticmethod
+    def _offer(queue: asyncio.Queue[dict[str, Any]], event: dict[str, Any]) -> None:
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        queue.put_nowait(event)
 
     async def publish(self, kit_id: str, event: dict[str, Any]) -> None:
-        await self._queue_for(kit_id).put(event)
+        with self._lock:
+            self._known.add(kit_id)
+            self._closed.discard(kit_id)
+            subscribers = tuple(self._subscribers.get(kit_id, ()))
+        for queue in subscribers:
+            self._offer(queue, event)
 
     def close(self, kit_id: str) -> None:
         with self._lock:
-            queue = self._queues.get(kit_id)
-        if queue is not None:
-            queue.put_nowait(self._CLOSE_SENTINEL)
+            self._closed.add(kit_id)
+            subscribers = tuple(self._subscribers.get(kit_id, ()))
+            if not subscribers:
+                self._known.discard(kit_id)
+        for queue in subscribers:
+            self._offer(queue, self._CLOSE_SENTINEL)
 
     def has_kit(self, kit_id: str) -> bool:
         with self._lock:
-            return kit_id in self._queues
+            return kit_id in self._known and kit_id not in self._closed
 
     async def subscribe(self, kit_id: str) -> AsyncIterator[dict[str, Any]]:
-        queue = self._queue_for(kit_id)
-        while True:
-            item = await queue.get()
-            if item is self._CLOSE_SENTINEL:
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_MAX_EVENT_QUEUE_SIZE)
+        with self._lock:
+            if kit_id in self._closed:
                 return
-            yield item
+            self._known.add(kit_id)
+            self._subscribers.setdefault(kit_id, set()).add(queue)
+        try:
+            while True:
+                item = await queue.get()
+                if item is self._CLOSE_SENTINEL:
+                    return
+                yield item
+        finally:
+            with self._lock:
+                subscribers = self._subscribers.get(kit_id)
+                if subscribers is not None:
+                    subscribers.discard(queue)
+                    if not subscribers:
+                        self._subscribers.pop(kit_id, None)
+                        if kit_id in self._closed:
+                            self._known.discard(kit_id)
 
 
 # ---------------------------------------------------------------------------

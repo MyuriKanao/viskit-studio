@@ -1,4 +1,4 @@
-.PHONY: bootstrap compose-up compose-down compose-logs db-migrate dev lint typecheck \
+.PHONY: bootstrap compose-up compose-down compose-logs db-migrate dev lint test typecheck \
         schemas gen-api web-build docker-up docker-down docker-logs
 
 WEB_PORT ?= 3068
@@ -43,6 +43,10 @@ dev:
 lint:
 	pnpm -r lint
 	uv run ruff check .
+
+## test: run Python unit/regression tests
+test:
+	uv run python -m unittest discover -v
 
 ## typecheck: run TypeScript and mypy checks
 typecheck:

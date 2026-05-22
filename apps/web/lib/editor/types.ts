@@ -6,6 +6,18 @@
  */
 export type OpType = 'edit_text' | 'move_layer' | 'inpaint' | 'revert';
 
+export type EditorActiveTool = 'select' | 'text' | 'move' | 'inpaint' | null;
+
+export interface EditorLayerSummary {
+  id: string;
+  label: string;
+  kind: 'base-image' | 'ocr-text' | 'inpaint-mask' | 'fabric-object';
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+  selected: boolean;
+}
+
 export interface Command {
   id: string;
   op_type: OpType;
@@ -47,8 +59,41 @@ export interface CanvasStageHandle {
   undo: () => void;
   /** Re-apply the next editor history snapshot. */
   redo: () => void;
+  /** Select a Fabric-backed editor layer by stable layer id. */
+  selectLayerById: (layerId: string) => void;
+  /** Toggle a Fabric-backed editor layer's visibility. */
+  setLayerVisibility: (layerId: string, visible: boolean) => void;
+  /** Toggle a Fabric-backed editor layer's lock/selectability. */
+  setLayerLocked: (layerId: string, locked: boolean) => void;
+  /** Move a Fabric-backed layer up/down in the stack. */
+  moveLayer: (layerId: string, direction: 'up' | 'down') => void;
+  /** Delete a Fabric-backed layer. Base image is intentionally not deletable. */
+  deleteLayer: (layerId: string) => void;
+  /** Set a Fabric-backed layer opacity, clamped to 0..1 by the caller. */
+  setLayerOpacity: (layerId: string, opacity: number) => void;
   /** Export the current canvas as a PNG data URL for explicit save. */
   exportPngDataUrl: () => string | null;
+  /** Export the current canvas as a raster data URL for downloads. */
+  exportImageDataUrl: (options?: {
+    format?: 'png' | 'jpeg' | 'webp';
+    quality?: number;
+  }) => string | null;
+  /** Build a versioned editor document from the current Fabric-backed layer state. */
+  exportEditorDocument: (input: {
+    id?: string;
+    imageId: string;
+    imageUrl: string;
+    width: number;
+    height: number;
+    activeToolId: string;
+    enabledToolGroups: string[];
+  }) => import('@/lib/editor/document').ViskitEditorDocument | null;
+  /** Load a versioned editor document into the Fabric canvas. */
+  loadEditorDocument: (
+    document: import('@/lib/editor/document').ViskitEditorDocument
+  ) => Promise<void>;
+  /** Export the current Fabric snapshot for production history checkpoints. */
+  exportFabricSnapshot: () => unknown | null;
   /** Count of fabric objects on the canvas (mask + text layers). For tests. */
   getObjectCount: () => number;
 }

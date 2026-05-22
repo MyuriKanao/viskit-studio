@@ -9,7 +9,10 @@
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "check:tokens": "node tools/check-token-drift.mjs",
-    "gen:api": "node tools/gen-api.mjs"
+    "gen:api": "node tools/gen-api.mjs",
+    "test": "pnpm test:editor-core && pnpm test:editor-component-smoke",
+    "test:editor-core": "rm -rf /tmp/viskit-editor-core-tests && tsc -p tsconfig.editor-tests.json --outDir /tmp/viskit-editor-core-tests && node --test /tmp/viskit-editor-core-tests/lib/editor/core-tests.js",
+    "test:editor-component-smoke": "rm -rf /tmp/viskit-editor-component-tests && tsc -p tsconfig.editor-component-tests.json --outDir /tmp/viskit-editor-component-tests && node --no-deprecation tools/run-editor-component-smoke.mjs /tmp/viskit-editor-component-tests"
   },
   "dependencies": {
     "@formatjs/intl-localematcher": "^0.5.0",
@@ -38,6 +41,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@playwright/test": "1.59.1",
     "@tanstack/react-query-devtools": "^5.85.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.17.57",
@@ -48,6 +52,7 @@
     "openapi-typescript": "^7.4.4",
     "postcss": "^8.5.4",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "jsdom": "20.0.3"
   }
 }

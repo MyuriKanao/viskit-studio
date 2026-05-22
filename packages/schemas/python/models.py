@@ -120,6 +120,64 @@ class EditResultOut(BaseModel):
     status: Annotated[str, Field(title='Status')]
 
 
+class EditorProjectResponse(BaseModel):
+    checksum: Annotated[str, Field(title='Checksum')]
+    created_at: Annotated[str | None, Field(title='Created At')] = None
+    document: Annotated[dict[str, Any], Field(title='Document')]
+    document_schema_version: Annotated[int, Field(title='Document Schema Version')]
+    image_id: Annotated[str, Field(title='Image Id')]
+    project_id: Annotated[str, Field(title='Project Id')]
+    revision: Annotated[int, Field(title='Revision')]
+    source_image_ref: Annotated[str | None, Field(title='Source Image Ref')] = None
+    updated_at: Annotated[str | None, Field(title='Updated At')] = None
+
+
+class ExpectedRevision(RootModel[int]):
+    root: Annotated[
+        int,
+        Field(
+            description='Optimistic concurrency guard; 409 when it differs from stored revision.',
+            ge=1,
+            title='Expected Revision',
+        ),
+    ]
+
+
+class SourceImageRef(RootModel[str]):
+    root: Annotated[
+        str,
+        Field(
+            description='Optional source_images.id backing this project import.',
+            max_length=120,
+            pattern='^[A-Za-z0-9_-]+$',
+            title='Source Image Ref',
+        ),
+    ]
+
+
+class EditorProjectSaveRequest(BaseModel):
+    document: Annotated[
+        dict[str, Any],
+        Field(
+            description='Versioned ViskitEditorDocument JSON object', title='Document'
+        ),
+    ]
+    expected_revision: Annotated[
+        ExpectedRevision | None,
+        Field(
+            description='Optimistic concurrency guard; 409 when it differs from stored revision.',
+            title='Expected Revision',
+        ),
+    ] = None
+    source_image_ref: Annotated[
+        SourceImageRef | None,
+        Field(
+            description='Optional source_images.id backing this project import.',
+            title='Source Image Ref',
+        ),
+    ] = None
+
+
 class EndpointSecretResponse(BaseModel):
     api_key: Annotated[str, Field(title='Api Key')]
 

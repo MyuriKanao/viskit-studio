@@ -334,6 +334,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/images/{image_id}/project": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Editor Project
+         * @description Return the saved Viskit editor project JSON for a canonical image id.
+         */
+        get: operations["get_editor_project_api_images__image_id__project_get"];
+        /**
+         * Put Editor Project
+         * @description Create or replace the persisted project JSON for a canonical image id.
+         */
+        put: operations["put_editor_project_api_images__image_id__project_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/images/{image_id}/project/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Editor Project
+         * @description Download the saved editor project as project JSON.
+         */
+        get: operations["export_editor_project_api_images__image_id__project_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/images/{image_id}/project/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Editor Project
+         * @description Import project JSON into the persisted editor state for this image.
+         */
+        post: operations["import_editor_project_api_images__image_id__project_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/images/{image_id}/save": {
         parameters: {
             query?: never;
@@ -1231,6 +1295,49 @@ export interface components {
             result_url: string;
             /** Status */
             status: string;
+        };
+        /** EditorProjectResponse */
+        EditorProjectResponse: {
+            /** Checksum */
+            checksum: string;
+            /** Created At */
+            created_at?: string | null;
+            /** Document */
+            document: {
+                [key: string]: unknown;
+            };
+            /** Document Schema Version */
+            document_schema_version: number;
+            /** Image Id */
+            image_id: string;
+            /** Project Id */
+            project_id: string;
+            /** Revision */
+            revision: number;
+            /** Source Image Ref */
+            source_image_ref?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** EditorProjectSaveRequest */
+        EditorProjectSaveRequest: {
+            /**
+             * Document
+             * @description Versioned ViskitEditorDocument JSON object
+             */
+            document: {
+                [key: string]: unknown;
+            };
+            /**
+             * Expected Revision
+             * @description Optimistic concurrency guard; 409 when it differs from stored revision.
+             */
+            expected_revision?: number | null;
+            /**
+             * Source Image Ref
+             * @description Optional source_images.id backing this project import.
+             */
+            source_image_ref?: string | null;
         };
         /** EndpointSecretResponse */
         EndpointSecretResponse: {
@@ -3005,6 +3112,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OcrResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_editor_project_api_images__image_id__project_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditorProjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_editor_project_api_images__image_id__project_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditorProjectSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditorProjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_editor_project_api_images__image_id__project_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_editor_project_api_images__image_id__project_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditorProjectSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditorProjectResponse"];
                 };
             };
             /** @description Validation Error */

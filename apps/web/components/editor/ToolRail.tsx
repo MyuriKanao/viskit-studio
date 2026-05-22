@@ -2,11 +2,12 @@
 
 import { Loader2, MousePointer2, Move, Redo2, Type, Undo2, Wand2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useEffect } from 'react';
+import { type ComponentType, useEffect, useMemo } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useCommandStack } from '@/lib/editor/command-stack';
+import { EDITOR_TOOL_REGISTRY, type EditorToolDefinition } from '@/lib/editor/tools';
 import { cn } from '@/lib/utils';
 
 export type ToolId = 'select' | 'text' | 'move' | 'inpaint' | 'undo' | 'redo';
@@ -20,6 +21,7 @@ export interface ToolRailProps {
   onUndo: () => void;
   onRedo: () => void;
   hasMask: boolean;
+  tools?: readonly EditorToolDefinition[];
   className?: string;
 }
 
@@ -32,6 +34,13 @@ const STATE_CLASSES: Record<ButtonState, string> = {
   loading: 'bg-accent-wash text-accent',
 };
 
+const TOOL_ICONS = {
+  select: MousePointer2,
+  move: Move,
+  text: Type,
+  inpaint: Wand2,
+} satisfies Record<'select' | 'move' | 'text' | 'inpaint', ComponentType<{ className?: string }>>;
+
 export function ToolRail({
   activeTool,
   onToolChange,
@@ -41,12 +50,18 @@ export function ToolRail({
   onUndo,
   onRedo,
   hasMask,
+  tools = EDITOR_TOOL_REGISTRY,
   className,
 }: ToolRailProps) {
   const t = useTranslations('editor.tools');
   const undoEmpty = useCommandStack((s) => s.undoStack.length === 0);
   const redoEmpty = useCommandStack((s) => s.redoStack.length === 0);
   const isStreaming = inpaintStatus === 'streaming';
+  const visibleTools = useMemo(() => tools.filter((tool) => tool.id in TOOL_ICONS), [tools]);
+  const visibleToolIds = useMemo(
+    () => new Set(visibleTools.map((tool) => tool.id)),
+    [visibleTools]
+  );
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -75,22 +90,25 @@ export function ToolRail({
       switch (e.key) {
         case 'v':
         case 'V':
-          if (!isStreaming) onToolChange('select');
+          if (!isStreaming && visibleToolIds.has('select')) onToolChange('select');
           break;
         case 't':
         case 'T':
-          if (!isStreaming) onToolChange('text');
+          if (!isStreaming && visibleToolIds.has('text')) onToolChange('text');
           break;
         case 'm':
         case 'M':
-          if (!isStreaming) onToolChange('move');
+          if (!isStreaming && visibleToolIds.has('move')) onToolChange('move');
           break;
         case 'i':
         case 'I':
-          if (!isStreaming) {
-            if (hasMask) onInpaintStart();
-          } else {
+          if (!visibleToolIds.has('inpaint')) return;
+          if (isStreaming) {
             onInpaintAbort();
+          } else if (activeTool === 'inpaint' && hasMask) {
+            onInpaintStart();
+          } else {
+            onToolChange('inpaint');
           }
           break;
         default:
@@ -110,16 +128,17 @@ export function ToolRail({
     onInpaintAbort,
     onUndo,
     onRedo,
+    activeTool,
+    visibleToolIds,
   ]);
 
-  function getToolState(id: 'select' | 'text' | 'move'): ButtonState {
+  function getToolState(id: 'select' | 'text' | 'move' | 'inpaint'): ButtonState {
     if (isStreaming) return 'disabled';
     return activeTool === id ? 'active' : 'idle';
   }
 
   function getInpaintState(): ButtonState {
     if (isStreaming) return 'loading';
-    if (!hasMask) return 'disabled';
     return activeTool === 'inpaint' ? 'active' : 'idle';
   }
 
@@ -133,12 +152,24 @@ export function ToolRail({
     return redoEmpty ? 'disabled' : 'idle';
   }
 
-  const selectState = getToolState('select');
-  const textState = getToolState('text');
-  const moveState = getToolState('move');
-  const inpaintState = getInpaintState();
   const undoState = getUndoState();
   const redoState = getRedoState();
+
+  function handleToolClick(id: 'select' | 'text' | 'move' | 'inpaint') {
+    if (id !== 'inpaint') {
+      onToolChange(id);
+      return;
+    }
+    if (isStreaming) {
+      onInpaintAbort();
+      return;
+    }
+    if (activeTool === 'inpaint' && hasMask) {
+      onInpaintStart();
+      return;
+    }
+    onToolChange('inpaint');
+  }
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -149,81 +180,35 @@ export function ToolRail({
         )}
         data-testid="tool-rail"
       >
-        {/* Select */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              data-state={selectState}
-              data-testid="tool-select"
-              className={cn(STATE_CLASSES[selectState])}
-              onClick={() => onToolChange('select')}
-              aria-label={t('select')}
-            >
-              <MousePointer2 className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">{t('select')} (V)</TooltipContent>
-        </Tooltip>
-
-        {/* Text */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              data-state={textState}
-              data-testid="tool-text"
-              className={cn(STATE_CLASSES[textState])}
-              onClick={() => onToolChange('text')}
-              aria-label={t('text')}
-            >
-              <Type className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">{t('text')} (T)</TooltipContent>
-        </Tooltip>
-
-        {/* Move */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              data-state={moveState}
-              data-testid="tool-move"
-              className={cn(STATE_CLASSES[moveState])}
-              onClick={() => onToolChange('move')}
-              aria-label={t('move')}
-            >
-              <Move className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">{t('move')} (M)</TooltipContent>
-        </Tooltip>
-
-        {/* Inpaint */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              data-state={inpaintState}
-              data-testid="tool-inpaint"
-              className={cn(STATE_CLASSES[inpaintState])}
-              onClick={isStreaming ? onInpaintAbort : onInpaintStart}
-              aria-label={t('inpaint')}
-            >
-              {isStreaming ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Wand2 className="h-4 w-4" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">{t('inpaint')} (I)</TooltipContent>
-        </Tooltip>
+        {visibleTools.map((tool) => {
+          const id = tool.id as 'select' | 'text' | 'move' | 'inpaint';
+          const state = id === 'inpaint' ? getInpaintState() : getToolState(id);
+          const Icon = id === 'inpaint' && isStreaming ? Loader2 : TOOL_ICONS[id];
+          return (
+            <Tooltip key={tool.id}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  data-state={state}
+                  data-testid={tool.testId}
+                  className={cn(STATE_CLASSES[state])}
+                  disabled={state === 'disabled'}
+                  onClick={() => handleToolClick(id)}
+                  aria-label={t(tool.id)}
+                >
+                  <Icon
+                    className={cn('h-4 w-4', isStreaming && id === 'inpaint' && 'animate-spin')}
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {t(tool.id)}
+                {tool.shortcut ? ` (${tool.shortcut})` : null}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
 
         {/* Undo */}
         <Tooltip>
@@ -234,6 +219,7 @@ export function ToolRail({
               data-state={undoState}
               data-testid="tool-undo"
               className={cn(STATE_CLASSES[undoState])}
+              disabled={undoState === 'disabled'}
               onClick={onUndo}
               aria-label={t('undo')}
             >
@@ -252,6 +238,7 @@ export function ToolRail({
               data-state={redoState}
               data-testid="tool-redo"
               className={cn(STATE_CLASSES[redoState])}
+              disabled={redoState === 'disabled'}
               onClick={onRedo}
               aria-label={t('redo')}
             >

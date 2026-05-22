@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "isolatedModules": false,
+    "rootDir": ".",
+    "types": [
+      "node"
+    ],
+    "incremental": false
+  },
+  "include": [],
+  "files": [
+    "lib/editor/adapters/fabric.ts",
+    "lib/editor/commands.ts",
+    "lib/editor/core-tests.ts",
+    "lib/editor/document.ts",
+    "lib/editor/history.ts",
+    "lib/editor/layers.ts",
+    "lib/editor/serialization.ts",
+    "lib/editor/tools.ts"
+  ]
+}

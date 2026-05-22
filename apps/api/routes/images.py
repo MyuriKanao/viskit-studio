@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import re
@@ -14,7 +15,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -36,6 +37,8 @@ _EDIT_RESULT_RE = re.compile(r"^edit-result:(?P<result_id>[A-Za-z0-9_-]{1,64})$"
 _OCR_CACHE: dict[str, dict[str, Any]] = {}
 # In-memory inpaint jobs registry (job_id -> asyncio.Queue of SSE events)
 _INPAINT_JOBS: dict[str, asyncio.Queue[dict[str, Any]]] = {}
+_EDITOR_PROJECT_SCHEMA_VERSION = 1
+_MAX_EDITOR_PROJECT_BYTES = 2 * 1024 * 1024
 
 
 def _repo_root() -> Path:
@@ -86,6 +89,85 @@ def _is_relative_to(path: Path, root: Path) -> bool:
 
 def _asset_url(image_id: str) -> str:
     return f"/api/images/{image_id}/bytes"
+
+
+def _iso_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return str(value.isoformat())
+    return str(value)
+
+
+def _json_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="stored editor project is not valid JSON",
+            ) from exc
+        if isinstance(parsed, dict):
+            return parsed
+    raise HTTPException(status_code=500, detail="stored editor project is not a JSON object")
+
+
+def _editor_document_schema_version(document: dict[str, Any]) -> int:
+    raw_version = document.get("schema_version", document.get("version"))
+    if isinstance(raw_version, bool) or not isinstance(raw_version, int):
+        raise HTTPException(
+            status_code=422,
+            detail="editor project document requires integer schema_version or version",
+        )
+    if raw_version != _EDITOR_PROJECT_SCHEMA_VERSION:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "unsupported editor project schema version: "
+                f"{raw_version}; expected {_EDITOR_PROJECT_SCHEMA_VERSION}"
+            ),
+        )
+    return raw_version
+
+
+def _unwrap_frontend_project_document(document: dict[str, Any]) -> dict[str, Any]:
+    if document.get("schema") != "viskit-editor-project":
+        return document
+    raw_version = document.get("version")
+    if isinstance(raw_version, bool) or raw_version != _EDITOR_PROJECT_SCHEMA_VERSION:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "unsupported editor project wrapper version: "
+                f"{raw_version}; expected {_EDITOR_PROJECT_SCHEMA_VERSION}"
+            ),
+        )
+    nested_document = document.get("document")
+    if not isinstance(nested_document, dict):
+        raise HTTPException(status_code=422, detail="editor project wrapper requires document")
+    return nested_document
+
+
+def _canonical_project_json(document: dict[str, Any]) -> str:
+    try:
+        payload = json.dumps(
+            document,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="editor project document must be JSON") from exc
+    if len(payload.encode("utf-8")) > _MAX_EDITOR_PROJECT_BYTES:
+        raise HTTPException(status_code=413, detail="editor project document exceeds 2 MiB")
+    return payload
+
+
+def _project_checksum(canonical_json: str) -> str:
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
 
 
 @contextmanager
@@ -398,6 +480,208 @@ class SaveImageResponse(BaseModel):
     image_url: str
     asset_id: str | None = None
     replaced: bool
+
+
+class EditorProjectSaveRequest(BaseModel):
+    document: dict[str, Any] = Field(description="Versioned ViskitEditorDocument JSON object")
+    source_image_ref: str | None = Field(
+        default=None,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="Optional source_images.id backing this project import.",
+    )
+    expected_revision: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optimistic concurrency guard; 409 when it differs from stored revision.",
+    )
+
+
+class EditorProjectResponse(BaseModel):
+    image_id: str
+    project_id: str
+    source_image_ref: str | None = None
+    document_schema_version: int
+    revision: int
+    checksum: str
+    document: dict[str, Any]
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+def _validate_source_image_ref(session: Session, source_image_ref: str | None) -> None:
+    if source_image_ref is None:
+        return
+    row = session.execute(
+        text("SELECT 1 FROM source_images WHERE id = :id"),
+        {"id": source_image_ref},
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=422, detail="source_image_ref does not exist")
+
+
+def _project_response_from_row(row: Any) -> EditorProjectResponse:
+    return EditorProjectResponse(
+        image_id=str(row.target_image_id),
+        project_id=str(row.id),
+        source_image_ref=str(row.source_image_ref) if row.source_image_ref is not None else None,
+        document_schema_version=int(row.document_schema_version),
+        revision=int(row.revision),
+        checksum=str(row.checksum),
+        document=_json_object(row.document),
+        created_at=_iso_or_none(getattr(row, "created_at", None)),
+        updated_at=_iso_or_none(getattr(row, "updated_at", None)),
+    )
+
+
+def _editor_project_row(session: Session, image_id: str) -> Any | None:
+    return session.execute(
+        text(
+            "SELECT id, target_image_id, source_image_ref, document,"
+            " document_schema_version, revision, checksum, created_at, updated_at"
+            " FROM editor_projects WHERE target_image_id = :target_image_id"
+        ),
+        {"target_image_id": image_id},
+    ).first()
+
+
+def _editor_project_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail={"code": "EDITOR_PROJECT_NOT_FOUND"})
+
+
+def _safe_project_filename(image_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", image_id).strip("._")
+    return f"{safe or 'editor-project'}.viskit-project.json"
+
+
+def _save_editor_project(
+    *,
+    image_id: str,
+    body: EditorProjectSaveRequest,
+    session: Session,
+) -> EditorProjectResponse:
+    # Validate the canonical image-id contract and stored path allowlist before
+    # accepting project JSON for this target.
+    _resolve_image_target(image_id, session)
+    _validate_source_image_ref(session, body.source_image_ref)
+
+    document = _unwrap_frontend_project_document(body.document)
+    schema_version = _editor_document_schema_version(document)
+    document_json = _canonical_project_json(document)
+    checksum = _project_checksum(document_json)
+    existing = _editor_project_row(session, image_id)
+
+    if existing is None:
+        if body.expected_revision is not None:
+            raise HTTPException(status_code=409, detail="editor project has no stored revision")
+        project_id = f"project_{hashlib.sha256(image_id.encode('utf-8')).hexdigest()[:32]}"
+        row = session.execute(
+            text(
+                "INSERT INTO editor_projects"
+                " (id, target_image_id, source_image_ref, document,"
+                "  document_schema_version, revision, checksum)"
+                " VALUES (:id, :target_image_id, :source_image_ref,"
+                f" {json_param(session, 'document')},"
+                " :document_schema_version, 1, :checksum)"
+                " RETURNING id, target_image_id, source_image_ref, document,"
+                " document_schema_version, revision, checksum, created_at, updated_at"
+            ),
+            {
+                "id": project_id,
+                "target_image_id": image_id,
+                "source_image_ref": body.source_image_ref,
+                "document": document_json,
+                "document_schema_version": schema_version,
+                "checksum": checksum,
+            },
+        ).first()
+    else:
+        current_revision = int(existing.revision)
+        if body.expected_revision is not None and body.expected_revision != current_revision:
+            raise HTTPException(
+                status_code=409,
+                detail=f"editor project revision mismatch: expected {body.expected_revision}, "
+                f"current {current_revision}",
+            )
+        row = session.execute(
+            text(
+                "UPDATE editor_projects SET"
+                " source_image_ref = :source_image_ref,"
+                f" document = {json_param(session, 'document')},"
+                " document_schema_version = :document_schema_version,"
+                " revision = revision + 1,"
+                " checksum = :checksum,"
+                " updated_at = CURRENT_TIMESTAMP"
+                " WHERE target_image_id = :target_image_id"
+                " RETURNING id, target_image_id, source_image_ref, document,"
+                " document_schema_version, revision, checksum, created_at, updated_at"
+            ),
+            {
+                "target_image_id": image_id,
+                "source_image_ref": body.source_image_ref,
+                "document": document_json,
+                "document_schema_version": schema_version,
+                "checksum": checksum,
+            },
+        ).first()
+    if row is None:
+        raise HTTPException(status_code=500, detail="editor project persistence failed")
+    return _project_response_from_row(row)
+
+
+@router.get("/{image_id}/project", response_model=EditorProjectResponse)
+def get_editor_project(
+    image_id: str,
+    session: Annotated[Session, Depends(get_session)],
+) -> EditorProjectResponse:
+    """Return the saved Viskit editor project JSON for a canonical image id."""
+    _resolve_image_target(image_id, session)
+    row = _editor_project_row(session, image_id)
+    if row is None:
+        raise _editor_project_not_found()
+    return _project_response_from_row(row)
+
+
+@router.get("/{image_id}/project/export")
+def export_editor_project(
+    image_id: str,
+    session: Annotated[Session, Depends(get_session)],
+) -> Response:
+    """Download the saved editor project as project JSON."""
+    _resolve_image_target(image_id, session)
+    row = _editor_project_row(session, image_id)
+    if row is None:
+        raise _editor_project_not_found()
+    document = _json_object(row.document)
+    return Response(
+        content=json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{_safe_project_filename(image_id)}"',
+            "ETag": str(row.checksum),
+            "X-Viskit-Project-Revision": str(row.revision),
+        },
+    )
+
+
+@router.put("/{image_id}/project", response_model=EditorProjectResponse)
+def put_editor_project(
+    image_id: str,
+    body: EditorProjectSaveRequest,
+    session: Annotated[Session, Depends(get_session)],
+) -> EditorProjectResponse:
+    """Create or replace the persisted project JSON for a canonical image id."""
+    return _save_editor_project(image_id=image_id, body=body, session=session)
+
+
+@router.post("/{image_id}/project/import", response_model=EditorProjectResponse)
+def import_editor_project(
+    image_id: str,
+    body: EditorProjectSaveRequest,
+    session: Annotated[Session, Depends(get_session)],
+) -> EditorProjectResponse:
+    """Import project JSON into the persisted editor state for this image."""
+    return _save_editor_project(image_id=image_id, body=body, session=session)
 
 
 @router.get("/{image_id}/bytes")

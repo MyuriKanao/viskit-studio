@@ -28,6 +28,21 @@ _MIME_EXTENSIONS: dict[str, str] = {
     "image/jpg": ".jpg",
     "image/webp": ".webp",
     "image/gif": ".gif",
+    "image/bmp": ".bmp",
+    "image/tiff": ".tiff",
+    "image/tif": ".tif",
+}
+_MIME_ALIASES: dict[str, str] = {
+    "image/jpg": "image/jpeg",
+    "image/tif": "image/tiff",
+}
+_SUPPORTED_IMAGE_MIME_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif",
+    "image/bmp",
+    "image/tiff",
 }
 
 
@@ -62,6 +77,15 @@ def _extension_for_mime(mime_type: str) -> str:
     return _MIME_EXTENSIONS.get(mime_type.lower(), ".img")
 
 
+def _normalize_source_image_mime(mime_type: str) -> str:
+    normalized = _MIME_ALIASES.get(mime_type.lower(), mime_type.lower())
+    if not normalized.startswith("image/"):
+        raise HTTPException(status_code=415, detail="source image must be image/*")
+    if normalized not in _SUPPORTED_IMAGE_MIME_TYPES:
+        raise HTTPException(status_code=415, detail="unsupported source image MIME type")
+    return normalized
+
+
 def _decode_data_url(data_url: str) -> tuple[bytes, str]:
     match = _DATA_URL_RE.match(data_url)
     if match is None:
@@ -90,8 +114,7 @@ async def _read_request_image(request: Request) -> tuple[bytes, str]:
             raise HTTPException(status_code=422, detail="expected JSON {data_url}") from exc
         image_bytes, mime_type = _decode_data_url(payload.data_url)
 
-    if not mime_type.startswith("image/"):
-        raise HTTPException(status_code=415, detail="source image must be image/*")
+    mime_type = _normalize_source_image_mime(mime_type)
     if len(image_bytes) > _MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="source image exceeds 10 MiB")
     if not image_bytes:

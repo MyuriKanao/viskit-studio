@@ -72,6 +72,7 @@ _TERMINAL_JOB_STATUSES = {"stopped", "succeeded", "failed", "partial", "interrup
 _SAFE_OUTPUT_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
 _DEFAULT_JOB_CONCURRENCY = 4
 _MAX_JOB_CONCURRENCY = 16
+_MAX_EVENT_QUEUE_SIZE = 100
 
 
 def _as_job_status(value: str) -> JobStatus:
@@ -96,33 +97,59 @@ class GenerationEventBus:
     _CLOSE_SENTINEL: dict[str, Any] = {"__sentinel__": True}
 
     def __init__(self) -> None:
-        self._queues: dict[str, asyncio.Queue[dict[str, Any]]] = {}
+        self._subscribers: dict[str, set[asyncio.Queue[dict[str, Any]]]] = {}
+        self._known: set[str] = set()
+        self._closed: set[str] = set()
         self._lock = threading.Lock()
 
-    def _queue_for(self, job_id: str) -> asyncio.Queue[dict[str, Any]]:
-        with self._lock:
-            queue = self._queues.get(job_id)
-            if queue is None:
-                queue = asyncio.Queue()
-                self._queues[job_id] = queue
-            return queue
+    @staticmethod
+    def _offer(queue: asyncio.Queue[dict[str, Any]], event: dict[str, Any]) -> None:
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        queue.put_nowait(event)
 
     async def publish(self, job_id: str, event: dict[str, Any]) -> None:
-        await self._queue_for(job_id).put(event)
+        with self._lock:
+            self._known.add(job_id)
+            self._closed.discard(job_id)
+            subscribers = tuple(self._subscribers.get(job_id, ()))
+        for queue in subscribers:
+            self._offer(queue, event)
 
     def close(self, job_id: str) -> None:
         with self._lock:
-            queue = self._queues.get(job_id)
-        if queue is not None:
-            queue.put_nowait(self._CLOSE_SENTINEL)
+            self._closed.add(job_id)
+            subscribers = tuple(self._subscribers.get(job_id, ()))
+            if not subscribers:
+                self._known.discard(job_id)
+        for queue in subscribers:
+            self._offer(queue, self._CLOSE_SENTINEL)
 
     async def subscribe(self, job_id: str) -> AsyncIterator[dict[str, Any]]:
-        queue = self._queue_for(job_id)
-        while True:
-            item = await queue.get()
-            if item is self._CLOSE_SENTINEL:
+        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_MAX_EVENT_QUEUE_SIZE)
+        with self._lock:
+            if job_id in self._closed:
                 return
-            yield item
+            self._known.add(job_id)
+            self._subscribers.setdefault(job_id, set()).add(queue)
+        try:
+            while True:
+                item = await queue.get()
+                if item is self._CLOSE_SENTINEL:
+                    return
+                yield item
+        finally:
+            with self._lock:
+                subscribers = self._subscribers.get(job_id)
+                if subscribers is not None:
+                    subscribers.discard(queue)
+                    if not subscribers:
+                        self._subscribers.pop(job_id, None)
+                        if job_id in self._closed:
+                            self._known.discard(job_id)
 
 
 _EVENT_BUS = GenerationEventBus()
@@ -554,10 +581,14 @@ def stop_generation_job(
 @router.get("/{job_id}/events")
 async def generation_job_events(job_id: str) -> StreamingResponse:
     with session_scope() as session:
-        snapshot = _job_response(session, job_id).model_dump(mode="json")
+        job = _job_response(session, job_id)
+        snapshot = job.model_dump(mode="json")
+        terminal = job.status in _TERMINAL_JOB_STATUSES
 
     async def _stream() -> AsyncIterator[bytes]:
         yield (f"event: snapshot\ndata: {json.dumps(snapshot, ensure_ascii=False)}\n\n").encode()
+        if terminal:
+            return
         async for event in _EVENT_BUS.subscribe(job_id):
             payload = json.dumps(event, ensure_ascii=False)
             yield f"event: update\ndata: {payload}\n\n".encode()
