@@ -7,24 +7,35 @@ from services.editor.types import TextBox
 _engine: Any | None = None
 
 
+class OcrUnavailableError(RuntimeError):
+    """Raised when the optional local OCR runtime is not installed."""
+
+
 def _get_engine() -> Any:
     global _engine
     if _engine is None:
         # paddleocr ships no PEP 561 stubs; runtime-only dependency.
-        from paddleocr import PaddleOCR  # type: ignore[import-not-found]  # heavy import, lazy
+        try:
+            from paddleocr import PaddleOCR  # type: ignore[import-not-found]  # heavy import, lazy
+        except ModuleNotFoundError as exc:
+            if exc.name == "paddleocr":
+                raise OcrUnavailableError("paddleocr is not installed") from exc
+            raise
 
         _engine = PaddleOCR(lang="ch", show_log=False)
     return _engine
 
 
 def detect_text_boxes(image_bytes: bytes) -> list[TextBox]:
+    engine = _get_engine()
+
     from io import BytesIO
 
     import numpy as np
     from PIL import Image
 
     img = np.array(Image.open(BytesIO(image_bytes)).convert("RGB"))
-    result = _get_engine().ocr(img, cls=False)
+    result = engine.ocr(img, cls=False)
     boxes: list[TextBox] = []
     for line in (result or [[]])[0] or []:
         pts, (text, conf) = line[0], line[1]
@@ -43,4 +54,4 @@ def detect_text_boxes(image_bytes: bytes) -> list[TextBox]:
     return boxes
 
 
-__all__ = ["detect_text_boxes"]
+__all__ = ["OcrUnavailableError", "detect_text_boxes"]

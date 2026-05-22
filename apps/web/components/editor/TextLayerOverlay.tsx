@@ -5,12 +5,14 @@ import * as React from 'react';
 
 import type { OcrBox } from '@/hooks/use-ocr';
 import { useOcr } from '@/hooks/use-ocr';
+import type { EditorActiveTool } from '@/lib/editor/types';
 import { cn } from '@/lib/utils';
 
 export interface TextLayerOverlayProps {
   imageId: string;
   canvasWidth: number;
   canvasHeight: number;
+  activeTool?: EditorActiveTool;
   onBoxClick?: (index: number, box: OcrBox) => void;
   className?: string;
 }
@@ -73,20 +75,23 @@ function OcrFeedback({
 interface OcrRectProps {
   box: OcrBox;
   index: number;
+  interactive: boolean;
   onBoxClick?: (index: number, box: OcrBox) => void;
 }
 
-function OcrRect({ box, index, onBoxClick }: OcrRectProps) {
+function OcrRect({ box, index, interactive, onBoxClick }: OcrRectProps) {
   const [hovered, setHovered] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
 
   const isActive = hovered || focused;
 
   function handleClick() {
+    if (!interactive) return;
     onBoxClick?.(index, box);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
+    if (!interactive) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onBoxClick?.(index, box);
@@ -102,10 +107,11 @@ function OcrRect({ box, index, onBoxClick }: OcrRectProps) {
         width={box.w}
         height={box.h}
         rx={2}
-        tabIndex={0}
+        tabIndex={interactive ? 0 : -1}
         aria-label={`OCR region: ${box.text}`}
         className={cn(
-          'cursor-pointer outline-none transition-colors duration-fast',
+          'outline-none transition-colors duration-fast',
+          interactive ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none',
           isActive ? 'fill-accent-wash stroke-accent opacity-80' : 'fill-accent-glow stroke-accent'
         )}
         strokeWidth={1.5}
@@ -175,11 +181,13 @@ export function TextLayerOverlay({
   imageId,
   canvasWidth,
   canvasHeight,
+  activeTool,
   onBoxClick,
   className,
 }: TextLayerOverlayProps) {
   const t = useTranslations('editor.ocr');
   const { data, isLoading, isError } = useOcr(imageId);
+  const boxInteractionEnabled = activeTool !== 'inpaint' && activeTool !== 'move';
 
   if (isLoading) {
     return (
@@ -201,6 +209,14 @@ export function TextLayerOverlay({
     );
   }
 
+  if (data?.available === false) {
+    return (
+      <div className={cn('pointer-events-none absolute inset-0', className)}>
+        <OcrFeedback state="empty" message={t('unavailable')} />
+      </div>
+    );
+  }
+
   if (!data || data.boxes.length === 0) {
     return (
       <div className={cn('pointer-events-none absolute inset-0', className)}>
@@ -210,13 +226,13 @@ export function TextLayerOverlay({
   }
 
   return (
-    <div className={cn('absolute inset-0', className)}>
+    <div className={cn('pointer-events-none absolute inset-0', className)}>
       <svg
         role="img"
         aria-label="OCR text regions"
         width={canvasWidth}
         height={canvasHeight}
-        className="absolute inset-0"
+        className="pointer-events-none absolute inset-0"
         style={{ top: 0, left: 0 }}
       >
         {data.boxes.map((box, i) => (
@@ -225,6 +241,7 @@ export function TextLayerOverlay({
             key={i}
             box={box}
             index={i}
+            interactive={boxInteractionEnabled}
             onBoxClick={onBoxClick}
           />
         ))}

@@ -9,6 +9,7 @@ import { Simulate } from 'react-dom/test-utils';
 
 import { HistoryTimeline } from '@/components/editor/HistoryTimeline';
 import { LayerPanel } from '@/components/editor/LayerPanel';
+import { ToolOptionsPanel } from '@/components/editor/ToolOptionsPanel';
 import { ToolRail } from '@/components/editor/ToolRail';
 import { useCommandStack } from '@/lib/editor/command-stack';
 import { downloadDataUrl, downloadText, safeDownloadName } from '@/lib/editor/downloads';
@@ -77,6 +78,59 @@ const messages = {
       moveDown: 'Move layer down',
       delete: 'Delete layer',
       opacity: 'Opacity',
+    },
+    properties: {
+      title: 'Properties',
+      activeTool: 'Active tool: {tool}',
+      tool: {
+        select: 'Select',
+        text: 'Text',
+        move: 'Move',
+        inpaint: 'AI Inpaint',
+        none: 'None',
+      },
+      kind: {
+        'base-image': 'Base image',
+        'fabric-object': 'Object',
+        'inpaint-mask': 'Inpaint mask',
+        'ocr-text': 'OCR text',
+      },
+      selection: {
+        title: 'Selection',
+        layer: 'Layer',
+        kind: 'Kind',
+        state: 'State',
+        locked: 'Locked',
+        editable: 'Editable',
+        empty: 'No editable layer selected',
+      },
+      text: {
+        title: 'Text tool',
+        hint: 'Click the canvas to create a text layer.',
+        add: 'Add text layer',
+      },
+      select: {
+        title: 'Select tool',
+        hint: 'Select editable layers.',
+      },
+      move: {
+        title: 'Move tool',
+        hint: 'Drag editable layers.',
+      },
+      inpaint: {
+        title: 'AI inpaint',
+        drawMask: 'Drag a mask.',
+        maskReady: 'Mask ready: {width}×{height}px',
+        start: 'Start inpaint',
+        cancel: 'Cancel',
+        status: {
+          idle: 'Idle',
+          streaming: 'Inpainting…',
+          success: 'Inpaint complete',
+          error: 'Inpaint failed',
+          aborted: 'Inpaint aborted',
+        },
+      },
     },
   },
 };
@@ -270,6 +324,33 @@ test('tool rail component smoke covers shortcut routing, disabled state, and foc
 
   dispatchKey('z', { ctrlKey: true });
   assert.deepEqual(undoCalls, ['undo']);
+});
+
+test('tool options expose an immediate text action for manual editing', async () => {
+  const actions: string[] = [];
+  const host = await renderWithIntl(
+    <ToolOptionsPanel
+      activeTool="text"
+      selectedLayer={null}
+      maskBox={null}
+      inpaintStatus="idle"
+      onAddTextLayer={() => actions.push('add-text')}
+      onInpaintStart={() => actions.push('inpaint-start')}
+      onInpaintAbort={() => actions.push('inpaint-abort')}
+    />
+  );
+
+  const addText = host.querySelector(
+    '[data-testid="editor-add-text-layer"]'
+  ) as HTMLButtonElement | null;
+  assert.ok(addText);
+  assert.equal(addText.disabled, false);
+  act(() => addText.click());
+  assert.deepEqual(actions, ['add-text']);
+  assert.equal(
+    host.querySelector('[data-testid="editor-text-options"]')?.textContent?.includes('Text tool'),
+    true
+  );
 });
 
 test('layer panel component smoke covers focusable controls and native disabled guards', async () => {

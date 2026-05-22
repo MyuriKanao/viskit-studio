@@ -7,7 +7,8 @@ from base64 import b64encode
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from unittest.mock import patch
 from urllib.parse import quote
 
 from fastapi import FastAPI
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.lib import db as db_mod
 from apps.api.lib.db import get_session
+from apps.api.routes import images as images_mod
 from apps.api.routes.assets import router as assets_router
 from apps.api.routes.images import router as images_router
 from apps.api.routes.source_images import router as source_images_router
@@ -46,6 +48,7 @@ class ImagesRoutePersistenceTest(unittest.TestCase):
         os.environ["VISKIT_BOOTSTRAP_WORKSPACE"] = "0"
         db_mod._engine = None
         db_mod._SessionLocal = None
+        images_mod._OCR_CACHE.clear()
         db_mod.ensure_schema()
 
         self.slot_path = self.output_dir / "kits" / "public-kit" / "hero" / "H1.png"
@@ -124,6 +127,71 @@ class ImagesRoutePersistenceTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"original png")
         self.assertEqual(response.headers["content-type"], "image/png")
+
+    def test_ocr_missing_optional_runtime_degrades_to_empty_boxes(self) -> None:
+        from services.editor import ocr as ocr_mod
+        from services.editor.ocr import OcrUnavailableError
+        from services.editor.types import TextBox
+
+        original_detect = ocr_mod.detect_text_boxes
+        ocr_mod_any = cast(Any, ocr_mod)
+
+        def unavailable(_: bytes) -> list[Any]:
+            raise OcrUnavailableError("paddleocr is not installed")
+
+        ocr_mod_any.detect_text_boxes = unavailable
+        try:
+            image_id = quote("kit-slot:10:H1", safe="")
+            response = self.client.post(f"/api/images/{image_id}/ocr", json={})
+            ocr_mod_any.detect_text_boxes = lambda _: [
+                TextBox(x=1, y=2, w=3, h=4, text="ok", confidence=0.9)
+            ]
+            recovered_response = self.client.post(f"/api/images/{image_id}/ocr", json={})
+        finally:
+            ocr_mod_any.detect_text_boxes = original_detect
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "boxes": [],
+                "engine": "none",
+                "version": "paddleocr-not-installed",
+                "available": False,
+                "unavailable_reason": "paddleocr is not installed",
+            },
+        )
+        self.assertEqual(recovered_response.status_code, 200)
+        self.assertEqual(recovered_response.json()["engine"], "paddleocr")
+        self.assertTrue(recovered_response.json()["available"])
+        self.assertEqual(recovered_response.json()["boxes"][0]["text"], "ok")
+
+    def test_ocr_engine_import_error_is_normalized_to_unavailable(self) -> None:
+        import builtins
+
+        from services.editor import ocr as ocr_mod
+        from services.editor.ocr import OcrUnavailableError
+
+        original_import = builtins.__import__
+
+        def fake_import(
+            name: str,
+            globals: dict[str, Any] | None = None,
+            locals: dict[str, Any] | None = None,
+            fromlist: tuple[str, ...] = (),
+            level: int = 0,
+        ) -> Any:
+            if name == "paddleocr":
+                exc = ModuleNotFoundError("No module named 'paddleocr'")
+                exc.name = "paddleocr"
+                raise exc
+            return original_import(name, globals, locals, fromlist, level)
+
+        ocr_mod._engine = None
+        with patch("builtins.__import__", fake_import):
+            with self.assertRaises(OcrUnavailableError):
+                ocr_mod.detect_text_boxes(b"not-an-image")
+        ocr_mod._engine = None
 
     def test_existing_image_can_be_imported_as_source_image(self) -> None:
         response = self.client.post(

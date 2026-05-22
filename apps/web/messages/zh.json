@@ -123,6 +123,7 @@
     "ocr": {
       "loading": "正在识别文字…",
       "error": "文字识别失败",
+      "unavailable": "OCR 未安装；仍可用文字工具手动添加文本。",
       "empty": "未检测到 OCR 文字区域"
     },
     "save": {
@@ -153,6 +154,13 @@
     "properties": {
       "title": "属性",
       "activeTool": "当前工具：{tool}",
+      "tool": {
+        "select": "选择",
+        "text": "文字",
+        "move": "移动",
+        "inpaint": "AI 重绘",
+        "none": "无"
+      },
       "kind": {
         "base-image": "底图",
         "ocr-text": "OCR 文字",
@@ -167,6 +175,19 @@
         "locked": "已锁定",
         "editable": "可编辑",
         "empty": "未选择可编辑图层"
+      },
+      "text": {
+        "title": "文字工具",
+        "hint": "点击画布即可新建文字层；如果 OCR 框可见，也可以点文字区域转成可编辑文字。",
+        "add": "添加文字层"
+      },
+      "select": {
+        "title": "选择工具",
+        "hint": "用于选择文字层、蒙版等可编辑图层；底图保持锁定以免误移动。"
+      },
+      "move": {
+        "title": "移动工具",
+        "hint": "先选择或新建可编辑图层，再拖拽移动；底图保持锁定。"
       },
       "inpaint": {
         "title": "AI 重绘",

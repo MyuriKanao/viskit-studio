@@ -20,6 +20,8 @@ export interface OcrResponse {
   boxes: OcrBox[];
   engine: string;
   version: string;
+  available?: boolean;
+  unavailable_reason?: string | null;
 }
 
 export function useOcr(imageId: string | undefined): UseQueryResult<OcrResponse, Error> {

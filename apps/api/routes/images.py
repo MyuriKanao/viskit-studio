@@ -440,6 +440,8 @@ class OcrResponse(BaseModel):
     boxes: list[TextBoxOut]
     engine: str
     version: str
+    available: bool = True
+    unavailable_reason: str | None = None
 
 
 class EditRequest(BaseModel):
@@ -707,18 +709,36 @@ async def ocr_image(
         image_bytes = await asyncio.to_thread(_load_image_bytes, image_id, request, session)
     except FileNotFoundError as e:
         raise HTTPException(404, f"image not found: {image_id}") from e
-    from services.editor.ocr import detect_text_boxes
+    from services.editor.ocr import OcrUnavailableError, detect_text_boxes
 
-    boxes = await asyncio.to_thread(detect_text_boxes, image_bytes)
+    engine = "paddleocr"
+    version = "2.x"
+    unavailable_reason: str | None = None
+    try:
+        boxes = await asyncio.to_thread(detect_text_boxes, image_bytes)
+    except OcrUnavailableError:
+        # OCR is an optional local enhancement. The editor must still open and
+        # allow manual text/inpaint editing on a fresh clone without the heavy
+        # PaddleOCR runtime installed.
+        boxes = []
+        engine = "none"
+        version = "paddleocr-not-installed"
+        available = False
+        unavailable_reason = "paddleocr is not installed"
+    else:
+        available = True
     response = OcrResponse(
         boxes=[
             TextBoxOut(x=b.x, y=b.y, w=b.w, h=b.h, text=b.text, confidence=b.confidence)
             for b in boxes
         ],
-        engine="paddleocr",
-        version="2.x",
+        engine=engine,
+        version=version,
+        available=available,
+        unavailable_reason=unavailable_reason,
     )
-    _OCR_CACHE[image_id] = response.model_dump()
+    if response.available:
+        _OCR_CACHE[image_id] = response.model_dump()
     return response
 
 

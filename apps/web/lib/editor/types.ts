@@ -53,6 +53,8 @@ export interface CanvasStageHandle {
     index: number,
     box: { x: number; y: number; w: number; h: number; text: string }
   ) => void;
+  /** Create an editable user text layer, optionally at a canvas coordinate. */
+  addTextLayer: (point?: { x: number; y: number }) => void;
   /** Remove the live mask rectangle (called on inpaint success / mask reset). */
   clearMaskRect: () => void;
   /** Apply editor history and restore the matching fabric snapshot. */

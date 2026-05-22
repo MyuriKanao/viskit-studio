@@ -99,6 +99,17 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
 
     React.useEffect(() => {
       activeToolRef.current = activeTool ?? null;
+      const fab = fabricRef.current;
+      if (!fab) return;
+      fab.defaultCursor =
+        activeTool === 'inpaint' ? 'crosshair' : activeTool === 'text' ? 'text' : 'default';
+      fab.hoverCursor =
+        activeTool === 'inpaint' ? 'crosshair' : activeTool === 'text' ? 'text' : 'move';
+      fab.selection = activeTool !== 'inpaint';
+      if (activeTool === 'inpaint') {
+        fab.discardActiveObject();
+      }
+      fab.requestRenderAll();
     }, [activeTool]);
 
     React.useEffect(() => {
@@ -360,6 +371,53 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
       []
     );
 
+    const addTextLayer = React.useCallback(
+      (point?: { x: number; y: number }) => {
+        const fab = fabricRef.current;
+        if (!fab) return;
+
+        const rootStyle =
+          typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null;
+        const textFill = rootStyle?.getPropertyValue('--text-primary').trim() || '#f0e8dd';
+        const now = Date.now();
+        const text = new fabric.Textbox('Text', {
+          left: Math.max(0, Math.min(width - 180, point?.x ?? width / 2 - 90)),
+          top: Math.max(0, Math.min(height - 48, point?.y ?? height / 2 - 24)),
+          width: 180,
+          fontSize: 36,
+          fontFamily: 'Inter, PingFang SC, Noto Sans SC, sans-serif',
+          fill: textFill,
+          backgroundColor: 'rgba(11, 11, 14, 0.54)',
+          padding: 6,
+          editable: true,
+          selectable: true,
+          cornerColor: '#ffffff',
+          borderColor: '#ffffff',
+          transparentCorners: false,
+        }) as fabric.Textbox & { customProps?: EditorCustomProps };
+        text.customProps = {
+          layerId: `text-${now}`,
+          layerType: 'ocr-text',
+          label: 'Text layer',
+        };
+        fab.add(text);
+        fab.setActiveObject(text);
+        text.enterEditing();
+        text.selectAll();
+        useCommandStack.getState().push({
+          id: `${imageId}-${now}`,
+          op_type: 'edit_text',
+          payload: { text: 'Text', source: 'manual' },
+          snapshot_json: JSON.stringify(fab.toObject(['customProps'])),
+          ts: now,
+        });
+        onLocalEditRef.current?.();
+        fab.requestRenderAll();
+        emitLayerState();
+      },
+      [emitLayerState, height, imageId, width]
+    );
+
     React.useImperativeHandle(
       ref,
       () => ({
@@ -433,6 +491,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           fab.requestRenderAll();
           emitLayerState();
         },
+        addTextLayer,
         clearMaskRect: () => {
           const fab = fabricRef.current;
           const rect = maskRectRef.current;
@@ -657,6 +716,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
         getObjectCount: () => fabricRef.current?.getObjects().length ?? 0,
       }),
       [
+        addTextLayer,
         emitLayerState,
         fabricObjectFromEditorLayer,
         fabricObjectToEditorLayer,
@@ -700,6 +760,19 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           selection: true,
         });
         fabricRef.current = fab;
+        fab.defaultCursor =
+          activeToolRef.current === 'inpaint'
+            ? 'crosshair'
+            : activeToolRef.current === 'text'
+              ? 'text'
+              : 'default';
+        fab.hoverCursor =
+          activeToolRef.current === 'inpaint'
+            ? 'crosshair'
+            : activeToolRef.current === 'text'
+              ? 'text'
+              : 'move';
+        fab.selection = activeToolRef.current !== 'inpaint';
 
         // Per §R7: imperative-only event handlers — NO setState during
         // drag/scale, NO startTransition. Fabric drives its own 60fps render
@@ -726,7 +799,12 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
         });
 
         fab.on('mouse:down', (e) => {
-          if (activeToolRef.current !== 'inpaint') return;
+          const tool = activeToolRef.current;
+          if (tool === 'text' && !e.target) {
+            addTextLayer(fab.getPointer(e.e));
+            return;
+          }
+          if (tool !== 'inpaint') return;
           if (maskRectRef.current) return; // committed mask exists — block re-draw
           const p = fab.getPointer(e.e);
           drawingMask = true;
@@ -860,7 +938,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
         }
         initRef.current = false;
       };
-    }, [emitLayerState, imageId, imageUrl, width, height]);
+    }, [addTextLayer, emitLayerState, imageId, imageUrl, width, height]);
 
     return (
       <div

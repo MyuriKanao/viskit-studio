@@ -123,6 +123,7 @@
     "ocr": {
       "loading": "Detecting text…",
       "error": "OCR failed",
+      "unavailable": "OCR is not installed; you can still add text manually with the Text tool.",
       "empty": "No OCR text regions detected"
     },
     "save": {
@@ -153,6 +154,13 @@
     "properties": {
       "title": "Properties",
       "activeTool": "Active tool: {tool}",
+      "tool": {
+        "select": "Select",
+        "text": "Text",
+        "move": "Move",
+        "inpaint": "AI Inpaint",
+        "none": "None"
+      },
       "kind": {
         "base-image": "Base image",
         "ocr-text": "OCR text",
@@ -167,6 +175,19 @@
         "locked": "Locked",
         "editable": "Editable",
         "empty": "No editable layer selected"
+      },
+      "text": {
+        "title": "Text tool",
+        "hint": "Click the canvas to create a text layer. If OCR boxes are visible, click a text region to convert it into editable text.",
+        "add": "Add text layer"
+      },
+      "select": {
+        "title": "Select tool",
+        "hint": "Select editable text/mask layers. The base image stays locked to prevent accidental movement."
+      },
+      "move": {
+        "title": "Move tool",
+        "hint": "Select or create an editable layer first, then drag it. The base image stays locked."
       },
       "inpaint": {
         "title": "AI inpaint",

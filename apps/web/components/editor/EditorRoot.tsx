@@ -161,6 +161,10 @@ export const EditorRoot = React.forwardRef<EditorRootHandle, EditorRootProps>(fu
     void inpaint.start(imageId, { mask_box: maskBox, new_text: '' });
   }, [imageId, inpaint, maskBox]);
 
+  const handleAddTextLayer = useCallback(() => {
+    canvasRef.current?.addTextLayer();
+  }, []);
+
   const handleBoxClick = useCallback(
     (index: number, box: OcrBox) => {
       if (activeTool === 'text') {
@@ -609,6 +613,7 @@ export const EditorRoot = React.forwardRef<EditorRootHandle, EditorRootProps>(fu
               imageId={imageId}
               canvasWidth={CANVAS_WIDTH}
               canvasHeight={CANVAS_HEIGHT}
+              activeTool={activeTool}
               onBoxClick={handleBoxClick}
               className="absolute inset-0"
             />
@@ -631,6 +636,7 @@ export const EditorRoot = React.forwardRef<EditorRootHandle, EditorRootProps>(fu
             selectedLayer={selectedLayer}
             maskBox={maskBox}
             inpaintStatus={inpaint.status}
+            onAddTextLayer={handleAddTextLayer}
             onInpaintStart={handleInpaintStart}
             onInpaintAbort={inpaint.abort}
           />
