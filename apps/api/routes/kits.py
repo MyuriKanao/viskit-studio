@@ -15,6 +15,7 @@ import logging
 import os
 import re
 import time
+import zlib
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -766,10 +767,14 @@ class KitListItem(BaseModel):
     sku: str
     name: str
     name_en: str | None
+    source_type: Literal["kit", "asset"] = "kit"
+    asset_id: str | None = None
+    image_ids: list[str | None] | None = None
     status: str
     score: int | None
     locale: str | None
     category: str | None = None
+    created_at: str | None = None
     updated_at: str | None = None
     thumbs: list[str | None]
 
@@ -786,6 +791,131 @@ _SORT_COLUMNS: dict[str, str] = {
     "updated_at": "mk.updated_at",
     "score": "mk.score",
 }
+
+
+def _asset_thumb_if_exists(asset_id: str, png_path: str | None) -> str | None:
+    if not png_path:
+        return None
+    candidate = Path(png_path)
+    if not candidate.is_absolute():
+        candidate = _thumb_base() / candidate
+    output_root = _output_dir()
+    if not output_root.is_absolute():
+        output_root = _thumb_base() / output_root
+    try:
+        candidate.resolve().relative_to(output_root.resolve())
+    except ValueError:
+        return None
+    if not candidate.is_file():
+        return None
+    version = candidate.stat().st_mtime_ns
+    return f"/api/assets/{asset_id}/image?v={version}"
+
+
+def _metadata_obj(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _asset_product_from_row(row: Any) -> dict[str, Any]:
+    metadata = _metadata_obj(row.metadata)
+    metadata_product = metadata.get("product")
+    if isinstance(metadata_product, dict):
+        return metadata_product
+
+    planner_payload = _metadata_obj(getattr(row, "planner_payload", None))
+    planner_product = planner_payload.get("product")
+    return planner_product if isinstance(planner_product, dict) else {}
+
+
+def _catalog_sort_value(item: Any, sort: Literal["created_at", "updated_at", "score"]) -> Any:
+    if sort == "score":
+        return item.score
+    raw = item.updated_at if sort == "updated_at" else item.created_at
+    return _iso_or_none(raw)
+
+
+def _asset_catalog_item(row: Any) -> KitListItem | None:
+    asset_id = str(row.id)
+    thumb = _asset_thumb_if_exists(asset_id, row.png_path)
+    if thumb is None:
+        return None
+    product = _asset_product_from_row(row)
+    name = str(row.name).strip() or f"Asset {asset_id}"
+    category = (
+        str(product.get("category")).strip()
+        if isinstance(product, dict) and product.get("category")
+        else str(row.output_kind or "asset")
+    )
+    locale = row.locale if row.locale in {"zh", "en"} else None
+    created_at = _iso_or_none(getattr(row, "created_at", None))
+    updated_at = _iso_or_none(getattr(row, "updated_at", None)) or created_at
+    numeric_id = int(asset_id) if asset_id.isdecimal() else zlib.crc32(asset_id.encode("utf-8"))
+    return KitListItem(
+        id=-numeric_id,
+        sku=f"ASSET-{asset_id}",
+        name=name,
+        name_en=None,
+        source_type="asset",
+        asset_id=asset_id,
+        image_ids=[f"asset:{asset_id}"] + [None] * 13,
+        status="ready",
+        score=None,
+        locale=locale,
+        category=category,
+        created_at=created_at,
+        updated_at=updated_at,
+        thumbs=[thumb] + [None] * 13,
+    )
+
+
+def _kit_catalog_item(session: Session, row: Any) -> KitListItem:
+    hero_rows = session.execute(
+        text(
+            "SELECT slot_index, png_path FROM hero_images"
+            " WHERE marketing_kit_id = :kit_id"
+            " ORDER BY slot_index ASC"
+            " LIMIT 5"
+        ),
+        {"kit_id": row.id},
+    ).all()
+    hero_map: dict[int, str | None] = {r.slot_index: r.png_path for r in hero_rows}
+    hero_thumbs: list[str | None] = [_thumb_if_exists(hero_map.get(i)) for i in range(1, 6)]
+
+    detail_rows = session.execute(
+        text(
+            "SELECT module_id, png_path FROM detail_images"
+            " WHERE marketing_kit_id = :kit_id"
+            " ORDER BY module_id ASC"
+        ),
+        {"kit_id": row.id},
+    ).all()
+    detail_map: dict[str, str | None] = {r.module_id: r.png_path for r in detail_rows}
+    detail_thumbs: list[str | None] = [
+        _thumb_if_exists(detail_map.get(f"M{i}")) for i in range(1, 10)
+    ]
+
+    return KitListItem(
+        id=int(row.id),
+        sku=row.sku,
+        name=row.name,
+        name_en=None,
+        source_type="kit",
+        status=row.status,
+        score=int(row.score) if row.score is not None else None,
+        locale=row.locale,
+        category=getattr(row, "category", None),
+        created_at=_iso_or_none(getattr(row, "created_at", None)),
+        updated_at=_iso_or_none(getattr(row, "updated_at", None)),
+        thumbs=hero_thumbs + detail_thumbs,
+    )
 
 
 @router.get("", response_model=KitListResponse)
@@ -808,13 +938,17 @@ def list_kits(
     up-to-9 detail png_paths (M1..M9) — 14 slots total, NULL-padded for any
     missing rows.  Callers render placeholder cells for NULL entries.
 
-    ``recent`` is advisory; sort defaults to ``created_at DESC`` to preserve
+    Standalone generated assets are also returned as catalog entries with
+    ``source_type='asset'`` so non-kit generations remain visible in Catalog.
+
+    ``recent=true`` preserves the Dashboard contract by returning kit rows
+    only. Catalog calls leave ``recent`` false and receive kit plus asset rows.
+
+    ``recent`` is otherwise advisory; sort defaults to ``created_at DESC`` to preserve
     the EPIC-7 Dashboard call shape (``?recent=true&limit=6``).  Catalog
     (EPIC-8) passes ``offset``, ``status``, ``locale``, ``min_score``,
     ``category``, ``sort``, ``order`` for filtered/paginated views.
     """
-    del recent  # advisory for back-compat; ordering is driven by `sort`/`order`
-
     filters: list[str] = []
     params: dict[str, Any] = {"limit": limit, "offset": offset}
     if status is not None:
@@ -836,76 +970,102 @@ def list_kits(
     where_clause = "WHERE " + " AND ".join(filters) if filters else ""
     sort_col = _SORT_COLUMNS[sort]
     order_sql = "ASC" if order == "asc" else "DESC"
+    include_assets = (
+        not recent
+        and sku is None
+        and min_score is None
+        and (status is None or status == "ready")
+    )
+    kit_params = {key: value for key, value in params.items() if key not in {"limit", "offset"}}
 
-    total_row = session.execute(
-        text(
-            "SELECT COUNT(*) FROM marketing_kits mk"
-            " JOIN product_catalogs pc ON pc.id = mk.product_catalog_id"
-            f" {where_clause}"
-        ),
-        params,
-    ).scalar()
-    total = int(total_row or 0)
+    if not include_assets:
+        total = int(
+            session.execute(
+                text(
+                    "SELECT COUNT(*)"
+                    " FROM marketing_kits mk"
+                    " JOIN product_catalogs pc ON pc.id = mk.product_catalog_id"
+                    f" {where_clause}"
+                ),
+                kit_params,
+            ).scalar_one()
+        )
+        kit_rows = session.execute(
+            text(
+                "SELECT mk.id, mk.status, mk.score, mk.locale, mk.created_at, mk.updated_at,"
+                " pc.sku, pc.name, pc.category"
+                " FROM marketing_kits mk"
+                " JOIN product_catalogs pc ON pc.id = mk.product_catalog_id"
+                f" {where_clause}"
+                f" ORDER BY {sort_col} IS NULL ASC,"
+                f" {sort_col} {order_sql},"
+                f" CASE WHEN {sort_col} IS NULL THEN mk.id END DESC,"
+                f" CASE WHEN {sort_col} IS NOT NULL THEN mk.id END {order_sql}"
+                " LIMIT :limit OFFSET :offset"
+            ),
+            params,
+        ).all()
+        return KitListResponse(
+            items=[_kit_catalog_item(session, row) for row in kit_rows],
+            total=total,
+        )
 
     kit_rows = session.execute(
         text(
-            "SELECT mk.id, mk.status, mk.score, mk.locale, mk.updated_at,"
+            "SELECT mk.id, mk.status, mk.score, mk.locale, mk.created_at, mk.updated_at,"
             " pc.sku, pc.name, pc.category"
             " FROM marketing_kits mk"
             " JOIN product_catalogs pc ON pc.id = mk.product_catalog_id"
             f" {where_clause}"
             f" ORDER BY {sort_col} IS NULL ASC, {sort_col} {order_sql}, mk.id DESC"
-            " LIMIT :limit OFFSET :offset"
         ),
-        params,
+        kit_params,
     ).all()
 
-    items: list[KitListItem] = []
-    for row in kit_rows:
-        # Hero thumbs (slot 1..5)
-        hero_rows = session.execute(
+    items: list[Any] = list(kit_rows)
+    if include_assets:
+        asset_filters: list[str] = []
+        asset_params: dict[str, Any] = {}
+        if status is not None:
+            if status != "ready":
+                asset_filters.append("1 = 0")
+        if locale is not None:
+            asset_filters.append("(gj.locale = :asset_locale)")
+            asset_params["asset_locale"] = locale
+        asset_where = "WHERE " + " AND ".join(asset_filters) if asset_filters else ""
+        asset_rows = session.execute(
             text(
-                "SELECT slot_index, png_path FROM hero_images"
-                " WHERE marketing_kit_id = :kit_id"
-                " ORDER BY slot_index ASC"
-                " LIMIT 5"
+                "SELECT ga.id, ga.name, ga.output_kind, ga.png_path, ga.metadata,"
+                " ga.created_at, ga.updated_at, gj.locale, gj.planner_payload"
+                " FROM generated_assets ga"
+                " LEFT JOIN generation_jobs gj ON gj.id = ga.source_job_id"
+                f" {asset_where}"
+                " ORDER BY ga.created_at DESC, ga.id DESC"
             ),
-            {"kit_id": row.id},
+            asset_params,
         ).all()
-        hero_map: dict[int, str | None] = {r.slot_index: r.png_path for r in hero_rows}
-        hero_thumbs: list[str | None] = [_thumb_if_exists(hero_map.get(i)) for i in range(1, 6)]
+        asset_items = [item for row in asset_rows if (item := _asset_catalog_item(row)) is not None]
+        if category is not None:
+            asset_items = [item for item in asset_items if item.category == category]
+        items.extend(asset_items)
 
-        # Detail thumbs (M1..M9)
-        detail_rows = session.execute(
-            text(
-                "SELECT module_id, png_path FROM detail_images"
-                " WHERE marketing_kit_id = :kit_id"
-                " ORDER BY module_id ASC"
-            ),
-            {"kit_id": row.id},
-        ).all()
-        detail_map: dict[str, str | None] = {r.module_id: r.png_path for r in detail_rows}
-        detail_thumbs: list[str | None] = [
-            _thumb_if_exists(detail_map.get(f"M{i}")) for i in range(1, 10)
-        ]
+    reverse = order == "desc"
 
-        updated_at = getattr(row, "updated_at", None)
-        items.append(
-            KitListItem(
-                id=int(row.id),
-                sku=row.sku,
-                name=row.name,
-                name_en=None,
-                status=row.status,
-                score=int(row.score) if row.score is not None else None,
-                locale=row.locale,
-                category=getattr(row, "category", None),
-                updated_at=_iso_or_none(updated_at),
-                thumbs=hero_thumbs + detail_thumbs,
-            )
-        )
-
-    return KitListResponse(items=items, total=total)
+    with_sort_value = [item for item in items if _catalog_sort_value(item, sort) is not None]
+    without_sort_value = [item for item in items if _catalog_sort_value(item, sort) is None]
+    with_sort_value.sort(
+        key=lambda item: (_catalog_sort_value(item, sort), abs(int(item.id))),
+        reverse=reverse,
+    )
+    without_sort_value.sort(key=lambda item: abs(int(item.id)), reverse=True)
+    items = with_sort_value + without_sort_value
+    total = len(items)
+    page_items = items[offset : offset + limit]
+    hydrated = [
+        item if isinstance(item, KitListItem) else _kit_catalog_item(session, item)
+        for item in page_items
+    ]
+    return KitListResponse(items=hydrated, total=total)
 
 
 # ---------------------------------------------------------------------------

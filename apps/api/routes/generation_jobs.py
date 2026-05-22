@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import threading
 import uuid
@@ -12,10 +13,10 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from apps.api.lib.db import get_session, json_param, session_scope
@@ -69,12 +70,26 @@ _ALL_JOB_STATUSES = {
 }
 _TERMINAL_JOB_STATUSES = {"stopped", "succeeded", "failed", "partial", "interrupted"}
 _SAFE_OUTPUT_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
+_DEFAULT_JOB_CONCURRENCY = 4
+_MAX_JOB_CONCURRENCY = 16
 
 
 def _as_job_status(value: str) -> JobStatus:
     if value not in _ALL_JOB_STATUSES:
         raise RuntimeError(f"unknown generation job status: {value!r}")
     return cast(JobStatus, value)
+
+
+def _generation_job_concurrency() -> int:
+    raw = os.environ.get("VISKIT_GENERATION_JOB_CONCURRENCY")
+    if raw is None:
+        return _DEFAULT_JOB_CONCURRENCY
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("invalid VISKIT_GENERATION_JOB_CONCURRENCY=%r; using default", raw)
+        return _DEFAULT_JOB_CONCURRENCY
+    return max(1, min(_MAX_JOB_CONCURRENCY, value))
 
 
 class GenerationEventBus:
@@ -194,6 +209,13 @@ class GenerationJobOut(BaseModel):
     outputs: list[GenerationOutputOut]
 
 
+class GenerationJobListResponse(BaseModel):
+    jobs: list[GenerationJobOut]
+    total: int
+    limit: int
+    offset: int
+
+
 class GenerationJobStartResponse(BaseModel):
     job_id: str
     status: JobStatus
@@ -234,28 +256,22 @@ def _output_image_url(row: Any, job_id: str) -> str | None:
     )
 
 
-def _job_response(session: Session, job_id: str) -> GenerationJobOut:
-    job = session.execute(
-        text(
-            "SELECT id, client_job_id, status, cancel_requested, source_image_ref,"
-            " user_prompt, locale, marketing_kit_id, planner_payload, created_at,"
-            " updated_at, started_at, finished_at, error_message"
-            " FROM generation_jobs WHERE id = :id"
-        ),
-        {"id": job_id},
-    ).first()
-    if job is None:
-        raise HTTPException(status_code=404, detail="generation job not found")
-    outputs = session.execute(
-        text(
-            "SELECT id, output_key, output_kind, template_ref, template_name, aspect_ratio,"
-            " width, height, prompt, status, destination_type, marketing_kit_id, slot_id,"
-            " asset_id, png_path, error_message, sort_order"
-            " FROM generation_outputs WHERE job_id = :job_id"
-            " ORDER BY sort_order ASC, id ASC"
-        ),
-        {"job_id": job_id},
-    ).all()
+_JOB_SELECT = (
+    "SELECT id, client_job_id, status, cancel_requested, source_image_ref,"
+    " user_prompt, locale, marketing_kit_id, planner_payload, created_at,"
+    " updated_at, started_at, finished_at, error_message"
+    " FROM generation_jobs"
+)
+
+_OUTPUT_SELECT = (
+    "SELECT id, job_id, output_key, output_kind, template_ref, template_name, aspect_ratio,"
+    " width, height, prompt, status, destination_type, marketing_kit_id, slot_id,"
+    " asset_id, png_path, error_message, sort_order"
+    " FROM generation_outputs"
+)
+
+
+def _job_out_from_rows(job: Any, outputs: list[Any]) -> GenerationJobOut:
     return GenerationJobOut(
         id=str(job.id),
         client_job_id=job.client_job_id,
@@ -299,15 +315,75 @@ def _job_response(session: Session, job_id: str) -> GenerationJobOut:
     )
 
 
+def _job_response(session: Session, job_id: str) -> GenerationJobOut:
+    job = session.execute(
+        text(f"{_JOB_SELECT} WHERE id = :id"),
+        {"id": job_id},
+    ).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="generation job not found")
+    outputs = session.execute(
+        text(f"{_OUTPUT_SELECT} WHERE job_id = :job_id ORDER BY sort_order ASC, id ASC"),
+        {"job_id": job_id},
+    ).all()
+    return _job_out_from_rows(job, list(outputs))
+
+
+@router.get("", response_model=GenerationJobListResponse)
+def list_generation_jobs(
+    session: Annotated[Session, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    status: Annotated[JobStatus | None, Query()] = None,
+) -> GenerationJobListResponse:
+    """Return recent durable generation jobs as queue/history records."""
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    where = ""
+    if status is not None:
+        where = " WHERE status = :status"
+        params["status"] = status
+
+    rows = session.execute(
+        text(f"{_JOB_SELECT}{where} ORDER BY created_at DESC, id DESC LIMIT :limit OFFSET :offset"),
+        params,
+    ).all()
+    count_params = {key: value for key, value in params.items() if key not in {"limit", "offset"}}
+    total = session.execute(
+        text(f"SELECT COUNT(*) FROM generation_jobs{where}"),
+        count_params,
+    ).scalar_one()
+    job_ids = [str(row.id) for row in rows]
+    outputs_by_job_id: dict[str, list[Any]] = {job_id: [] for job_id in job_ids}
+    if job_ids:
+        output_rows = session.execute(
+            text(
+                f"{_OUTPUT_SELECT} WHERE job_id IN :job_ids"
+                " ORDER BY job_id ASC, sort_order ASC, id ASC"
+            ).bindparams(bindparam("job_ids", expanding=True)),
+            {"job_ids": job_ids},
+        ).all()
+        for output in output_rows:
+            outputs_by_job_id.setdefault(str(output.job_id), []).append(output)
+    return GenerationJobListResponse(
+        jobs=[_job_out_from_rows(row, outputs_by_job_id.get(str(row.id), [])) for row in rows],
+        total=int(total),
+        limit=limit,
+        offset=offset,
+    )
+
+
 @router.post("", response_model=GenerationJobCreated, status_code=201)
 def create_generation_job(
     payload: GenerationJobCreate,
     session: Annotated[Session, Depends(get_session)],
 ) -> GenerationJobCreated:
-    if session.execute(
-        text("SELECT 1 FROM source_images WHERE id = :id"),
-        {"id": payload.source_image_ref},
-    ).first() is None:
+    if (
+        session.execute(
+            text("SELECT 1 FROM source_images WHERE id = :id"),
+            {"id": payload.source_image_ref},
+        ).first()
+        is None
+    ):
         raise HTTPException(status_code=422, detail="unknown source_image_ref")
 
     output_keys = [item.output_key for item in payload.outputs]
@@ -473,10 +549,7 @@ async def generation_job_events(job_id: str) -> StreamingResponse:
         snapshot = _job_response(session, job_id).model_dump(mode="json")
 
     async def _stream() -> AsyncIterator[bytes]:
-        yield (
-            "event: snapshot\n"
-            f"data: {json.dumps(snapshot, ensure_ascii=False)}\n\n"
-        ).encode()
+        yield (f"event: snapshot\ndata: {json.dumps(snapshot, ensure_ascii=False)}\n\n").encode()
         async for event in _EVENT_BUS.subscribe(job_id):
             payload = json.dumps(event, ensure_ascii=False)
             yield f"event: update\ndata: {payload}\n\n".encode()
@@ -491,10 +564,7 @@ def get_generation_output_image(
     session: Annotated[Session, Depends(get_session)],
 ) -> FileResponse:
     row = session.execute(
-        text(
-            "SELECT png_path FROM generation_outputs"
-            " WHERE job_id = :job_id AND id = :output_id"
-        ),
+        text("SELECT png_path FROM generation_outputs WHERE job_id = :job_id AND id = :output_id"),
         {"job_id": job_id, "output_id": output_id},
     ).first()
     if row is None or row.png_path is None:
@@ -583,6 +653,141 @@ def _generate_image_sync(app: Any, prompt: str, size: str, job_id: str, output_i
     return bytes(response.images[0])
 
 
+def _claim_queued_outputs(session: Session, job_id: str, limit: int) -> list[Any]:
+    outputs = session.execute(
+        text(
+            "SELECT id, output_key, prompt, width, height, destination_type,"
+            " marketing_kit_id, slot_id, template_ref, output_kind"
+            " FROM generation_outputs"
+            " WHERE job_id = :job_id AND status = 'queued'"
+            " ORDER BY sort_order ASC, id ASC LIMIT :limit"
+        ),
+        {"job_id": job_id, "limit": limit},
+    ).all()
+    output_ids = [str(output.id) for output in outputs]
+    if output_ids:
+        session.execute(
+            text(
+                "UPDATE generation_outputs SET status = 'running', updated_at = CURRENT_TIMESTAMP"
+                " WHERE id IN :output_ids"
+            ).bindparams(bindparam("output_ids", expanding=True)),
+            {"output_ids": output_ids},
+        )
+    return list(outputs)
+
+
+async def _run_generation_output(app: Any, job_id: str, output: Any) -> None:
+    output_id = str(output.id)
+    await _EVENT_BUS.publish(
+        job_id,
+        {"type": "output", "job_id": job_id, "output_id": output_id, "status": "running"},
+    )
+    size = f"{int(output.width)}x{int(output.height)}"
+    try:
+        png_bytes = await asyncio.to_thread(
+            _generate_image_sync,
+            app,
+            str(output.prompt),
+            size,
+            job_id,
+            output_id,
+        )
+        base_path = _output_file_path(job_id, str(output.output_key), output_id)
+        base_path.parent.mkdir(parents=True, exist_ok=True)
+        base_path.write_bytes(png_bytes)
+        png_path = str(base_path)
+        asset_id: str | None = None
+        if str(output.destination_type) == "kit_slot":
+            marketing_kit_id = int(output.marketing_kit_id)
+            slot_id = str(output.slot_id)
+            kit_path = _kit_slot_file_path(marketing_kit_id, slot_id)
+            kit_path.parent.mkdir(parents=True, exist_ok=True)
+            kit_path.write_bytes(png_bytes)
+            png_path = str(kit_path)
+            with session_scope() as session:
+                upsert_kit_slot_png_path(
+                    session,
+                    marketing_kit_id=marketing_kit_id,
+                    slot_id=slot_id,
+                    png_path=png_path,
+                    prompt=str(output.prompt),
+                )
+        else:
+            asset_file_token = f"asset_{uuid.uuid4().hex}"
+            asset_path = _asset_file_path(asset_file_token)
+            asset_path.parent.mkdir(parents=True, exist_ok=True)
+            asset_path.write_bytes(png_bytes)
+            png_path = str(asset_path)
+            with session_scope() as session:
+                row = session.execute(
+                    text(
+                        "INSERT INTO generated_assets"
+                        " (name, template_ref, output_kind, png_path,"
+                        "  source_job_id, source_output_id, source_image_ref, metadata)"
+                        " SELECT :name, :template_ref, :output_kind, :png_path,"
+                        "  gj.id, :output_id, gj.source_image_ref, "
+                        f"{json_param(session, 'metadata')}"
+                        " FROM generation_jobs gj WHERE gj.id = :job_id"
+                        " RETURNING id"
+                    ),
+                    {
+                        "name": str(output.output_key),
+                        "template_ref": output.template_ref,
+                        "output_kind": output.output_kind,
+                        "png_path": png_path,
+                        "output_id": output_id,
+                        "job_id": job_id,
+                        "metadata": json.dumps({"job_id": job_id}, ensure_ascii=False),
+                    },
+                ).first()
+                if row is None:
+                    raise RuntimeError("asset insert returned no id")
+                asset_id = str(row.id)
+        with session_scope() as session:
+            session.execute(
+                text(
+                    "UPDATE generation_outputs SET status = 'succeeded',"
+                    " png_path = :png_path, asset_id = :asset_id,"
+                    " updated_at = CURRENT_TIMESTAMP WHERE id = :id"
+                ),
+                {"id": output_id, "png_path": png_path, "asset_id": asset_id},
+            )
+        await _EVENT_BUS.publish(
+            job_id,
+            {
+                "type": "output",
+                "job_id": job_id,
+                "output_id": output_id,
+                "status": "succeeded",
+            },
+        )
+    except Exception as exc:  # keep sibling outputs independent
+        logger.exception(
+            "generation output failed: job_id=%s output_id=%s",
+            job_id,
+            output_id,
+        )
+        with session_scope() as session:
+            session.execute(
+                text(
+                    "UPDATE generation_outputs SET status = 'failed',"
+                    " error_message = :error, updated_at = CURRENT_TIMESTAMP"
+                    " WHERE id = :id"
+                ),
+                {"id": output_id, "error": str(exc)},
+            )
+        await _EVENT_BUS.publish(
+            job_id,
+            {
+                "type": "output",
+                "job_id": job_id,
+                "output_id": output_id,
+                "status": "failed",
+                "error_message": str(exc),
+            },
+        )
+
+
 async def _run_generation_job(app: Any, job_id: str) -> None:
     try:
         await _EVENT_BUS.publish(job_id, {"type": "job", "job_id": job_id, "status": "running"})
@@ -596,12 +801,11 @@ async def _run_generation_job(app: Any, job_id: str) -> None:
                 {"id": job_id},
             )
 
+        concurrency = _generation_job_concurrency()
         while True:
             with session_scope() as session:
                 job = session.execute(
-                    text(
-                        "SELECT cancel_requested FROM generation_jobs WHERE id = :id"
-                    ),
+                    text("SELECT cancel_requested FROM generation_jobs WHERE id = :id"),
                     {"id": job_id},
                 ).first()
                 if job is None:
@@ -629,17 +833,8 @@ async def _run_generation_job(app: Any, job_id: str) -> None:
                         {"type": "job", "job_id": job_id, "status": final_status},
                     )
                     return
-                output = session.execute(
-                    text(
-                        "SELECT id, output_key, prompt, width, height, destination_type,"
-                        " marketing_kit_id, slot_id, template_ref, output_kind"
-                        " FROM generation_outputs"
-                        " WHERE job_id = :job_id AND status = 'queued'"
-                        " ORDER BY sort_order ASC, id ASC LIMIT 1"
-                    ),
-                    {"job_id": job_id},
-                ).first()
-                if output is None:
+                outputs = _claim_queued_outputs(session, job_id, concurrency)
+                if not outputs:
                     final_status = _final_job_status(session, job_id)
                     session.execute(
                         text(
@@ -654,123 +849,9 @@ async def _run_generation_job(app: Any, job_id: str) -> None:
                         {"type": "job", "job_id": job_id, "status": final_status},
                     )
                     return
-                output_id = str(output.id)
-                session.execute(
-                    text(
-                        "UPDATE generation_outputs SET status = 'running',"
-                        " updated_at = CURRENT_TIMESTAMP WHERE id = :id"
-                    ),
-                    {"id": output_id},
-                )
-
-            await _EVENT_BUS.publish(
-                job_id,
-                {"type": "output", "job_id": job_id, "output_id": output_id, "status": "running"},
+            await asyncio.gather(
+                *(_run_generation_output(app, job_id, output) for output in outputs)
             )
-            size = f"{int(output.width)}x{int(output.height)}"
-            try:
-                png_bytes = await asyncio.to_thread(
-                    _generate_image_sync,
-                    app,
-                    str(output.prompt),
-                    size,
-                    job_id,
-                    output_id,
-                )
-                base_path = _output_file_path(job_id, str(output.output_key), output_id)
-                base_path.parent.mkdir(parents=True, exist_ok=True)
-                base_path.write_bytes(png_bytes)
-                png_path = str(base_path)
-                asset_id: str | None = None
-                if str(output.destination_type) == "kit_slot":
-                    marketing_kit_id = int(output.marketing_kit_id)
-                    slot_id = str(output.slot_id)
-                    kit_path = _kit_slot_file_path(marketing_kit_id, slot_id)
-                    kit_path.parent.mkdir(parents=True, exist_ok=True)
-                    kit_path.write_bytes(png_bytes)
-                    png_path = str(kit_path)
-                    with session_scope() as session:
-                        upsert_kit_slot_png_path(
-                            session,
-                            marketing_kit_id=marketing_kit_id,
-                            slot_id=slot_id,
-                            png_path=png_path,
-                            prompt=str(output.prompt),
-                        )
-                else:
-                    asset_file_token = f"asset_{uuid.uuid4().hex}"
-                    asset_path = _asset_file_path(asset_file_token)
-                    asset_path.parent.mkdir(parents=True, exist_ok=True)
-                    asset_path.write_bytes(png_bytes)
-                    png_path = str(asset_path)
-                    with session_scope() as session:
-                        row = session.execute(
-                            text(
-                                "INSERT INTO generated_assets"
-                                " (name, template_ref, output_kind, png_path,"
-                                "  source_job_id, source_output_id, source_image_ref, metadata)"
-                                " SELECT :name, :template_ref, :output_kind, :png_path,"
-                                "  gj.id, :output_id, gj.source_image_ref, "
-                                f"{json_param(session, 'metadata')}"
-                                " FROM generation_jobs gj WHERE gj.id = :job_id"
-                                " RETURNING id"
-                            ),
-                            {
-                                "name": str(output.output_key),
-                                "template_ref": output.template_ref,
-                                "output_kind": output.output_kind,
-                                "png_path": png_path,
-                                "output_id": output_id,
-                                "job_id": job_id,
-                                "metadata": json.dumps({"job_id": job_id}, ensure_ascii=False),
-                            },
-                        ).first()
-                        if row is None:
-                            raise RuntimeError("asset insert returned no id")
-                        asset_id = str(row.id)
-                with session_scope() as session:
-                    session.execute(
-                        text(
-                            "UPDATE generation_outputs SET status = 'succeeded',"
-                            " png_path = :png_path, asset_id = :asset_id,"
-                            " updated_at = CURRENT_TIMESTAMP WHERE id = :id"
-                        ),
-                        {"id": output_id, "png_path": png_path, "asset_id": asset_id},
-                    )
-                await _EVENT_BUS.publish(
-                    job_id,
-                    {
-                        "type": "output",
-                        "job_id": job_id,
-                        "output_id": output_id,
-                        "status": "succeeded",
-                    },
-                )
-            except Exception as exc:  # keep later outputs independent
-                logger.exception(
-                    "generation output failed: job_id=%s output_id=%s",
-                    job_id,
-                    output_id,
-                )
-                with session_scope() as session:
-                    session.execute(
-                        text(
-                            "UPDATE generation_outputs SET status = 'failed',"
-                            " error_message = :error, updated_at = CURRENT_TIMESTAMP"
-                            " WHERE id = :id"
-                        ),
-                        {"id": output_id, "error": str(exc)},
-                    )
-                await _EVENT_BUS.publish(
-                    job_id,
-                    {
-                        "type": "output",
-                        "job_id": job_id,
-                        "output_id": output_id,
-                        "status": "failed",
-                        "error_message": str(exc),
-                    },
-                )
     finally:
         _TASKS.pop(job_id, None)
         _EVENT_BUS.close(job_id)
