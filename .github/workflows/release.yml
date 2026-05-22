@@ -38,7 +38,7 @@ jobs:
           else
             tag="${GITHUB_REF_NAME}"
           fi
-          if [[ ! "${tag}" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
             echo "Tag must look like v0.1.0 or v0.1.0-rc.1" >&2
             exit 1
           fi
