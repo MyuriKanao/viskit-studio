@@ -13,7 +13,7 @@ export interface SaveEditedImageResponse {
   mode: ImageSaveMode;
   image_id: string;
   image_url: string;
-  asset_id: number | null;
+  asset_id: string | null;
   replaced: boolean;
 }
 
@@ -44,6 +44,8 @@ export function imageBytesUrl(imageId: string): string {
 
 export function resolveApiImageSrc(src: string | null | undefined): string {
   if (!src) return '';
+  if (/\/api\/assets\/(?:None|null|undefined)(?:[/?#]|$)/.test(src)) return '';
+  if (/\/api\/images\/asset%3A(?:None|null|undefined)(?:[/?#]|$)/i.test(src)) return '';
   if (src.startsWith('/api/')) return `${baseUrl}${src}`;
   return src;
 }

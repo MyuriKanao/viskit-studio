@@ -155,8 +155,9 @@ class ImagesRoutePersistenceTest(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["mode"], "copy")
         self.assertFalse(body["replaced"])
-        self.assertIsInstance(body["asset_id"], int)
-        self.assertTrue(body["image_id"].startswith("asset:"))
+        self.assertIsInstance(body["asset_id"], str)
+        self.assertTrue(body["asset_id"].startswith("asset_"))
+        self.assertEqual(body["image_id"], f"asset:{body['asset_id']}")
         self.assertEqual(self.slot_path.read_bytes(), b"original png")
 
         asset_response = self.client.get(f"/api/images/{quote(body['image_id'], safe='')}/bytes")

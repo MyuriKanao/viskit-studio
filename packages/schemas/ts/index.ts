@@ -1897,7 +1897,7 @@ export interface components {
         /** SaveImageResponse */
         SaveImageResponse: {
             /** Asset Id */
-            asset_id?: number | null;
+            asset_id?: string | null;
             /** Image Id */
             image_id: string;
             /** Image Url */

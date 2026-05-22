@@ -470,7 +470,7 @@ class SaveImageRequest(BaseModel):
 
 
 class SaveImageResponse(BaseModel):
-    asset_id: Annotated[int | None, Field(title='Asset Id')] = None
+    asset_id: Annotated[str | None, Field(title='Asset Id')] = None
     image_id: Annotated[str, Field(title='Image Id')]
     image_url: Annotated[str, Field(title='Image Url')]
     mode: Annotated[Mode, Field(title='Mode')]

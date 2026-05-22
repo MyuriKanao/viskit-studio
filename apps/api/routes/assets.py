@@ -69,8 +69,17 @@ def _metadata_obj(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _valid_asset_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    asset_id = str(value).strip()
+    return asset_id if asset_id and asset_id not in {"None", "null", "undefined"} else None
+
+
 def _asset_from_row(row: Any) -> AssetOut:
-    asset_id = str(row.id)
+    asset_id = _valid_asset_id(row.id)
+    if asset_id is None:
+        raise ValueError("asset row is missing id")
     return AssetOut(
         id=asset_id,
         name=str(row.name),
@@ -104,7 +113,13 @@ def list_assets(
         ),
         {"limit": limit, "offset": offset},
     ).all()
-    return AssetListResponse(items=[_asset_from_row(row) for row in rows], total=total)
+    items: list[AssetOut] = []
+    for row in rows:
+        try:
+            items.append(_asset_from_row(row))
+        except ValueError:
+            continue
+    return AssetListResponse(items=items, total=total)
 
 
 def _asset_file(session: Session, asset_id: str) -> tuple[Any, Any]:

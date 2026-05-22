@@ -812,6 +812,13 @@ def _asset_thumb_if_exists(asset_id: str, png_path: str | None) -> str | None:
     return f"/api/assets/{asset_id}/image?v={version}"
 
 
+def _valid_asset_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    asset_id = str(value).strip()
+    return asset_id if asset_id and asset_id not in {"None", "null", "undefined"} else None
+
+
 def _metadata_obj(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -843,7 +850,9 @@ def _catalog_sort_value(item: Any, sort: Literal["created_at", "updated_at", "sc
 
 
 def _asset_catalog_item(row: Any) -> KitListItem | None:
-    asset_id = str(row.id)
+    asset_id = _valid_asset_id(row.id)
+    if asset_id is None:
+        return None
     thumb = _asset_thumb_if_exists(asset_id, row.png_path)
     if thumb is None:
         return None

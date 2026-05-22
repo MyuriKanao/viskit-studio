@@ -67,6 +67,20 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
+function asIdString(value: unknown): string | null {
+  const id = asString(value);
+  return id && id !== 'None' && id !== 'null' && id !== 'undefined' ? id : null;
+}
+
+function asImageId(value: unknown): string | null {
+  const imageId = asIdString(value);
+  if (!imageId) return null;
+  if (/^asset:(?!None$|null$|undefined$)[A-Za-z0-9_-]{1,80}$/.test(imageId)) return imageId;
+  if (/^kit-slot:\d+:[HM][1-9]$/.test(imageId)) return imageId;
+  if (/^job-output:[A-Za-z0-9_-]+:[A-Za-z0-9_-]+$/.test(imageId)) return imageId;
+  return null;
+}
+
 function asNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -189,8 +203,8 @@ function normalizeOutput(raw: unknown, jobId: string, index: number): Generation
   const outputKey = asString(output.output_key) ?? outputId;
   const destinationType = normalizeDestination(output.destination_type ?? output.destination);
   const marketingKitId = asNumber(output.marketing_kit_id);
-  const slotId = asString(output.slot_id);
-  const assetId = asString(output.asset_id);
+  const slotId = asIdString(output.slot_id);
+  const assetId = asIdString(output.asset_id);
   const fallbackImageId =
     destinationType === 'kit_slot' && marketingKitId !== null && slotId
       ? canonicalKitSlotImageId(marketingKitId, slotId)
@@ -210,7 +224,7 @@ function normalizeOutput(raw: unknown, jobId: string, index: number): Generation
     destination_type: destinationType,
     slot_id: slotId,
     asset_id: assetId,
-    image_id: asString(output.image_id) ?? fallbackImageId,
+    image_id: asImageId(output.image_id) ?? fallbackImageId,
     image_url: asString(output.image_url) ?? asString(output.url),
     download_url: asString(output.download_url),
     png_path: asString(output.png_path),

@@ -44,6 +44,13 @@ function outputImageSrc(output: GenerationOutput): string {
   return resolveApiImageSrc(output.image_url ?? output.png_path ?? output.download_url);
 }
 
+function canEditImageId(imageId: string): boolean {
+  return (
+    /^asset:(?!None$|null$|undefined$)[A-Za-z0-9_-]{1,80}$/.test(imageId) ||
+    /^kit-slot:\d+:[HM][1-9]$/.test(imageId)
+  );
+}
+
 export function GenerationJobPreview({
   sourceImage,
   plan,
@@ -58,8 +65,12 @@ export function GenerationJobPreview({
   const planItems = plan?.items.filter((item) => item.enabled) ?? [];
   const outputs = job?.outputs ?? [];
   const isActive =
-    job?.status === 'queued' || job?.status === 'planned' || job?.status === 'running';
-  const canStop = isActive && !isStopping && phase !== 'stopping';
+    job?.status === 'queued' ||
+    job?.status === 'planned' ||
+    job?.status === 'running' ||
+    job?.status === 'stopping';
+  const isStopPending = isStopping || phase === 'stopping' || job?.status === 'stopping';
+  const canStop = isActive && !isStopPending;
 
   async function handleStop() {
     setIsStopping(true);
@@ -84,12 +95,12 @@ export function GenerationJobPreview({
                 : '确认输出计划后开始后台生成'}
             </p>
           </div>
-          {job ? (
+          {isActive ? (
             <button
               data-testid="generation-stop-button"
               type="button"
               onClick={handleStop}
-              disabled={!canStop}
+              disabled={isStopPending}
               className={cn(
                 'rounded-input border px-s-3 py-s-2 text-xs font-medium transition-colors',
                 canStop
@@ -97,7 +108,7 @@ export function GenerationJobPreview({
                   : 'border-border-subtle text-ink-faint'
               )}
             >
-              {phase === 'stopping' || isStopping ? '停止中…' : '停止后续输出'}
+              {isStopPending ? '停止中…' : '停止后续输出'}
             </button>
           ) : null}
         </div>
@@ -169,6 +180,7 @@ function OutputTile({ output, locale }: { output: GenerationOutput; locale: stri
     output.download_url ?? output.image_url ?? output.png_path
   );
   const editHref = `/${locale}/editor/${encodeURIComponent(output.image_id)}`;
+  const canEdit = complete && canEditImageId(output.image_id);
 
   return (
     <article
@@ -229,10 +241,11 @@ function OutputTile({ output, locale }: { output: GenerationOutput; locale: stri
           <Link
             data-testid={`generation-output-edit-${output.output_id}`}
             href={editHref}
-            aria-disabled={!complete}
+            prefetch={false}
+            aria-disabled={!canEdit}
             className={cn(
               'rounded-input border px-s-3 py-s-1.5 text-xs',
-              complete
+              canEdit
                 ? 'border-border-subtle text-ink-secondary hover:border-accent hover:text-accent'
                 : 'pointer-events-none border-border-subtle text-ink-faint opacity-50'
             )}
