@@ -9,16 +9,11 @@
 #      UV_EXTRAS=--extra postgres
 #      VISKIT_DATABASE_URL=postgresql+psycopg://viskit:viskit@postgres:5432/viskit
 # 2. Uncomment the app.depends_on block and the postgres service block.
-# 3. Run: docker compose up -d --build
+# 3. Run: docker compose up -d
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
-        UV_EXTRAS: ${UV_EXTRAS:-}
+    image: ${VISKIT_IMAGE:-ghcr.io/your-org/viskit-studio:latest}
     environment:
       DATABASE_URL: ${VISKIT_DATABASE_URL:-sqlite:////app/data/viskit.db}
       CONFIG_PATH: /app/data/config.yaml
@@ -31,6 +26,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       APIMART_API_KEY: ${APIMART_API_KEY:-}
+      CHATGPT2API_KEY: ${CHATGPT2API_KEY:-}
+      CPA_API_KEY: ${CPA_API_KEY:-}
+      SUB2API_API_KEY: ${SUB2API_API_KEY:-}
       COMPLIANCE_SCREEN_API_KEY: ${COMPLIANCE_SCREEN_API_KEY:-}
     ports:
       - "0.0.0.0:${VISKIT_WEB_PORT:-3068}:3000"

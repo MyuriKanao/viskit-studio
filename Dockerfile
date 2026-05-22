@@ -1,4 +1,4 @@
-# Viskit Studio single-container image: FastAPI + Next.js + SQLite/local files.
+# Viskit Studio single-container image: FastAPI + compiled Next.js + SQLite/local files.
 
 FROM node:22-bookworm-slim AS web-builder
 WORKDIR /app
@@ -49,9 +49,12 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Copy the Node runtime from the web builder and the built Next.js workspace.
+# Copy the Node runtime from the web builder and only the compiled Next.js
+# standalone server. Source files and dev dependencies are not needed at runtime.
 COPY --from=web-builder /usr/local/bin/node /usr/local/bin/node
-COPY --from=web-builder /app /app
+COPY --from=web-builder /app/apps/web/.next/standalone /app
+COPY --from=web-builder /app/apps/web/.next/static /app/apps/web/.next/static
+COPY --from=web-builder /app/apps/web/public /app/apps/web/public
 
 # Overlay the Python runtime, backend services, migrations, and committed config example.
 COPY --from=api-builder /app/.venv /app/.venv
@@ -63,4 +66,4 @@ COPY --from=api-builder /app/config.yaml.example /app/config.yaml.example
 
 EXPOSE 3000
 ENTRYPOINT ["tini", "--"]
-CMD ["bash", "-c", "/app/.venv/bin/uvicorn apps.api.main:app --host 0.0.0.0 --port ${API_PORT} & api_pid=$!; until (echo > /dev/tcp/127.0.0.1/${API_PORT}) >/dev/null 2>&1; do if ! kill -0 ${api_pid} 2>/dev/null; then wait ${api_pid}; exit $?; fi; sleep 0.2; done; /usr/local/bin/node apps/web/node_modules/next/dist/bin/next start apps/web -H 0.0.0.0 -p ${WEB_PORT} & web_pid=$!; trap 'kill -TERM ${api_pid} ${web_pid} 2>/dev/null; wait' TERM INT; wait -n ${api_pid} ${web_pid}; status=$?; kill -TERM ${api_pid} ${web_pid} 2>/dev/null; wait || true; exit ${status}"]
+CMD ["bash", "-c", "/app/.venv/bin/uvicorn apps.api.main:app --host 0.0.0.0 --port ${API_PORT} & api_pid=$!; until (echo > /dev/tcp/127.0.0.1/${API_PORT}) >/dev/null 2>&1; do if ! kill -0 ${api_pid} 2>/dev/null; then wait ${api_pid}; exit $?; fi; sleep 0.2; done; HOSTNAME=0.0.0.0 PORT=${WEB_PORT} /usr/local/bin/node apps/web/server.js & web_pid=$!; trap 'kill -TERM ${api_pid} ${web_pid} 2>/dev/null; wait' TERM INT; wait -n ${api_pid} ${web_pid}; status=$?; kill -TERM ${api_pid} ${web_pid} 2>/dev/null; wait || true; exit ${status}"]

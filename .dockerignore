@@ -5,6 +5,11 @@
 .venv
 node_modules
 apps/web/.next
+apps/web/tsconfig.tsbuildinfo
+apps/web/test-results
+tests
+apps/api/test_*.py
+services/**/test_*.py
 .mypy_cache
 .ruff_cache
 .pytest_cache

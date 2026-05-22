@@ -23,7 +23,18 @@ providers:
     base_url: https://api.apimart.ai
     api_key_env: APIMART_API_KEY
     model: gpt-image-2
-    # For provider-specific image APIs use:
+    # For provider-specific image APIs use the image_generation protocol.
+    # OpenAI-compatible reverse proxies such as CPA/sub2api can usually stay on
+    # protocol: openai_compatible when they expose /v1/images/generations.
+    #
+    # chatgpt2api example:
+    # protocol: image_generation
+    # adapter: chatgpt2api
+    # base_url: http://host.docker.internal:8317
+    # api_key_env: CHATGPT2API_KEY
+    # model: gpt-image-2
+    #
+    # Other provider-specific image APIs:
     # protocol: image_generation
     # adapter: openai
     # Supported adapters:
