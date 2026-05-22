@@ -7,18 +7,45 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { CanvasStageProps } from '@/components/editor/CanvasStage';
 import { HistoryTimeline } from '@/components/editor/HistoryTimeline';
+import { LayerPanel } from '@/components/editor/LayerPanel';
 import { TextLayerOverlay } from '@/components/editor/TextLayerOverlay';
+import { ToolOptionsPanel } from '@/components/editor/ToolOptionsPanel';
 import { ToolRail } from '@/components/editor/ToolRail';
 import { useInpaint } from '@/hooks/use-inpaint';
 import type { OcrBox } from '@/hooks/use-ocr';
 import {
+  type EditorProjectResponse,
   type ImageSaveMode,
   createEditResultFromDataUrl,
+  getEditorProject,
   imageBytesUrl,
+  importEditorProject,
   saveEditedImage,
+  saveEditorProject,
 } from '@/lib/api/images';
 import { useCommandStack } from '@/lib/editor/command-stack';
-import type { CanvasStageHandle, MaskBox } from '@/lib/editor/types';
+import type { ViskitEditorDocument } from '@/lib/editor/document';
+import {
+  EDITOR_RASTER_EXPORT_FORMATS,
+  downloadDataUrl,
+  downloadText,
+  safeDownloadName,
+} from '@/lib/editor/downloads';
+import { deserializeEditorDocument, serializeEditorDocument } from '@/lib/editor/serialization';
+import { getEditorTestHooks } from '@/lib/editor/test-hooks';
+import {
+  type EditorToolConfig,
+  type RegisteredToolId,
+  resolveDefaultTool,
+  resolveEnabledTools,
+} from '@/lib/editor/tools';
+import type {
+  CanvasStageHandle,
+  EditorActiveTool,
+  EditorLayerSummary,
+  MaskBox,
+} from '@/lib/editor/types';
+import { cn } from '@/lib/utils';
 import { useLocale } from 'next-intl';
 import { useRouter } from 'next/navigation';
 
@@ -46,18 +73,59 @@ const CANVAS_HEIGHT = 1536;
 
 export interface EditorRootProps {
   imageId: string;
+  config?: EditorToolConfig;
+  sourceImageRef?: string | null;
+  autoLoadProject?: boolean;
+  className?: string;
+  onProjectLoad?: (document: ViskitEditorDocument, project: EditorProjectResponse | null) => void;
+  onProjectSave?: (project: EditorProjectResponse) => void;
+  onProjectExport?: (document: ViskitEditorDocument) => void;
+  onError?: (error: Error) => void;
+}
+
+export interface EditorRootHandle {
+  getProjectDocument: () => ViskitEditorDocument | null;
+  exportProjectJson: () => string | null;
+  exportImageDataUrl: (options?: {
+    format?: 'png' | 'jpeg' | 'webp';
+    quality?: number;
+  }) => string | null;
+  saveProject: () => Promise<EditorProjectResponse>;
+  loadProject: (payload: string | ViskitEditorDocument) => Promise<void>;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+type ProjectStatus = 'idle' | 'loading' | 'saving' | 'saved' | 'exported' | 'error';
 
-export function EditorRoot({ imageId }: EditorRootProps) {
+export const EditorRoot = React.forwardRef<EditorRootHandle, EditorRootProps>(function EditorRoot(
+  {
+    imageId,
+    config,
+    sourceImageRef = null,
+    autoLoadProject = false,
+    className,
+    onProjectLoad,
+    onProjectSave,
+    onProjectExport,
+    onError,
+  },
+  ref
+) {
   const t = useTranslations('editor');
   const locale = useLocale() as 'zh' | 'en';
   const router = useRouter();
-  const [activeTool, setActiveTool] = useState<'select' | 'text' | 'move' | 'inpaint' | null>(
-    'select'
+  const enabledTools = React.useMemo(() => resolveEnabledTools(config), [config]);
+  const enabledToolIds = React.useMemo(
+    () => new Set<RegisteredToolId>(enabledTools.map((tool) => tool.id as RegisteredToolId)),
+    [enabledTools]
+  );
+  const defaultTool = React.useMemo(() => resolveDefaultTool(config), [config]);
+  const [activeTool, setActiveTool] = useState<EditorActiveTool>(
+    (defaultTool?.id as EditorActiveTool) ?? 'select'
   );
   const [maskBox, setMaskBox] = useState<MaskBox | null>(null);
+  const [layers, setLayers] = useState<EditorLayerSummary[]>([]);
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const hasMask = maskBox !== null;
   const canvasRef = useRef<CanvasStageHandle | null>(null);
   const inpaint = useInpaint();
@@ -65,8 +133,28 @@ export function EditorRoot({ imageId }: EditorRootProps) {
   const [hasLocalCanvasEdits, setHasLocalCanvasEdits] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [projectStatus, setProjectStatus] = useState<ProjectStatus>('idle');
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const [projectRevision, setProjectRevision] = useState<number | null>(null);
+  const projectFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const imageUrl = imageBytesUrl(imageId);
+  const selectedLayer =
+    layers.find((layer) => layer.id === selectedLayerId) ??
+    layers.find((layer) => layer.selected) ??
+    null;
+
+  useEffect(() => {
+    if (activeTool && !enabledToolIds.has(activeTool as RegisteredToolId)) {
+      setActiveTool((defaultTool?.id as EditorActiveTool) ?? null);
+    }
+  }, [activeTool, defaultTool, enabledToolIds]);
+
+  const markLocalCanvasEdit = useCallback(() => {
+    setHasLocalCanvasEdits(true);
+    setSaveStatus('idle');
+    setSaveError(null);
+  }, []);
 
   const handleInpaintStart = useCallback(() => {
     if (!maskBox) return;
@@ -77,14 +165,12 @@ export function EditorRoot({ imageId }: EditorRootProps) {
     (index: number, box: OcrBox) => {
       if (activeTool === 'text') {
         canvasRef.current?.upsertTextLayerFromOcr(index, box);
-        setHasLocalCanvasEdits(true);
-        setSaveStatus('idle');
-        setSaveError(null);
+        markLocalCanvasEdit();
         return;
       }
       canvasRef.current?.selectByOcrIndex(index);
     },
-    [activeTool]
+    [activeTool, markLocalCanvasEdit]
   );
 
   const handleUndo = useCallback(() => {
@@ -93,23 +179,51 @@ export function EditorRoot({ imageId }: EditorRootProps) {
     setSaveStatus('idle');
   }, []);
 
+  const handleLayersChange = useCallback((nextLayers: EditorLayerSummary[]) => {
+    setLayers(nextLayers);
+  }, []);
+
+  const handleSelectionChange = useCallback((layerId: string | null) => {
+    setSelectedLayerId(layerId);
+  }, []);
+
+  const handleLayerSelect = useCallback((layerId: string) => {
+    canvasRef.current?.selectLayerById(layerId);
+    setSelectedLayerId(layerId);
+  }, []);
+
+  const handleLayerVisibilityToggle = useCallback((layerId: string, visible: boolean) => {
+    canvasRef.current?.setLayerVisibility(layerId, visible);
+  }, []);
+
+  const handleLayerLockedToggle = useCallback((layerId: string, locked: boolean) => {
+    canvasRef.current?.setLayerLocked(layerId, locked);
+  }, []);
+
+  const handleLayerMove = useCallback((layerId: string, direction: 'up' | 'down') => {
+    canvasRef.current?.moveLayer(layerId, direction);
+  }, []);
+
+  const handleLayerDelete = useCallback((layerId: string) => {
+    canvasRef.current?.deleteLayer(layerId);
+  }, []);
+
+  const handleLayerOpacityChange = useCallback((layerId: string, opacity: number) => {
+    canvasRef.current?.setLayerOpacity(layerId, opacity);
+  }, []);
+
   const handleRedo = useCallback(() => {
     canvasRef.current?.redo();
     setHasLocalCanvasEdits(useCommandStack.getState().undoStack.length > 0);
     setSaveStatus('idle');
   }, []);
 
-  // Surface setMaskBox + setActiveTool on the test hook so EPIC-5b AC#7 can
-  // commit a mask without simulating a fabric drag. Single-tenant internal
-  // tool — see CanvasStage.tsx for the same justification. No cleanup: the
-  // assignment is idempotent and a cleanup-then-remount race with the dynamic
-  // CanvasStage child can leave the hook nulled-out exactly when tests poll.
+  // Surface focused editor drivers only when the explicit editor test-hook flag is enabled.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const w = window as Window & { __editorTest?: Record<string, unknown> };
-    if (!w.__editorTest) w.__editorTest = {};
-    w.__editorTest.setMaskBox = setMaskBox;
-    w.__editorTest.setActiveTool = setActiveTool;
+    const hooks = getEditorTestHooks();
+    if (!hooks) return;
+    hooks.setMaskBox = setMaskBox;
+    hooks.setActiveTool = setActiveTool;
   }, []);
 
   // On inpaint success: snapshot the canvas to history and clear the mask
@@ -122,15 +236,7 @@ export function EditorRoot({ imageId }: EditorRootProps) {
       (typeof inpaint.lastEvent?.data.edit_result_ref === 'string'
         ? inpaint.lastEvent.data.edit_result_ref
         : null);
-    const fab =
-      typeof window !== 'undefined'
-        ? (
-            window as Window & {
-              __editorTest?: { canvas?: { toObject?: (k: string[]) => unknown } };
-            }
-          ).__editorTest?.canvas
-        : undefined;
-    const snapshot = fab?.toObject?.(['customProps']) ?? {};
+    const snapshot = canvasRef.current?.exportFabricSnapshot() ?? {};
     useCommandStack.getState().push({
       id: `${imageId}-${Date.now()}`,
       op_type: 'inpaint',
@@ -184,12 +290,247 @@ export function EditorRoot({ imageId }: EditorRootProps) {
     [hasLocalCanvasEdits, imageId, locale, pendingEditResultRef, router, saveStatus]
   );
 
+  const getCurrentProjectDocument = useCallback(() => {
+    return (
+      canvasRef.current?.exportEditorDocument({
+        imageId,
+        imageUrl,
+        width: CANVAS_WIDTH,
+        height: CANVAS_HEIGHT,
+        activeToolId: activeTool ?? 'select',
+        enabledToolGroups: [...new Set(enabledTools.map((tool) => tool.group))],
+      }) ?? null
+    );
+  }, [activeTool, enabledTools, imageId, imageUrl]);
+
+  const requireCurrentProjectDocument = useCallback(() => {
+    const document = getCurrentProjectDocument();
+    if (!document) throw new Error(t('project.canvasNotReady'));
+    return document;
+  }, [getCurrentProjectDocument, t]);
+
+  const applyProjectDocument = useCallback(
+    async (document: ViskitEditorDocument, project: EditorProjectResponse | null) => {
+      await canvasRef.current?.loadEditorDocument(document);
+      setProjectRevision(project?.revision ?? null);
+      setHasLocalCanvasEdits(false);
+      setPendingEditResultRef(null);
+      setSaveStatus('idle');
+      setProjectError(null);
+      const projectTool = document.toolState.activeToolId as EditorActiveTool;
+      if (projectTool && enabledToolIds.has(projectTool as RegisteredToolId)) {
+        setActiveTool(projectTool);
+      }
+      onProjectLoad?.(document, project);
+    },
+    [enabledToolIds, onProjectLoad]
+  );
+
+  const handleOpenProject = useCallback(async () => {
+    setProjectStatus('loading');
+    setProjectError(null);
+    try {
+      const project = await getEditorProject(imageId);
+      if (!project) {
+        setProjectStatus('error');
+        setProjectError(t('project.notFound'));
+        return null;
+      }
+      const document = deserializeEditorDocument(JSON.stringify(project.document));
+      await applyProjectDocument(document, project);
+      setProjectStatus('saved');
+      return project;
+    } catch (err) {
+      const error = err as Error;
+      setProjectStatus('error');
+      setProjectError(error.message);
+      onError?.(error);
+      return null;
+    }
+  }, [applyProjectDocument, imageId, onError, t]);
+
+  const handleSaveProject = useCallback(async () => {
+    setProjectStatus('saving');
+    setProjectError(null);
+    try {
+      const document = requireCurrentProjectDocument();
+      const project = await saveEditorProject(imageId, document, {
+        sourceImageRef,
+        expectedRevision: projectRevision,
+      });
+      setProjectRevision(project.revision);
+      setProjectStatus('saved');
+      setHasLocalCanvasEdits(false);
+      onProjectSave?.(project);
+      return project;
+    } catch (err) {
+      const error = err as Error;
+      setProjectStatus('error');
+      setProjectError(error.message);
+      onError?.(error);
+      throw error;
+    }
+  }, [
+    imageId,
+    onError,
+    onProjectSave,
+    projectRevision,
+    requireCurrentProjectDocument,
+    sourceImageRef,
+  ]);
+
+  const handleExportProject = useCallback(() => {
+    try {
+      const document = requireCurrentProjectDocument();
+      downloadText(
+        safeDownloadName(imageId, 'viskit-project.json'),
+        serializeEditorDocument(document)
+      );
+      setProjectStatus('exported');
+      setProjectError(null);
+      onProjectExport?.(document);
+    } catch (err) {
+      const error = err as Error;
+      setProjectStatus('error');
+      setProjectError(error.message);
+      onError?.(error);
+    }
+  }, [imageId, onError, onProjectExport, requireCurrentProjectDocument]);
+
+  const handleExportImage = useCallback(
+    (format: 'png' | 'jpeg' | 'webp') => {
+      const dataUrl = canvasRef.current?.exportImageDataUrl({
+        format,
+        quality: format === 'png' ? undefined : 0.92,
+      });
+      if (!dataUrl) {
+        const error = new Error(t('project.canvasNotReady'));
+        setProjectStatus('error');
+        setProjectError(error.message);
+        onError?.(error);
+        return;
+      }
+      downloadDataUrl(safeDownloadName(imageId, format), dataUrl);
+      setProjectStatus('exported');
+      setProjectError(null);
+    },
+    [imageId, onError, t]
+  );
+
+  const handleProjectFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0];
+      event.currentTarget.value = '';
+      if (!file) return;
+      setProjectStatus('loading');
+      setProjectError(null);
+      try {
+        const document = deserializeEditorDocument(await file.text());
+        await applyProjectDocument(document, null);
+        const project = await importEditorProject(imageId, document, {
+          sourceImageRef,
+          expectedRevision: projectRevision,
+        });
+        setProjectRevision(project.revision);
+        setProjectStatus('saved');
+        onProjectSave?.(project);
+      } catch (err) {
+        const error = err as Error;
+        setProjectStatus('error');
+        setProjectError(error.message);
+        onError?.(error);
+      }
+    },
+    [applyProjectDocument, imageId, onError, onProjectSave, projectRevision, sourceImageRef]
+  );
+
+  useEffect(() => {
+    if (!autoLoadProject) return;
+    const timer = window.setTimeout(() => {
+      void handleOpenProject();
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [autoLoadProject, handleOpenProject]);
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      getProjectDocument: getCurrentProjectDocument,
+      exportProjectJson: () => {
+        const document = getCurrentProjectDocument();
+        return document ? serializeEditorDocument(document) : null;
+      },
+      exportImageDataUrl: (options) => canvasRef.current?.exportImageDataUrl(options) ?? null,
+      saveProject: handleSaveProject,
+      loadProject: async (payload) => {
+        const document =
+          typeof payload === 'string'
+            ? deserializeEditorDocument(payload)
+            : deserializeEditorDocument(JSON.stringify(payload));
+        await applyProjectDocument(document, null);
+      },
+    }),
+    [applyProjectDocument, getCurrentProjectDocument, handleSaveProject]
+  );
+
+  const projectBusy = projectStatus === 'loading' || projectStatus === 'saving';
+
   return (
-    <div className="flex h-screen flex-col bg-surface-01 text-ink-primary">
+    <div className={cn('flex h-screen flex-col bg-surface-01 text-ink-primary', className)}>
       {/* Top bar */}
       <header className="flex items-center justify-between border-b border-border-subtle bg-surface-02 px-s-5 py-s-3">
         <span className="font-display text-ink-primary">{t('title')}</span>
-        <div className="flex items-center gap-s-2 text-xs">
+        <div className="flex flex-wrap items-center justify-end gap-s-2 text-xs">
+          <input
+            ref={projectFileInputRef}
+            type="file"
+            accept="application/json,.json,.viskit-project.json"
+            className="hidden"
+            onChange={(event) => void handleProjectFileChange(event)}
+          />
+          <button
+            type="button"
+            disabled={projectBusy}
+            onClick={() => void handleOpenProject()}
+            className="rounded-input border border-border-subtle bg-surface-01 px-s-3 py-s-1 text-ink-secondary transition-colors hover:border-border-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t('project.open')}
+          </button>
+          <button
+            type="button"
+            disabled={projectBusy}
+            onClick={() => void handleSaveProject().catch(() => undefined)}
+            className="rounded-input border border-border-subtle bg-surface-01 px-s-3 py-s-1 text-ink-secondary transition-colors hover:border-border-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t('project.save')}
+          </button>
+          <button
+            type="button"
+            disabled={projectBusy}
+            onClick={() => projectFileInputRef.current?.click()}
+            className="rounded-input border border-border-subtle bg-surface-01 px-s-3 py-s-1 text-ink-secondary transition-colors hover:border-border-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t('project.import')}
+          </button>
+          <button
+            type="button"
+            disabled={projectBusy}
+            onClick={handleExportProject}
+            className="rounded-input border border-border-subtle bg-surface-01 px-s-3 py-s-1 text-ink-secondary transition-colors hover:border-border-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t('project.exportJson')}
+          </button>
+          {EDITOR_RASTER_EXPORT_FORMATS.map((format) => (
+            <button
+              key={format}
+              type="button"
+              disabled={projectBusy}
+              onClick={() => handleExportImage(format)}
+              className="rounded-input border border-border-subtle bg-surface-01 px-s-2 py-s-1 uppercase text-ink-secondary transition-colors hover:border-border-strong hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {format}
+            </button>
+          ))}
           {pendingEditResultRef || hasLocalCanvasEdits ? (
             <>
               <span className="text-ink-muted">{t('save.pending')}</span>
@@ -218,6 +559,16 @@ export function EditorRoot({ imageId }: EditorRootProps) {
               {t('save.error')}: {saveError}
             </span>
           ) : null}
+          {projectStatus !== 'idle' && (
+            <span
+              className={cn(projectStatus === 'error' ? 'text-danger' : 'text-ink-muted')}
+              role={projectStatus === 'error' ? 'alert' : undefined}
+            >
+              {projectStatus === 'error' && projectError
+                ? `${t('project.error')}: ${projectError}`
+                : t(`project.status.${projectStatus}`)}
+            </span>
+          )}
         </div>
       </header>
 
@@ -233,6 +584,7 @@ export function EditorRoot({ imageId }: EditorRootProps) {
           onRedo={handleRedo}
           inpaintStatus={inpaint.status}
           hasMask={hasMask}
+          tools={enabledTools}
           className="shrink-0 m-s-3"
         />
 
@@ -247,7 +599,10 @@ export function EditorRoot({ imageId }: EditorRootProps) {
               height={CANVAS_HEIGHT}
               activeTool={activeTool}
               onMaskChange={setMaskBox}
-              onLocalEdit={() => setHasLocalCanvasEdits(true)}
+              onLocalEdit={markLocalCanvasEdit}
+              onLayersChange={handleLayersChange}
+              onSelectionChange={handleSelectionChange}
+              imageLoadErrorLabel={t('canvas.imageLoadError')}
             />
             {/* TextLayerOverlay stacked absolute over canvas */}
             <TextLayerOverlay
@@ -259,6 +614,27 @@ export function EditorRoot({ imageId }: EditorRootProps) {
             />
           </div>
         </div>
+
+        <div className="flex w-[320px] shrink-0 flex-col gap-s-3 overflow-y-auto border-l border-border-subtle bg-surface-01 p-s-3">
+          <LayerPanel
+            layers={layers}
+            selectedLayerId={selectedLayerId}
+            onSelectLayer={handleLayerSelect}
+            onToggleVisibility={handleLayerVisibilityToggle}
+            onToggleLocked={handleLayerLockedToggle}
+            onMoveLayer={handleLayerMove}
+            onDeleteLayer={handleLayerDelete}
+            onChangeOpacity={handleLayerOpacityChange}
+          />
+          <ToolOptionsPanel
+            activeTool={activeTool}
+            selectedLayer={selectedLayer}
+            maskBox={maskBox}
+            inpaintStatus={inpaint.status}
+            onInpaintStart={handleInpaintStart}
+            onInpaintAbort={inpaint.abort}
+          />
+        </div>
       </div>
 
       {/* Bottom: history timeline */}
@@ -267,4 +643,6 @@ export function EditorRoot({ imageId }: EditorRootProps) {
       </div>
     </div>
   );
-}
+});
+
+EditorRoot.displayName = 'EditorRoot';

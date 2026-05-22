@@ -6,7 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,11 +20,17 @@ from sqlalchemy.orm import Session
 from apps.api.lib import db as db_mod
 from apps.api.lib.db import get_session
 from apps.api.routes.generation_jobs import (
+    GenerationEventBus,
     _run_generation_job,
 )
 from apps.api.routes.generation_jobs import (
     router as generation_jobs_router,
 )
+from services.imagegen.orchestrator import KitEventBus
+
+
+async def next_event(stream: AsyncIterator[dict[str, Any]]) -> dict[str, Any]:
+    return await anext(stream)
 
 
 @contextmanager
@@ -206,12 +212,16 @@ class GenerationJobsRouteTest(unittest.TestCase):
             status = session.execute(
                 text("SELECT status FROM generation_jobs WHERE id = 'job_parallel'")
             ).scalar_one()
-            output_statuses = session.execute(
-                text(
-                    "SELECT status FROM generation_outputs"
-                    " WHERE job_id = 'job_parallel' ORDER BY sort_order"
+            output_statuses = (
+                session.execute(
+                    text(
+                        "SELECT status FROM generation_outputs"
+                        " WHERE job_id = 'job_parallel' ORDER BY sort_order"
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             asset_count = session.execute(
                 text("SELECT COUNT(*) FROM generated_assets WHERE source_job_id = 'job_parallel'")
             ).scalar_one()
@@ -219,6 +229,72 @@ class GenerationJobsRouteTest(unittest.TestCase):
         self.assertEqual(status, "succeeded")
         self.assertEqual(output_statuses, ["succeeded", "succeeded", "succeeded", "succeeded"])
         self.assertEqual(asset_count, 4)
+
+    def test_generation_event_bus_fans_out_and_releases_closed_topics(self) -> None:
+        async def run() -> None:
+            bus = GenerationEventBus()
+            first = bus.subscribe("job_stream")
+            second = bus.subscribe("job_stream")
+            first_event: asyncio.Task[dict[str, Any]] = asyncio.create_task(next_event(first))
+            second_event: asyncio.Task[dict[str, Any]] = asyncio.create_task(next_event(second))
+            await asyncio.sleep(0)
+
+            await bus.publish("job_stream", {"status": "running"})
+
+            self.assertEqual(await first_event, {"status": "running"})
+            self.assertEqual(await second_event, {"status": "running"})
+
+            first_close: asyncio.Task[dict[str, Any]] = asyncio.create_task(next_event(first))
+            second_close: asyncio.Task[dict[str, Any]] = asyncio.create_task(next_event(second))
+            await asyncio.sleep(0)
+            bus.close("job_stream")
+
+            with self.assertRaises(StopAsyncIteration):
+                await first_close
+            with self.assertRaises(StopAsyncIteration):
+                await second_close
+            self.assertNotIn("job_stream", bus._subscribers)
+            self.assertNotIn("job_stream", bus._known)
+
+        asyncio.run(run())
+
+    def test_kit_event_bus_fans_out_and_releases_closed_topics(self) -> None:
+        async def run() -> None:
+            bus = KitEventBus()
+            first = bus.subscribe("kit_stream")
+            second = bus.subscribe("kit_stream")
+            first_event: asyncio.Task[dict[str, Any]] = asyncio.create_task(next_event(first))
+            second_event: asyncio.Task[dict[str, Any]] = asyncio.create_task(next_event(second))
+            await asyncio.sleep(0)
+
+            await bus.publish("kit_stream", {"image_id": "H1", "status": "running"})
+
+            self.assertTrue(bus.has_kit("kit_stream"))
+            self.assertEqual(await first_event, {"image_id": "H1", "status": "running"})
+            self.assertEqual(await second_event, {"image_id": "H1", "status": "running"})
+
+            first_close: asyncio.Task[dict[str, Any]] = asyncio.create_task(next_event(first))
+            second_close: asyncio.Task[dict[str, Any]] = asyncio.create_task(next_event(second))
+            await asyncio.sleep(0)
+            bus.close("kit_stream")
+
+            with self.assertRaises(StopAsyncIteration):
+                await first_close
+            with self.assertRaises(StopAsyncIteration):
+                await second_close
+            self.assertFalse(bus.has_kit("kit_stream"))
+            self.assertNotIn("kit_stream", bus._subscribers)
+            self.assertNotIn("kit_stream", bus._known)
+
+        asyncio.run(run())
+
+    def test_terminal_generation_job_events_stream_ends_after_snapshot(self) -> None:
+        response = self.client.get("/api/generation/jobs/job_done/events")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: snapshot", response.text)
+        self.assertIn('"status": "succeeded"', response.text)
+        self.assertNotIn("event: update", response.text)
 
 
 if __name__ == "__main__":

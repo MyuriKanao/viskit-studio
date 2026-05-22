@@ -4,10 +4,31 @@ import * as fabric from 'fabric';
 import * as React from 'react';
 
 import { useCommandStack } from '@/lib/editor/command-stack';
-import type { CanvasStageHandle, MaskBox, OpType } from '@/lib/editor/types';
+import { assertValidEditorDocument, createEditorDocument } from '@/lib/editor/document';
+import type { EditorLayer, MaskLayer, OcrTextLayer } from '@/lib/editor/layers';
+import { getEditorTestHooks } from '@/lib/editor/test-hooks';
+import type {
+  CanvasStageHandle,
+  EditorActiveTool,
+  EditorLayerSummary,
+  MaskBox,
+  OpType,
+} from '@/lib/editor/types';
 import { cn } from '@/lib/utils';
 
-export type EditorActiveTool = 'select' | 'text' | 'move' | 'inpaint' | null;
+type EditorCustomProps = {
+  layerId?: string;
+  layerType?: EditorLayerSummary['kind'];
+  ocrIndex?: number;
+  label?: string;
+};
+
+type EditorFabricObject = fabric.Object & { customProps?: EditorCustomProps };
+type ExportImageFormat = 'png' | 'jpeg' | 'webp';
+type CanvasImageLoadStatus = 'loading' | 'ready' | 'error';
+
+const BASE_LAYER_ID = 'base-image';
+const INPAINT_MASK_LAYER_ID = 'inpaint-mask';
 
 export interface CanvasStageProps {
   imageId: string;
@@ -21,6 +42,12 @@ export interface CanvasStageProps {
   onMaskChange?: (box: MaskBox | null) => void;
   /** Fired when a local canvas edit needs explicit save. */
   onLocalEdit?: () => void;
+  /** Fired when Fabric layer membership or layer metadata changes. */
+  onLayersChange?: (layers: EditorLayerSummary[]) => void;
+  /** Fired when Fabric active selection changes. */
+  onSelectionChange?: (layerId: string | null) => void;
+  /** Visible operator feedback when the base image cannot be loaded into Fabric. */
+  imageLoadErrorLabel?: string;
 }
 
 /**
@@ -42,6 +69,9 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
       activeTool,
       onMaskChange,
       onLocalEdit,
+      onLayersChange,
+      onSelectionChange,
+      imageLoadErrorLabel = 'Image failed to load. Canvas tools remain available.',
     },
     ref
   ) {
@@ -54,7 +84,11 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
     /** Latest onMaskChange — read inside fabric handlers (kept out of useEffect deps). */
     const onMaskChangeRef = React.useRef<typeof onMaskChange>(onMaskChange);
     const onLocalEditRef = React.useRef<typeof onLocalEdit>(onLocalEdit);
+    const onLayersChangeRef = React.useRef<typeof onLayersChange>(onLayersChange);
+    const onSelectionChangeRef = React.useRef<typeof onSelectionChange>(onSelectionChange);
     const baselineSnapshotRef = React.useRef<string | null>(null);
+    const [imageLoadStatus, setImageLoadStatus] = React.useState<CanvasImageLoadStatus>('loading');
+    const [imageLoadError, setImageLoadError] = React.useState<string | null>(null);
     /**
      * Mount guard ref — required to keep `new fabric.Canvas(...)` from running
      * twice under React 18 `<StrictMode>` double-mount. The cleanup branch
@@ -75,6 +109,257 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
       onLocalEditRef.current = onLocalEdit;
     }, [onLocalEdit]);
 
+    React.useEffect(() => {
+      onLayersChangeRef.current = onLayersChange;
+    }, [onLayersChange]);
+
+    React.useEffect(() => {
+      onSelectionChangeRef.current = onSelectionChange;
+    }, [onSelectionChange]);
+
+    const ensureLayerProps = React.useCallback(
+      (
+        object: EditorFabricObject,
+        index: number
+      ): Required<Pick<EditorCustomProps, 'layerId'>> & EditorCustomProps => {
+        const existing = object.customProps ?? {};
+        if (existing.layerId) return { ...existing, layerId: existing.layerId };
+        const layerId = `${imageId}-layer-${index}-${Date.now()}`;
+        object.customProps = {
+          ...existing,
+          layerId,
+          layerType: existing.layerType ?? 'fabric-object',
+          label: existing.label ?? `Layer ${index + 1}`,
+        };
+        return { ...object.customProps, layerId };
+      },
+      [imageId]
+    );
+
+    const buildLayerSummaries = React.useCallback((): EditorLayerSummary[] => {
+      const fab = fabricRef.current;
+      if (!fab) return [];
+
+      const activeObject = fab.getActiveObject() as EditorFabricObject | undefined;
+      const activeLayerId = activeObject?.customProps?.layerId ?? null;
+      const objectLayers = fab
+        .getObjects()
+        .map((object, index) => {
+          const editorObject = object as EditorFabricObject;
+          const props = ensureLayerProps(editorObject, index);
+          const kind = props.layerType ?? 'fabric-object';
+          return {
+            id: props.layerId,
+            label:
+              props.label ??
+              (kind === 'ocr-text'
+                ? `OCR text ${(props.ocrIndex ?? index) + 1}`
+                : kind === 'inpaint-mask'
+                  ? 'Inpaint mask'
+                  : `Layer ${index + 1}`),
+            kind,
+            visible: editorObject.visible !== false,
+            locked: editorObject.selectable === false || editorObject.evented === false,
+            opacity: typeof editorObject.opacity === 'number' ? editorObject.opacity : 1,
+            selected: props.layerId === activeLayerId,
+          } satisfies EditorLayerSummary;
+        })
+        .reverse();
+
+      return [
+        ...objectLayers,
+        {
+          id: BASE_LAYER_ID,
+          label: 'Base image',
+          kind: 'base-image',
+          visible: true,
+          locked: true,
+          opacity: 1,
+          selected: false,
+        },
+      ];
+    }, [ensureLayerProps]);
+
+    const emitLayerState = React.useCallback(() => {
+      const summaries = buildLayerSummaries();
+      onLayersChangeRef.current?.(summaries);
+      onSelectionChangeRef.current?.(summaries.find((layer) => layer.selected)?.id ?? null);
+    }, [buildLayerSummaries]);
+
+    const findLayerObject = React.useCallback((layerId: string): EditorFabricObject | null => {
+      const fab = fabricRef.current;
+      if (!fab) return null;
+      return (
+        (fab
+          .getObjects()
+          .find((object) => (object as EditorFabricObject).customProps?.layerId === layerId) as
+          | EditorFabricObject
+          | undefined) ?? null
+      );
+    }, []);
+
+    const layerTransformFromObject = React.useCallback((object: EditorFabricObject) => {
+      return {
+        x: Number(object.left ?? 0),
+        y: Number(object.top ?? 0),
+        width: Number(object.width ?? 0),
+        height: Number(object.height ?? 0),
+        rotation: Number(object.angle ?? 0),
+        scaleX: Number(object.scaleX ?? 1),
+        scaleY: Number(object.scaleY ?? 1),
+      };
+    }, []);
+
+    const layerBaseFromObject = React.useCallback(
+      (object: EditorFabricObject, index: number, now: string) => {
+        const props = ensureLayerProps(object, index);
+        return {
+          id: props.layerId,
+          name: props.label ?? `Layer ${index + 1}`,
+          visible: object.visible !== false,
+          locked: object.selectable === false || object.evented === false,
+          opacity: typeof object.opacity === 'number' ? object.opacity : 1,
+          transform: layerTransformFromObject(object),
+          updatedAt: now,
+          createdAt: now,
+        };
+      },
+      [ensureLayerProps, layerTransformFromObject]
+    );
+
+    const fabricObjectToEditorLayer = React.useCallback(
+      (object: EditorFabricObject, index: number, now: string): EditorLayer | null => {
+        const props = ensureLayerProps(object, index);
+        const base = layerBaseFromObject(object, index, now);
+
+        if (props.layerType === 'ocr-text' && object instanceof fabric.Textbox) {
+          const fill = typeof object.fill === 'string' ? object.fill : '#f0e8dd';
+          const backgroundColor =
+            typeof object.backgroundColor === 'string' ? object.backgroundColor : undefined;
+          return {
+            ...base,
+            kind: 'ocr-text',
+            source: 'ocr',
+            text: object.text || 'Text',
+            ocrIndex: props.ocrIndex,
+            fontFamily:
+              typeof object.fontFamily === 'string'
+                ? object.fontFamily
+                : 'Inter, PingFang SC, Noto Sans SC, sans-serif',
+            fontSize: typeof object.fontSize === 'number' ? object.fontSize : 18,
+            fill,
+            backgroundColor,
+          } satisfies OcrTextLayer;
+        }
+
+        if (props.layerType === 'inpaint-mask' && object instanceof fabric.Rect) {
+          return {
+            ...base,
+            kind: 'mask',
+            source: 'user',
+            purpose: 'inpaint',
+            maskBox: {
+              x: Number(object.left ?? 0),
+              y: Number(object.top ?? 0),
+              w: Number(object.width ?? 0),
+              h: Number(object.height ?? 0),
+            },
+          } satisfies MaskLayer;
+        }
+
+        return null;
+      },
+      [ensureLayerProps, layerBaseFromObject]
+    );
+
+    const fabricObjectFromEditorLayer = React.useCallback(
+      async (layer: EditorLayer): Promise<EditorFabricObject | null> => {
+        if (layer.kind === 'ocr-text') {
+          const text = new fabric.Textbox(layer.text || 'Text', {
+            left: layer.transform.x,
+            top: layer.transform.y,
+            width: Math.max(1, layer.transform.width),
+            fontSize: layer.fontSize,
+            fontFamily: layer.fontFamily,
+            fill: layer.fill,
+            backgroundColor: layer.backgroundColor,
+            opacity: layer.opacity,
+            visible: layer.visible,
+            selectable: !layer.locked,
+            evented: !layer.locked,
+            angle: layer.transform.rotation,
+            scaleX: layer.transform.scaleX,
+            scaleY: layer.transform.scaleY,
+            editable: true,
+            cornerColor: '#ffffff',
+            borderColor: '#ffffff',
+            transparentCorners: false,
+          }) as fabric.Textbox & { customProps?: EditorCustomProps };
+          text.customProps = {
+            layerId: layer.id,
+            layerType: 'ocr-text',
+            ocrIndex: layer.ocrIndex,
+            label: layer.name,
+          };
+          return text;
+        }
+
+        if (layer.kind === 'mask') {
+          const rect = new fabric.Rect({
+            left: layer.maskBox.x,
+            top: layer.maskBox.y,
+            width: layer.maskBox.w,
+            height: layer.maskBox.h,
+            fill: 'rgba(99, 102, 241, 0.18)',
+            stroke: 'rgb(99, 102, 241)',
+            strokeWidth: 2,
+            strokeUniform: true,
+            opacity: layer.opacity,
+            visible: layer.visible,
+            selectable: !layer.locked,
+            evented: !layer.locked,
+            angle: layer.transform.rotation,
+            scaleX: layer.transform.scaleX,
+            scaleY: layer.transform.scaleY,
+          }) as fabric.Rect & { customProps?: EditorCustomProps };
+          rect.customProps = {
+            layerId: layer.id,
+            layerType: 'inpaint-mask',
+            label: layer.name,
+          };
+          return rect;
+        }
+
+        if (layer.kind === 'raster') {
+          const image = (await fabric.FabricImage.fromURL(layer.imageUrl, {
+            crossOrigin: 'anonymous',
+          })) as fabric.FabricImage & { customProps?: EditorCustomProps };
+          image.set({
+            left: layer.transform.x,
+            top: layer.transform.y,
+            width: layer.transform.width,
+            height: layer.transform.height,
+            opacity: layer.opacity,
+            visible: layer.visible,
+            selectable: !layer.locked,
+            evented: !layer.locked,
+            angle: layer.transform.rotation,
+            scaleX: layer.transform.scaleX,
+            scaleY: layer.transform.scaleY,
+          });
+          image.customProps = {
+            layerId: layer.id,
+            layerType: 'fabric-object',
+            label: layer.name,
+          };
+          return image;
+        }
+
+        return null;
+      },
+      []
+    );
+
     React.useImperativeHandle(
       ref,
       () => ({
@@ -83,14 +368,11 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           if (!fab) return;
           const target = fab
             .getObjects()
-            .find(
-              (o) =>
-                (o as fabric.Object & { customProps?: { ocrIndex?: number } }).customProps
-                  ?.ocrIndex === index
-            );
+            .find((o) => (o as EditorFabricObject).customProps?.ocrIndex === index);
           if (target) {
             fab.setActiveObject(target);
             fab.requestRenderAll();
+            emitLayerState();
           }
         },
         upsertTextLayerFromOcr: (index, box) => {
@@ -98,11 +380,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           if (!fab) return;
           const existing = fab
             .getObjects()
-            .find(
-              (o) =>
-                (o as fabric.Object & { customProps?: { ocrIndex?: number; layerType?: string } })
-                  .customProps?.ocrIndex === index
-            );
+            .find((o) => (o as EditorFabricObject).customProps?.ocrIndex === index);
           if (existing) {
             fab.setActiveObject(existing);
             if (existing instanceof fabric.Textbox) {
@@ -110,6 +388,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
               existing.selectAll();
             }
             fab.requestRenderAll();
+            emitLayerState();
             return;
           }
 
@@ -131,8 +410,13 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
             cornerColor: '#ffffff',
             borderColor: '#ffffff',
             transparentCorners: false,
-          }) as fabric.Textbox & { customProps?: { layerType: string; ocrIndex: number } };
-          text.customProps = { layerType: 'ocr-text', ocrIndex: index };
+          }) as fabric.Textbox & { customProps?: EditorCustomProps };
+          text.customProps = {
+            layerId: `ocr-text-${index}`,
+            layerType: 'ocr-text',
+            ocrIndex: index,
+            label: `OCR text ${index + 1}`,
+          };
           fab.add(text);
           fab.setActiveObject(text);
           text.enterEditing();
@@ -147,6 +431,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           });
           onLocalEditRef.current?.();
           fab.requestRenderAll();
+          emitLayerState();
         },
         clearMaskRect: () => {
           const fab = fabricRef.current;
@@ -157,6 +442,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
             fab.requestRenderAll();
           }
           onMaskChangeRef.current?.(null);
+          emitLayerState();
         },
         undo: () => {
           const fab = fabricRef.current;
@@ -168,6 +454,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           if (!snapshot) return;
           void fab.loadFromJSON(JSON.parse(snapshot)).then(() => {
             fab.requestRenderAll();
+            emitLayerState();
           });
         },
         redo: () => {
@@ -177,7 +464,91 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           if (!redone) return;
           void fab.loadFromJSON(JSON.parse(redone.snapshot_json)).then(() => {
             fab.requestRenderAll();
+            emitLayerState();
           });
+        },
+        selectLayerById: (layerId) => {
+          if (layerId === BASE_LAYER_ID) return;
+          const fab = fabricRef.current;
+          const target = findLayerObject(layerId);
+          if (!fab || !target || target.selectable === false) return;
+          fab.setActiveObject(target);
+          fab.requestRenderAll();
+          emitLayerState();
+        },
+        setLayerVisibility: (layerId, visible) => {
+          const fab = fabricRef.current;
+          const target = findLayerObject(layerId);
+          if (!fab || !target) return;
+          target.set({ visible });
+          if (!visible && fab.getActiveObject() === target) {
+            fab.discardActiveObject();
+          }
+          fab.requestRenderAll();
+          onLocalEditRef.current?.();
+          emitLayerState();
+        },
+        setLayerLocked: (layerId, locked) => {
+          const fab = fabricRef.current;
+          const target = findLayerObject(layerId);
+          if (!fab || !target) return;
+          target.set({
+            selectable: !locked,
+            evented: !locked,
+            lockMovementX: locked,
+            lockMovementY: locked,
+            lockRotation: locked,
+            lockScalingX: locked,
+            lockScalingY: locked,
+          });
+          if (locked && fab.getActiveObject() === target) {
+            fab.discardActiveObject();
+          }
+          fab.requestRenderAll();
+          onLocalEditRef.current?.();
+          emitLayerState();
+        },
+        moveLayer: (layerId, direction) => {
+          const fab = fabricRef.current;
+          const target = findLayerObject(layerId);
+          if (!fab || !target) return;
+          const stack = fab as fabric.Canvas & {
+            bringObjectForward?: (object: fabric.Object) => void;
+            sendObjectBackwards?: (object: fabric.Object) => void;
+          };
+          if (direction === 'up') {
+            stack.bringObjectForward?.(target);
+          } else {
+            stack.sendObjectBackwards?.(target);
+          }
+          fab.requestRenderAll();
+          onLocalEditRef.current?.();
+          emitLayerState();
+        },
+        deleteLayer: (layerId) => {
+          const fab = fabricRef.current;
+          const target = findLayerObject(layerId);
+          if (!fab || !target) return;
+          if (maskRectRef.current === target) {
+            maskRectRef.current = null;
+            onMaskChangeRef.current?.(null);
+          }
+          fab.remove(target);
+          if (fab.getActiveObject() === target) {
+            fab.discardActiveObject();
+          }
+          fab.requestRenderAll();
+          onLocalEditRef.current?.();
+          emitLayerState();
+        },
+        setLayerOpacity: (layerId, opacity) => {
+          const fab = fabricRef.current;
+          const target = findLayerObject(layerId);
+          if (!fab || !target) return;
+          target.set({ opacity: Math.max(0, Math.min(1, opacity)) });
+          fab.requestRenderAll();
+          onLocalEditRef.current?.();
+          emitLayerState();
         },
         exportPngDataUrl: () => {
           const fab = fabricRef.current;
@@ -186,15 +557,120 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           fab.requestRenderAll();
           return fab.toDataURL({ format: 'png', multiplier: 1 });
         },
+        exportImageDataUrl: (options = {}) => {
+          const fab = fabricRef.current;
+          if (!fab) return null;
+          const format: ExportImageFormat = options.format ?? 'png';
+          fab.discardActiveObject();
+          fab.requestRenderAll();
+          return fab.toDataURL({
+            format,
+            quality: options.quality,
+            multiplier: 1,
+          });
+        },
+        exportEditorDocument: (input) => {
+          const fab = fabricRef.current;
+          if (!fab) return null;
+          const now = new Date().toISOString();
+          const baseDocument = createEditorDocument({
+            id: input.id,
+            imageId: input.imageId,
+            imageUrl: input.imageUrl,
+            width: input.width,
+            height: input.height,
+            now,
+          });
+          const objectLayers = fab
+            .getObjects()
+            .map((object, index) =>
+              fabricObjectToEditorLayer(object as EditorFabricObject, index, now)
+            )
+            .filter((layer): layer is EditorLayer => layer !== null);
+          const activeLayerId =
+            (fab.getActiveObject() as EditorFabricObject | undefined)?.customProps?.layerId ?? null;
+          return assertValidEditorDocument({
+            ...baseDocument,
+            layers: [baseDocument.layers[0], ...objectLayers],
+            selectedLayerIds: activeLayerId ? [activeLayerId] : ['layer:base-image'],
+            toolState: {
+              activeToolId: input.activeToolId,
+              enabledToolGroups: input.enabledToolGroups,
+            },
+            updatedAt: now,
+          });
+        },
+        loadEditorDocument: async (document) => {
+          const fab = fabricRef.current;
+          if (!fab) return;
+          const validDocument = assertValidEditorDocument(document);
+          fab.discardActiveObject();
+          for (const object of [...fab.getObjects()]) {
+            fab.remove(object);
+          }
+          maskRectRef.current = null;
+          onMaskChangeRef.current?.(null);
+
+          const baseLayer =
+            validDocument.layers.find((layer) => layer.kind === 'base-image') ?? null;
+          const backgroundImageUrl =
+            baseLayer?.kind === 'base-image' ? baseLayer.imageUrl : validDocument.source.imageUrl;
+          try {
+            const image = await fabric.FabricImage.fromURL(backgroundImageUrl, {
+              crossOrigin: 'anonymous',
+            });
+            fab.backgroundImage = image;
+          } catch {
+            fab.backgroundImage = undefined;
+          }
+
+          const fabricObjects = await Promise.all(
+            validDocument.layers
+              .filter((layer) => layer.kind !== 'base-image')
+              .map((layer) => fabricObjectFromEditorLayer(layer))
+          );
+          for (const object of fabricObjects) {
+            if (!object) continue;
+            fab.add(object);
+            if (object.customProps?.layerType === 'inpaint-mask' && object instanceof fabric.Rect) {
+              maskRectRef.current = object;
+              onMaskChangeRef.current?.({
+                x: Number(object.left ?? 0),
+                y: Number(object.top ?? 0),
+                w: Number(object.width ?? 0),
+                h: Number(object.height ?? 0),
+              });
+            }
+          }
+
+          const selectedLayerId = validDocument.selectedLayerIds[0];
+          const selectedObject = selectedLayerId ? findLayerObject(selectedLayerId) : null;
+          if (selectedObject && selectedObject.selectable !== false) {
+            fab.setActiveObject(selectedObject);
+          }
+          baselineSnapshotRef.current = JSON.stringify(fab.toObject(['customProps']));
+          useCommandStack.getState().clear();
+          fab.requestRenderAll();
+          emitLayerState();
+        },
+        exportFabricSnapshot: () => fabricRef.current?.toObject(['customProps']) ?? null,
         getObjectCount: () => fabricRef.current?.getObjects().length ?? 0,
       }),
-      [imageId]
+      [
+        emitLayerState,
+        fabricObjectFromEditorLayer,
+        fabricObjectToEditorLayer,
+        findLayerObject,
+        imageId,
+      ]
     );
 
     React.useEffect(() => {
       if (initRef.current) return;
       if (!canvasElRef.current) return;
       initRef.current = true;
+      setImageLoadStatus('loading');
+      setImageLoadError(null);
 
       /**
        * §R7 quirk: under React 18 `<StrictMode>` the cleanup of the first mount
@@ -255,7 +731,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           const p = fab.getPointer(e.e);
           drawingMask = true;
           dragStart = { x: p.x, y: p.y };
-          liveMaskRect = new fabric.Rect({
+          const maskRect = new fabric.Rect({
             left: p.x,
             top: p.y,
             width: 1,
@@ -266,8 +742,15 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
             strokeUniform: true,
             selectable: false,
             evented: false,
-          });
+          }) as fabric.Rect & { customProps?: EditorCustomProps };
+          maskRect.customProps = {
+            layerId: INPAINT_MASK_LAYER_ID,
+            layerType: 'inpaint-mask',
+            label: 'Inpaint mask',
+          };
+          liveMaskRect = maskRect;
           fab.add(liveMaskRect);
+          emitLayerState();
         });
 
         fab.on('mouse:move', (e) => {
@@ -296,6 +779,7 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
               fab.remove(liveMaskRect);
               fab.requestRenderAll();
             }
+            emitLayerState();
             drawingMask = false;
             dragStart = null;
             liveMaskRect = null;
@@ -315,33 +799,41 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
             ts: Date.now(),
           });
           pendingOp = null;
+          emitLayerState();
         });
 
-        // Test hook for Playwright. Viskit Studio is a single-tenant internal
-        // tool (per project memory), so unconditionally exposing the canvas
-        // and store via `window.__editorTest` is acceptable. Used by the
-        // EPIC-5b AC#3/#5/#7 specs to drive real fabric events from the test
-        // harness without simulating raw DOM pointer events. Direct property
-        // assignment (not spread reassignment) avoids racing EditorRoot's
-        // setMaskBox install when this canvas mounts second.
-        if (typeof window !== 'undefined') {
-          const w = window as Window & { __editorTest?: Record<string, unknown> };
-          if (!w.__editorTest) w.__editorTest = {};
-          w.__editorTest.canvas = fab;
-          w.__editorTest.commandStack = useCommandStack;
+        fab.on('selection:created', emitLayerState);
+        fab.on('selection:updated', emitLayerState);
+        fab.on('selection:cleared', emitLayerState);
+
+        const hooks = getEditorTestHooks();
+        if (hooks) {
+          hooks.canvas = fab;
+          hooks.commandStack = useCommandStack;
         }
 
-        // Best-effort base-image load. Errors are swallowed; the canvas
-        // remains usable for text-only ops even if the underlying PNG fails.
+        if (!imageUrl) {
+          setImageLoadStatus('error');
+          setImageLoadError('Image URL is empty.');
+          emitLayerState();
+          return;
+        }
+
         fabric.FabricImage.fromURL(imageUrl, { crossOrigin: 'anonymous' })
           .then((img) => {
             if (!fabricRef.current) return; // unmounted during async load
             fab.backgroundImage = img;
             baselineSnapshotRef.current = JSON.stringify(fab.toObject(['customProps']));
+            setImageLoadStatus('ready');
+            setImageLoadError(null);
             fab.requestRenderAll();
+            emitLayerState();
           })
-          .catch(() => {
-            /* swallow */
+          .catch((error: unknown) => {
+            if (cancelled || !fabricRef.current) return;
+            setImageLoadStatus('error');
+            setImageLoadError(error instanceof Error ? error.message : 'Image load failed.');
+            emitLayerState();
           });
       };
 
@@ -362,26 +854,44 @@ export const CanvasStage = React.forwardRef<CanvasStageHandle, CanvasStageProps>
           fabricRef.current = null;
           maskRectRef.current = null;
         }
-        if (typeof window !== 'undefined') {
-          const w = window as Window & { __editorTest?: Record<string, unknown> };
-          if (w.__editorTest) {
-            w.__editorTest.canvas = undefined;
-          }
+        const hooks = getEditorTestHooks();
+        if (hooks?.canvas === fab) {
+          hooks.canvas = undefined;
         }
         initRef.current = false;
       };
-    }, [imageId, imageUrl, width, height]);
+    }, [emitLayerState, imageId, imageUrl, width, height]);
 
     return (
       <div
         data-testid="canvas-stage"
         data-active-tool={activeTool ?? 'none'}
+        data-image-load-state={imageLoadStatus}
         className={cn(
           'relative inline-block rounded-card border border-border-subtle bg-surface-02',
           className
         )}
       >
         <canvas ref={canvasElRef} width={width} height={height} />
+        {imageLoadStatus !== 'ready' ? (
+          <div
+            data-testid={
+              imageLoadStatus === 'error' ? 'canvas-image-error' : 'canvas-image-loading'
+            }
+            role={imageLoadStatus === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+            className={cn(
+              'pointer-events-none absolute inset-4 flex items-start justify-center rounded-input border px-s-3 py-s-2 text-center text-xs shadow-lift',
+              imageLoadStatus === 'error'
+                ? 'border-danger/40 bg-danger/10 text-danger'
+                : 'border-border-subtle bg-surface-01/85 text-ink-muted'
+            )}
+          >
+            {imageLoadStatus === 'error'
+              ? `Canvas image could not be loaded. Editing remains available. ${imageLoadError ?? ''}`
+              : 'Loading canvas image…'}
+          </div>
+        ) : null}
       </div>
     );
   }

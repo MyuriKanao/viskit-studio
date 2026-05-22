@@ -1,0 +1,30 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "isolatedModules": false,
+    "rootDir": ".",
+    "types": [
+      "node"
+    ],
+    "incremental": false
+  },
+  "files": [
+    "components/editor/HistoryTimeline.tsx",
+    "components/editor/LayerPanel.tsx",
+    "components/editor/ToolRail.tsx",
+    "components/ui/button.tsx",
+    "components/ui/tooltip.tsx",
+    "lib/editor/command-stack.ts",
+    "lib/editor/component-smoke-tests.tsx",
+    "lib/editor/downloads.ts",
+    "lib/editor/route.ts",
+    "lib/editor/tools.ts",
+    "lib/editor/types.ts",
+    "lib/utils.ts"
+  ],
+  "include": []
+}

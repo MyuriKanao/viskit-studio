@@ -120,16 +120,84 @@
       "aborted": "已取消",
       "cancel": "取消"
     },
-    "ocr": {
-      "loading": "正在识别文字…",
-      "error": "文字识别失败"
-    },
+  "ocr": {
+    "loading": "正在识别文字…",
+    "error": "文字识别失败",
+    "empty": "未检测到 OCR 文字区域"
+  },
     "save": {
       "pending": "保存本次编辑：",
       "replace": "替换当前图",
       "copy": "另存为副本",
       "saved": "编辑已保存",
       "error": "保存失败"
+    },
+    "layers": {
+      "title": "图层",
+      "subtitle": "共 {count} 个图层",
+      "hide": "隐藏图层",
+      "show": "显示图层",
+      "lock": "锁定图层",
+      "unlock": "解锁图层",
+      "kind": {
+        "base-image": "底图",
+        "ocr-text": "OCR 文字",
+        "inpaint-mask": "蒙版",
+        "fabric-object": "对象"
+      },
+      "moveUp": "上移图层",
+      "moveDown": "下移图层",
+      "delete": "删除图层",
+      "opacity": "不透明度"
+    },
+    "properties": {
+      "title": "属性",
+      "activeTool": "当前工具：{tool}",
+      "kind": {
+        "base-image": "底图",
+        "ocr-text": "OCR 文字",
+        "inpaint-mask": "重绘蒙版",
+        "fabric-object": "画布对象"
+      },
+      "selection": {
+        "title": "选区",
+        "layer": "图层",
+        "kind": "类型",
+        "state": "状态",
+        "locked": "已锁定",
+        "editable": "可编辑",
+        "empty": "未选择可编辑图层"
+      },
+      "inpaint": {
+        "title": "AI 重绘",
+        "drawMask": "选择 AI 重绘，在画布拖拽蒙版后启动任务。",
+        "maskReady": "蒙版就绪：{width}×{height}px",
+        "start": "开始重绘",
+        "cancel": "取消",
+        "status": {
+          "idle": "空闲",
+          "streaming": "重绘中…",
+          "success": "重绘完成",
+          "error": "重绘失败",
+          "aborted": "重绘已取消"
+        }
+      }
+    },
+    "project": {
+      "open": "打开项目",
+      "save": "保存项目",
+      "import": "导入 JSON",
+      "exportJson": "导出 JSON",
+      "error": "项目",
+      "notFound": "当前图片没有已保存项目",
+      "canvasNotReady": "画布尚未就绪",
+      "status": {
+        "loading": "正在加载项目…",
+        "saving": "正在保存项目…",
+        "saved": "项目已保存",
+        "exported": "导出已准备",
+        "error": "项目错误"
+      }
     }
   },
   "catalog": {

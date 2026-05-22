@@ -326,6 +326,77 @@ components:
         - status
       title: EditResultOut
       type: object
+    EditorProjectResponse:
+      properties:
+        checksum:
+          title: Checksum
+          type: string
+        created_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Created At
+        document:
+          additionalProperties: true
+          title: Document
+          type: object
+        document_schema_version:
+          title: Document Schema Version
+          type: integer
+        image_id:
+          title: Image Id
+          type: string
+        project_id:
+          title: Project Id
+          type: string
+        revision:
+          title: Revision
+          type: integer
+        source_image_ref:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Source Image Ref
+        updated_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Updated At
+      required:
+        - image_id
+        - project_id
+        - document_schema_version
+        - revision
+        - checksum
+        - document
+      title: EditorProjectResponse
+      type: object
+    EditorProjectSaveRequest:
+      properties:
+        document:
+          additionalProperties: true
+          description: Versioned ViskitEditorDocument JSON object
+          title: Document
+          type: object
+        expected_revision:
+          anyOf:
+            - minimum: 1
+              type: integer
+            - type: 'null'
+          description: Optimistic concurrency guard; 409 when it differs from stored revision.
+          title: Expected Revision
+        source_image_ref:
+          anyOf:
+            - maxLength: 120
+              pattern: ^[A-Za-z0-9_-]+$
+              type: string
+            - type: 'null'
+          description: Optional source_images.id backing this project import.
+          title: Source Image Ref
+      required:
+        - document
+      title: EditorProjectSaveRequest
+      type: object
     EndpointSecretResponse:
       properties:
         api_key:
@@ -3134,6 +3205,124 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Ocr Image
+      tags:
+        - editor
+  /api/images/{image_id}/project:
+    get:
+      description: Return the saved Viskit editor project JSON for a canonical image id.
+      operationId: get_editor_project_api_images__image_id__project_get
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorProjectResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Get Editor Project
+      tags:
+        - editor
+    put:
+      description: Create or replace the persisted project JSON for a canonical image id.
+      operationId: put_editor_project_api_images__image_id__project_put
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorProjectSaveRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorProjectResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Put Editor Project
+      tags:
+        - editor
+  /api/images/{image_id}/project/export:
+    get:
+      description: Download the saved editor project as project JSON.
+      operationId: export_editor_project_api_images__image_id__project_export_get
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: {}
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Export Editor Project
+      tags:
+        - editor
+  /api/images/{image_id}/project/import:
+    post:
+      description: Import project JSON into the persisted editor state for this image.
+      operationId: import_editor_project_api_images__image_id__project_import_post
+      parameters:
+        - in: path
+          name: image_id
+          required: true
+          schema:
+            title: Image Id
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorProjectSaveRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorProjectResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Import Editor Project
       tags:
         - editor
   /api/images/{image_id}/save:

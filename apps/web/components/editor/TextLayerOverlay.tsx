@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import * as React from 'react';
 
 import type { OcrBox } from '@/hooks/use-ocr';
@@ -42,6 +43,30 @@ function SkeletonOverlay({ width, height }: { width: number; height: number }) {
         />
       ))}
     </svg>
+  );
+}
+
+function OcrFeedback({
+  message,
+  state,
+}: {
+  message: string;
+  state: 'empty' | 'error';
+}) {
+  return (
+    <div
+      data-testid={state === 'error' ? 'ocr-error-state' : 'ocr-empty-state'}
+      role={state === 'error' ? 'alert' : 'status'}
+      aria-live="polite"
+      className={cn(
+        'pointer-events-none absolute left-1/2 top-4 max-w-[320px] -translate-x-1/2 rounded-input border px-s-3 py-s-2 text-center text-xs shadow-lift',
+        state === 'error'
+          ? 'border-danger/40 bg-danger/10 text-danger'
+          : 'border-border-subtle bg-surface-01/90 text-ink-muted'
+      )}
+    >
+      {message}
+    </div>
   );
 }
 
@@ -110,13 +135,41 @@ function OcrRect({ box, index, onBoxClick }: OcrRectProps) {
   );
 }
 
+function OcrStatusNotice({
+  testId,
+  tone,
+  children,
+}: {
+  testId: string;
+  tone: 'muted' | 'danger';
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-start justify-center p-s-4">
+      <p
+        data-testid={testId}
+        role={tone === 'danger' ? 'alert' : 'status'}
+        aria-live="polite"
+        className={cn(
+          'rounded-input border px-s-3 py-s-2 text-xs shadow-lift',
+          tone === 'danger'
+            ? 'border-danger/40 bg-danger/10 text-danger'
+            : 'border-border-subtle bg-surface-02/90 text-ink-muted'
+        )}
+      >
+        {children}
+      </p>
+    </div>
+  );
+}
+
 /**
  * TextLayerOverlay — renders OCR bounding boxes as an absolutely-positioned
  * SVG over the canvas. Each box is keyboard-focusable and dispatches
  * `onBoxClick` on click or Enter/Space.
  *
  * - Loading: 3 skeleton rects with `animate-pulse`.
- * - Error / empty: renders nothing (OCR is best-effort per spec §R3).
+ * - Error / empty: visible operator feedback with accessible live status.
  */
 export function TextLayerOverlay({
   imageId,
@@ -125,13 +178,14 @@ export function TextLayerOverlay({
   onBoxClick,
   className,
 }: TextLayerOverlayProps) {
+  const t = useTranslations('editor.ocr');
   const { data, isLoading, isError } = useOcr(imageId);
 
   if (isLoading) {
     return (
       <div
         aria-busy="true"
-        aria-label="Loading OCR regions"
+        aria-label={t('loading')}
         className={cn('pointer-events-none absolute inset-0', className)}
       >
         <SkeletonOverlay width={canvasWidth} height={canvasHeight} />
@@ -139,8 +193,20 @@ export function TextLayerOverlay({
     );
   }
 
-  if (isError || !data || data.boxes.length === 0) {
-    return null;
+  if (isError) {
+    return (
+      <div className={cn('pointer-events-none absolute inset-0', className)}>
+        <OcrFeedback state="error" message={t('error')} />
+      </div>
+    );
+  }
+
+  if (!data || data.boxes.length === 0) {
+    return (
+      <div className={cn('pointer-events-none absolute inset-0', className)}>
+        <OcrFeedback state="empty" message={t('empty')} />
+      </div>
+    );
   }
 
   return (

@@ -473,6 +473,21 @@ CREATE TABLE IF NOT EXISTS source_images (
 );
 CREATE INDEX IF NOT EXISTS source_images_sha256_idx ON source_images(sha256);
 
+CREATE TABLE IF NOT EXISTS editor_projects (
+    id TEXT PRIMARY KEY,
+    target_image_id TEXT NOT NULL UNIQUE,
+    source_image_ref TEXT REFERENCES source_images(id) ON DELETE SET NULL,
+    document TEXT NOT NULL,
+    document_schema_version INTEGER NOT NULL CHECK (document_schema_version >= 1),
+    revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+    checksum TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS editor_projects_source_image_ref_idx
+    ON editor_projects(source_image_ref);
+CREATE INDEX IF NOT EXISTS editor_projects_updated_at_idx ON editor_projects(updated_at);
+
 CREATE TABLE IF NOT EXISTS generation_jobs (
     id TEXT PRIMARY KEY,
     client_job_id TEXT UNIQUE,

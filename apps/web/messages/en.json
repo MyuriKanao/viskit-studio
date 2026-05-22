@@ -120,16 +120,84 @@
       "aborted": "Aborted",
       "cancel": "Cancel"
     },
-    "ocr": {
-      "loading": "Detecting text…",
-      "error": "OCR failed"
-    },
+  "ocr": {
+    "loading": "Detecting text…",
+    "error": "OCR failed",
+    "empty": "No OCR text regions detected"
+  },
     "save": {
       "pending": "Save this edit as:",
       "replace": "Replace current",
       "copy": "Save as copy",
       "saved": "Edit saved",
       "error": "Save failed"
+    },
+    "layers": {
+      "title": "Layers",
+      "subtitle": "{count, plural, one {# layer} other {# layers}}",
+      "hide": "Hide layer",
+      "show": "Show layer",
+      "lock": "Lock layer",
+      "unlock": "Unlock layer",
+      "kind": {
+        "base-image": "Base",
+        "ocr-text": "OCR text",
+        "inpaint-mask": "Mask",
+        "fabric-object": "Object"
+      },
+      "moveUp": "Move layer up",
+      "moveDown": "Move layer down",
+      "delete": "Delete layer",
+      "opacity": "Opacity"
+    },
+    "properties": {
+      "title": "Properties",
+      "activeTool": "Active tool: {tool}",
+      "kind": {
+        "base-image": "Base image",
+        "ocr-text": "OCR text",
+        "inpaint-mask": "Inpaint mask",
+        "fabric-object": "Canvas object"
+      },
+      "selection": {
+        "title": "Selection",
+        "layer": "Layer",
+        "kind": "Kind",
+        "state": "State",
+        "locked": "Locked",
+        "editable": "Editable",
+        "empty": "No editable layer selected"
+      },
+      "inpaint": {
+        "title": "AI inpaint",
+        "drawMask": "Choose AI Inpaint, drag a mask on the canvas, then start the job.",
+        "maskReady": "Mask ready: {width}×{height}px",
+        "start": "Start inpaint",
+        "cancel": "Cancel",
+        "status": {
+          "idle": "Idle",
+          "streaming": "Inpainting…",
+          "success": "Inpaint complete",
+          "error": "Inpaint failed",
+          "aborted": "Inpaint aborted"
+        }
+      }
+    },
+    "project": {
+      "open": "Open project",
+      "save": "Save project",
+      "import": "Import JSON",
+      "exportJson": "Export JSON",
+      "error": "Project",
+      "notFound": "No saved project for this image",
+      "canvasNotReady": "Canvas is not ready",
+      "status": {
+        "loading": "Loading project…",
+        "saving": "Saving project…",
+        "saved": "Project saved",
+        "exported": "Export ready",
+        "error": "Project error"
+      }
     }
   },
   "catalog": {
