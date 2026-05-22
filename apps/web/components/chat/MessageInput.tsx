@@ -1,5 +1,6 @@
 'use client';
 
+import { ArrowUp, ImagePlus } from 'lucide-react';
 import * as React from 'react';
 
 import { useChatImageFlow } from '@/hooks/use-chat-flow';
@@ -133,20 +134,21 @@ export function MessageInput() {
   }, [handleImageFile]);
 
   return (
-    <div className="border-t border-border-subtle p-s-3 flex flex-col gap-s-2">
+    <div className="border-t border-border-subtle px-s-4 py-s-4">
       {error && (
-        <div className="rounded-input bg-danger/10 px-s-3 py-s-2 text-xs text-danger">{error}</div>
+        <div className="mb-s-2 rounded-input bg-danger/10 px-s-3 py-s-2 text-xs text-danger">
+          {error}
+        </div>
       )}
 
-      {/* Drop zone */}
       <div
         data-testid="image-drop-zone"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={cn(
-          'rounded-input border-2 border-dashed px-s-3 py-s-2 text-center text-xs text-ink-faint transition-colors duration-fast',
-          isDragOver ? 'border-accent bg-accent/5 text-accent' : 'border-border-subtle',
+          'mx-auto flex w-full max-w-[960px] items-center gap-s-3 rounded-[28px] border border-border-subtle bg-surface-02 px-s-4 py-s-3 shadow-[0_18px_60px_rgba(0,0,0,0.18)] transition-colors duration-fast',
+          isDragOver && 'border-accent bg-accent/10',
           isDisabled && 'opacity-50'
         )}
       >
@@ -159,26 +161,21 @@ export function MessageInput() {
           onChange={handleFileInputChange}
           className="sr-only"
         />
-        <div className="flex flex-col items-center justify-center gap-s-2 sm:flex-row">
-          <button
-            data-testid="image-upload-button"
-            type="button"
-            disabled={isDisabled}
-            onClick={() => fileInputRef.current?.click()}
-            className={cn(
-              'inline-flex items-center justify-center rounded-input border border-border-subtle bg-surface-02 px-s-3 py-s-1.5 text-xs font-medium text-ink-secondary',
-              'transition-colors duration-fast hover:border-accent hover:text-accent',
-              'disabled:pointer-events-none disabled:opacity-50'
-            )}
-          >
-            选择图片
-          </button>
-          <span>或拖拽 / 粘贴图片至此</span>
-        </div>
-      </div>
-
-      {/* Text input row */}
-      <div className="flex gap-s-2">
+        <button
+          data-testid="image-upload-button"
+          type="button"
+          disabled={isDisabled}
+          onClick={() => fileInputRef.current?.click()}
+          className={cn(
+            'inline-flex h-10 shrink-0 items-center justify-center gap-s-1 rounded-full border border-border-subtle bg-surface-01 px-s-4 text-sm font-medium text-ink-secondary',
+            'transition-colors duration-fast hover:border-accent hover:text-accent',
+            'focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1 focus:ring-offset-surface-02',
+            'disabled:pointer-events-none disabled:opacity-50'
+          )}
+        >
+          <ImagePlus aria-hidden="true" className="h-4 w-4" />
+          上传
+        </button>
         <input
           ref={inputRef}
           data-testid="message-input"
@@ -192,11 +189,11 @@ export function MessageInput() {
               ? '请先完成确认'
               : isImageWaitingForPrompt
                 ? '输入需求后开始生成 brief…'
-                : '输入消息…'
+                : '输入你想要生成的画面，也可直接粘贴图片'
           }
           className={cn(
-            'flex-1 rounded-input border border-border-subtle bg-surface-02 px-s-3 py-s-2 text-sm text-ink-primary placeholder:text-ink-faint',
-            'focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1',
+            'h-11 min-w-0 flex-1 rounded-full border border-transparent bg-surface-01 px-s-4 text-sm text-ink-primary placeholder:text-ink-faint',
+            'focus:border-accent/50 focus:outline-none focus:ring-2 focus:ring-accent/40',
             'disabled:opacity-50 disabled:pointer-events-none'
           )}
         />
@@ -206,12 +203,14 @@ export function MessageInput() {
           onClick={() => void handleSend()}
           disabled={isDisabled || !text.trim()}
           className={cn(
-            'inline-flex items-center justify-center rounded-input bg-accent px-s-4 py-s-2 text-sm font-medium text-ink-base-l',
+            'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-ink-base-l',
             'transition-colors duration-fast hover:bg-accent-soft',
+            'focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-1 focus:ring-offset-surface-02',
             'disabled:opacity-50 disabled:pointer-events-none'
           )}
+          aria-label={isImageWaitingForPrompt ? '开始生成' : '发送'}
         >
-          {isImageWaitingForPrompt ? '开始生成' : '发送'}
+          <ArrowUp aria-hidden="true" className="h-5 w-5" />
         </button>
       </div>
     </div>

@@ -5,6 +5,8 @@ import { create } from 'zustand';
 import type { GenerationPlan, SourceImageRef } from '@/lib/generation/types';
 import type { ChatMessage, ConfirmationMode, InferredSpec } from './types';
 
+const CHAT_DRAFT_STORAGE_KEY = 'viskit:new-kit:chat-draft:v1';
+
 function makeKitClientId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -35,7 +37,7 @@ export interface ChatState {
   reset: () => void;
 }
 
-const initialState = (): Omit<
+type ChatDataState = Omit<
   ChatState,
   | 'appendMessage'
   | 'updateMessage'
@@ -47,17 +49,45 @@ const initialState = (): Omit<
   | 'setConfirmationMode'
   | 'setActiveJobId'
   | 'reset'
-> => ({
-  messages: [],
-  hero_image: null,
-  source_image: null,
-  user_prompt: null,
-  inferred_spec: null,
-  output_plan: null,
-  confirmation_mode: null,
-  kit_client_id: makeKitClientId(),
-  active_job_id: null,
-});
+>;
+
+function readPersistedState(): Partial<ChatDataState> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.sessionStorage.getItem(CHAT_DRAFT_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Partial<ChatDataState>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function baseState(): ChatDataState {
+  return {
+    messages: [],
+    hero_image: null,
+    source_image: null,
+    user_prompt: null,
+    inferred_spec: null,
+    output_plan: null,
+    confirmation_mode: null,
+    kit_client_id: makeKitClientId(),
+    active_job_id: null,
+  };
+}
+
+const initialState = (hydrate = true): ChatDataState => {
+  const base = baseState();
+  if (!hydrate) return base;
+  const persisted = readPersistedState();
+  return {
+    ...base,
+    ...persisted,
+    messages: Array.isArray(persisted.messages) ? persisted.messages : base.messages,
+    kit_client_id: persisted.kit_client_id || base.kit_client_id,
+  };
+};
 
 export const useChatStore = create<ChatState>((set) => ({
   ...initialState(),
@@ -98,9 +128,28 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setActiveJobId: (jobId) => set({ active_job_id: jobId }),
 
-  reset: () => set({ ...initialState() }),
+  reset: () => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(CHAT_DRAFT_STORAGE_KEY);
+    }
+    set({ ...initialState(false) });
+  },
 }));
 
 if (typeof window !== 'undefined') {
   (window as unknown as { __chatStore?: typeof useChatStore }).__chatStore = useChatStore;
+  useChatStore.subscribe((state) => {
+    const snapshot: ChatDataState = {
+      messages: state.messages,
+      hero_image: state.hero_image,
+      source_image: state.source_image,
+      user_prompt: state.user_prompt,
+      inferred_spec: state.inferred_spec,
+      output_plan: state.output_plan,
+      confirmation_mode: state.confirmation_mode,
+      kit_client_id: state.kit_client_id,
+      active_job_id: state.active_job_id,
+    };
+    window.sessionStorage.setItem(CHAT_DRAFT_STORAGE_KEY, JSON.stringify(snapshot));
+  });
 }

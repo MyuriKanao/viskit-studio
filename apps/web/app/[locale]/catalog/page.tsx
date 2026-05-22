@@ -21,6 +21,7 @@ import type { CatalogDrawerSku } from '@/components/drawers/CatalogDrawer';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useKitsCatalog } from '@/hooks/use-kits-catalog';
 import type {
   CatalogFilters as CatalogFilterState,
@@ -37,6 +38,11 @@ const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 type ImagePreviewSelection = {
   kitId: number;
   imageIndex: number;
+};
+
+type PendingImageDelete = {
+  kit: KitListItem;
+  imageId: string;
 };
 
 async function deleteKitImage({
@@ -87,6 +93,9 @@ export default function CatalogPage() {
   const queryClient = useQueryClient();
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [imagePreview, setImagePreview] = React.useState<ImagePreviewSelection | null>(null);
+  const [pendingImageDelete, setPendingImageDelete] = React.useState<PendingImageDelete | null>(
+    null
+  );
 
   // View mode
   const [view, setView] = React.useState<CatalogView>('grid');
@@ -141,8 +150,11 @@ export default function CatalogPage() {
   }, [imagePreview, isLoading, selectedPreviewKit]);
   const deleteImage = useMutation({
     mutationFn: async ({ kit, imageId }: { kit: KitListItem; imageId: string }) => {
-      if (kit.source_type === 'asset' && kit.asset_id) {
-        await deleteCatalogAsset(kit.asset_id);
+      if (kit.source_type === 'asset') {
+        const selectedAssetId = imageId.startsWith('asset:') ? imageId.slice('asset:'.length) : '';
+        const assetId = selectedAssetId || kit.asset_id;
+        if (!assetId) throw new Error('Missing asset id');
+        await deleteCatalogAsset(assetId);
         return;
       }
       await deleteKitImage({ kitId: kit.id, imageId });
@@ -191,17 +203,24 @@ export default function CatalogPage() {
   const handleDeleteImage = React.useCallback(
     (kit: KitListItem, imageId: string) => {
       if (deleteImage.isPending) return;
-      const ok = window.confirm(t('delete_image_confirm', { image: imageId, name: kit.name }));
-      if (!ok) return;
-      deleteImage.mutate(
-        { kit, imageId },
-        {
-          onSuccess: () => setImagePreview(null),
-        }
-      );
+      setPendingImageDelete({ kit, imageId });
     },
-    [deleteImage, t]
+    [deleteImage.isPending]
   );
+
+  const confirmDeleteImage = React.useCallback(() => {
+    if (!pendingImageDelete || deleteImage.isPending) return;
+    const { kit, imageId } = pendingImageDelete;
+    deleteImage.mutate(
+      { kit, imageId },
+      {
+        onSuccess: () => {
+          setPendingImageDelete(null);
+          setImagePreview(null);
+        },
+      }
+    );
+  }, [deleteImage, pendingImageDelete]);
   const resolveEditableImageId = React.useCallback(
     (kit: KitListItem, imageId: string) =>
       kit.source_type === 'asset' ? imageId : encodeKitSlotImageId(kit.id, imageId),
@@ -460,6 +479,27 @@ export default function CatalogPage() {
         onSendToChat={(imageId) => {
           if (selectedPreviewKit) handleSendToChat(selectedPreviewKit, imageId);
         }}
+      />
+      <ConfirmDialog
+        open={pendingImageDelete !== null}
+        title={t('delete_image_dialog_title')}
+        description={
+          pendingImageDelete
+            ? t('delete_image_confirm', {
+                image: pendingImageDelete.imageId,
+                name: pendingImageDelete.kit.name,
+              })
+            : ''
+        }
+        cancelLabel={t('delete_cancel')}
+        confirmLabel={
+          deleteImage.isPending ? t('delete_image_pending') : t('delete_image_confirm_cta')
+        }
+        pending={deleteImage.isPending}
+        onOpenChange={(open) => {
+          if (!open) setPendingImageDelete(null);
+        }}
+        onConfirm={confirmDeleteImage}
       />
     </div>
   );

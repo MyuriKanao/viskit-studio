@@ -5,6 +5,7 @@ import * as React from 'react';
 
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { type Template, useTemplates } from '@/hooks/use-templates';
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -98,6 +99,7 @@ export default function TemplatesPage() {
   const [activeId, setActiveId] = React.useState<string | null>(null);
   const [editName, setEditName] = React.useState('');
   const [editPrompt, setEditPrompt] = React.useState('');
+  const [deleteTarget, setDeleteTarget] = React.useState<Template | null>(null);
 
   const activeTemplate =
     templates.find((template) => template.id === activeId) ?? templates[0] ?? null;
@@ -206,6 +208,7 @@ export default function TemplatesPage() {
       if (activeId === templateRef) {
         setActiveId(null);
       }
+      setDeleteTarget(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -399,7 +402,7 @@ export default function TemplatesPage() {
                               <button
                                 type="button"
                                 disabled={busy === activeTemplate.id}
-                                onClick={() => deleteTemplate(activeTemplate.id)}
+                                onClick={() => setDeleteTarget(activeTemplate)}
                                 className={dangerButtonClass}
                               >
                                 删除
@@ -464,6 +467,22 @@ export default function TemplatesPage() {
           </section>
         </div>
       </main>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="删除自定义模板"
+        description={
+          deleteTarget ? `删除「${deleteTarget.name}」？此操作只影响模板库，不会改动历史套包。` : ''
+        }
+        cancelLabel="取消"
+        confirmLabel={busy === deleteTarget?.id ? '删除中…' : '确认删除'}
+        pending={busy === deleteTarget?.id}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        onConfirm={() => {
+          if (deleteTarget) void deleteTemplate(deleteTarget.id);
+        }}
+      />
     </div>
   );
 }

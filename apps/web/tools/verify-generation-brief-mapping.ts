@@ -3,7 +3,7 @@ import {
   buildGenerationBriefDraft,
   buildRewriteSpecPayload,
 } from '@/lib/chat/generation-brief';
-import type { FieldInference, InferredSpec } from '@/lib/chat/types';
+import { type FieldInference, type InferredSpec, normalizeInferredSpec } from '@/lib/chat/types';
 import { buildGenerationJobCreateRequest } from '@/lib/generation/job-payload';
 import type { GenerationPlan, ProductProfilePayload, SourceImageRef } from '@/lib/generation/types';
 
@@ -145,3 +145,39 @@ assert(
   'adapter keeps backend-safe asset destination'
 );
 assert(combinedBrief.product.brand === 'Viskit Studio', 'job planner payload carries edited brief');
+
+const malformedInferred = normalizeInferredSpec({
+  category: field('健康零食'),
+  product_type: field('general_food'),
+  brand_color_hex: field('#4f46e5'),
+  selling_points: undefined,
+} as unknown as InferredSpec);
+const malformedDraft = buildGenerationBriefDraft(malformedInferred, plan);
+assert(malformedDraft.product.brand === '', 'missing inferred brand normalizes to empty string');
+assert(
+  malformedDraft.selling_points.length === 0,
+  'missing selling points normalize to empty list'
+);
+
+const fourByFivePayload = buildGenerationJobCreateRequest({
+  kitClientId: 'kit-fixture',
+  sourceImage,
+  locale: 'zh',
+  userPrompt: null,
+  stylePrompt: '',
+  product,
+  outputPlan: {
+    ...plan,
+    items: [
+      {
+        ...plan.items[0],
+        aspect_ratio: '4:5',
+        enabled: true,
+      },
+    ],
+  },
+  inferred: applied.spec,
+  spec: { hero_sections: [] },
+});
+assert(fourByFivePayload.outputs[0]?.width === 1088, '4:5 width is divisible by 16');
+assert(fourByFivePayload.outputs[0]?.height === 1360, '4:5 height is divisible by 16');

@@ -87,7 +87,12 @@
     "role_description_llm": "LLM writes and rewrites structured text such as product specs, copy, and review notes.",
     "role_description_image": "Image generates final visual assets and should be bound to an image-capable model.",
     "role_description_compliance_screen": "Compliance screen is the cheap preflight reviewer that blocks risky kits before expensive generation.",
-    "role_description_custom": "Custom roles are optional routes and are not required for registry startup."
+    "role_description_custom": "Custom roles are optional routes and are not required for registry startup.",
+    "delete_endpoint_title": "Delete endpoint",
+    "delete_endpoint_confirm": "Delete the {role} endpoint? That role will no longer be available.",
+    "delete_endpoint_confirm_cta": "Delete",
+    "delete_endpoint_pending": "Deleting…",
+    "delete_cancel": "Cancel"
   },
   "providersDialog": {
     "drift_title": "Config conflict",
@@ -125,6 +130,28 @@
       "error": "OCR failed",
       "unavailable": "OCR is not installed; you can still add text manually with the Text tool.",
       "empty": "No OCR text regions detected"
+    },
+    "canvas": {
+      "imageLoadError": "Image failed to load. Canvas tools remain available."
+    },
+    "miniPaint": {
+      "fullEditor": "Full miniPaint editor",
+      "loading": "Loading image into miniPaint…",
+      "ready": "miniPaint is ready",
+      "blankReady": "Blank canvas is ready",
+      "saving": "Saving miniPaint output…",
+      "reload": "Reload image",
+      "newCanvas": "New blank canvas",
+      "download": "Download PNG",
+      "home": "Back home",
+      "blankLayer": "Blank layer",
+      "errors": {
+        "network": "Could not connect to the image service. Check that the backend is running.",
+        "bundle": "The editor assets failed to load. Refresh the page and try again.",
+        "init": "The editor took too long to initialize. Refresh the page and try again.",
+        "decode": "The image data could not be decoded. Reload the image and try again.",
+        "saveBlank": "This editor entry is not bound to a source image. Use Download PNG to save it."
+      }
     },
     "save": {
       "pending": "Save this edit as:",
@@ -264,7 +291,11 @@
     "download_image": "Download",
     "edit_image": "Open editor",
     "delete_image": "Delete image",
+    "delete_image_dialog_title": "Delete image",
     "delete_image_confirm": "Delete {image} from {name}?",
+    "delete_image_confirm_cta": "Delete",
+    "delete_image_pending": "Deleting…",
+    "delete_cancel": "Cancel",
     "delete_image_error": "Delete image failed",
     "drawer_title": "SKU details",
     "drawer_close_aria": "Close drawer",
@@ -371,6 +402,7 @@
       "job_label": "Job {id}",
       "edit": "Edit",
       "download": "Download",
+      "recover": "Regenerate",
       "status": {
         "draft": "Draft",
         "planned": "Ready",

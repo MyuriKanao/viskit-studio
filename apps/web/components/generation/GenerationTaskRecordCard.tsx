@@ -164,10 +164,14 @@ export function GenerationTaskRecordCard({
   ).length;
   const totalCount = outputs.length;
   const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+  const showProgress = isGenerationJobActive(job.status);
   const taskTitle = job.user_prompt?.trim() || outputs[0]?.title || t('untitled');
   const finishedLabel = job.finished_at
     ? formatDateTime(job.finished_at, locale)
     : formatDateTime(job.updated_at ?? job.created_at, locale);
+  const recoverHref = `${localePrefix(locale)}/new-kit?recover_job_id=${encodeURIComponent(
+    job.job_id
+  )}`;
 
   return (
     <article
@@ -210,18 +214,25 @@ export function GenerationTaskRecordCard({
           </div>
         </div>
 
-        <div className="min-w-40 lg:text-right">
-          <div className="h-2 overflow-hidden rounded-pill bg-surface-03" aria-hidden="true">
-            <span
-              className={cn(
-                'block h-full rounded-pill transition-all duration-std',
-                isGenerationJobFailed(job.status) ? 'bg-danger' : 'bg-accent'
-              )}
-              style={{ width: `${progress}%` }}
-            />
+        {showProgress ? (
+          <div className="min-w-40 lg:text-right">
+            <div className="h-2 overflow-hidden rounded-pill bg-surface-03" aria-hidden="true">
+              <span
+                className="block h-full rounded-pill bg-accent transition-all duration-std"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="mt-s-1 font-mono text-xs text-ink-faint">{progress}%</p>
           </div>
-          <p className="mt-s-1 font-mono text-xs text-ink-faint">{progress}%</p>
-        </div>
+        ) : (
+          <Link
+            href={recoverHref}
+            prefetch={false}
+            className="inline-flex h-8 shrink-0 items-center justify-center rounded-input border border-border-subtle px-s-3 text-xs font-medium text-ink-secondary transition-colors hover:border-accent hover:text-accent"
+          >
+            {t('recover')}
+          </Link>
+        )}
       </div>
 
       {job.error_message ? (
@@ -270,6 +281,8 @@ function OutputRecordTile({
   downloadLabel: string;
 }) {
   const imageSrc = outputImageSrc(output);
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const showImage = Boolean(imageSrc) && !imageFailed;
   const complete = outputIsComplete(output);
   const hrefPrefix = localePrefix(locale);
   const editHref = `${hrefPrefix}/editor/${encodeURIComponent(output.image_id)}`;
@@ -281,12 +294,13 @@ function OutputRecordTile({
   return (
     <div className="overflow-hidden rounded-input border border-border-subtle bg-surface-02">
       <div className={cn('relative bg-surface-03', compact ? 'aspect-square' : 'aspect-[4/3]')}>
-        {imageSrc ? (
+        {showImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageSrc}
             alt={output.title}
             loading="lazy"
+            onError={() => setImageFailed(true)}
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (

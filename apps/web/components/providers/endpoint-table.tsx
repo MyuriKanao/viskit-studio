@@ -7,6 +7,7 @@ import * as React from 'react';
 import { StatusChip } from '@/components/atoms/status-chip';
 import { providerRoleDescriptionKey } from '@/components/providers/role-descriptions';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { ProviderHealthRow } from '@/hooks/use-providers-health';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +62,7 @@ export function EndpointTable({ endpoints, health, onEdit, className }: Endpoint
   const t = useTranslations('providers');
   const queryClient = useQueryClient();
   const [pendingRole, setPendingRole] = React.useState<string | null>(null);
+  const [deleteTargetRole, setDeleteTargetRole] = React.useState<string | null>(null);
   const [probeByRole, setProbeByRole] = React.useState<Map<string, ProbeRow>>(() => new Map());
   const probe = useMutation({
     mutationFn: probeRole,
@@ -86,7 +88,6 @@ export function EndpointTable({ endpoints, health, onEdit, className }: Endpoint
 
   const [error, setError] = React.useState<string | null>(null);
   const handleDelete = async (role: string) => {
-    if (!window.confirm(`删除 ${role} 端点？`)) return;
     setPendingRole(role);
     setError(null);
     try {
@@ -109,6 +110,7 @@ export function EndpointTable({ endpoints, health, onEdit, className }: Endpoint
         setError(`已保存但 registry 未刷新: ${body.warning}`);
       }
       await queryClient.invalidateQueries({ queryKey: ['providers', 'health'] });
+      setDeleteTargetRole(null);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -220,7 +222,7 @@ export function EndpointTable({ endpoints, health, onEdit, className }: Endpoint
                             variant="ghost"
                             size="sm"
                             disabled={pendingRole === row.role}
-                            onClick={() => handleDelete(row.role)}
+                            onClick={() => setDeleteTargetRole(row.role)}
                             aria-label={`Delete ${row.role}`}
                           >
                             {pendingRole === row.role ? '删除中…' : '删除'}
@@ -235,6 +237,22 @@ export function EndpointTable({ endpoints, health, onEdit, className }: Endpoint
           </tbody>
         </table>
       </div>
+      <ConfirmDialog
+        open={deleteTargetRole !== null}
+        title={t('delete_endpoint_title')}
+        description={
+          deleteTargetRole ? t('delete_endpoint_confirm', { role: deleteTargetRole }) : ''
+        }
+        cancelLabel={t('delete_cancel')}
+        confirmLabel={pendingRole ? t('delete_endpoint_pending') : t('delete_endpoint_confirm_cta')}
+        pending={pendingRole !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTargetRole(null);
+        }}
+        onConfirm={() => {
+          if (deleteTargetRole) void handleDelete(deleteTargetRole);
+        }}
+      />
     </>
   );
 }

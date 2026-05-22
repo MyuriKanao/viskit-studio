@@ -251,6 +251,7 @@ function normalizeGenerationJob(raw: unknown, fallbackJobId?: string): Generatio
     user_prompt: asString(job.user_prompt),
     locale: asString(job.locale),
     marketing_kit_id: asNumber(job.marketing_kit_id),
+    planner_payload: asRecord(job.planner_payload),
     outputs,
     error_message: asString(job.error_message) ?? asString(job.error),
     created_at: asString(job.created_at),
@@ -328,7 +329,7 @@ async function postGenerationJob(
     throw new Error('/api/generation/jobs failed: missing job_id');
   }
   if (snapshot.outputs.length > 0) return snapshot;
-  return fetchGenerationJob(snapshot.job_id);
+  return fetchGenerationJobWithRetry(snapshot.job_id);
 }
 
 async function postStartGenerationJob(jobId: string): Promise<GenerationJobSnapshot> {
@@ -342,10 +343,10 @@ async function postStartGenerationJob(jobId: string): Promise<GenerationJobSnaps
   if (!response.ok) {
     await readJsonOrThrow(response, `/api/generation/jobs/${jobId}/start`);
   }
-  return fetchGenerationJob(jobId);
+  return fetchGenerationJobWithRetry(jobId);
 }
 
-async function fetchGenerationJob(jobId: string): Promise<GenerationJobSnapshot> {
+export async function fetchGenerationJob(jobId: string): Promise<GenerationJobSnapshot> {
   const response = await fetch(`${baseUrl}/api/generation/jobs/${encodeURIComponent(jobId)}`, {
     cache: 'no-store',
   });
@@ -357,6 +358,23 @@ async function fetchGenerationJob(jobId: string): Promise<GenerationJobSnapshot>
   return snapshot;
 }
 
+async function fetchGenerationJobWithRetry(
+  jobId: string,
+  attempts = 4
+): Promise<GenerationJobSnapshot> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fetchGenerationJob(jobId);
+    } catch (err) {
+      lastError = err;
+      if (attempt === attempts - 1) break;
+      await new Promise((resolve) => window.setTimeout(resolve, 150 * (attempt + 1)));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 async function postStopGenerationJob(jobId: string): Promise<GenerationJobSnapshot> {
   const response = await fetch(`${baseUrl}/api/generation/jobs/${encodeURIComponent(jobId)}/stop`, {
     method: 'POST',
@@ -364,7 +382,7 @@ async function postStopGenerationJob(jobId: string): Promise<GenerationJobSnapsh
   });
   const body = await readJsonOrThrow(response, `/api/generation/jobs/${jobId}/stop`);
   const snapshot = normalizeGenerationJob(body, jobId);
-  return snapshot.outputs.length > 0 ? snapshot : fetchGenerationJob(jobId);
+  return snapshot.outputs.length > 0 ? snapshot : fetchGenerationJobWithRetry(jobId);
 }
 
 async function fetchGenerationJobs(limit: number, offset = 0): Promise<GenerationJobListSnapshot> {

@@ -87,7 +87,12 @@
     "role_description_llm": "LLM 用于生成和改写结构化文本，例如商品规格、文案和审核意见。",
     "role_description_image": "Image 用于生成最终视觉资产，需要绑定到支持图片生成的模型。",
     "role_description_compliance_screen": "Compliance screen 是低成本预审模型，用于在昂贵生成前拦截风险套件。",
-    "role_description_custom": "自定义角色是可选路由，不属于 registry 启动必需角色。"
+    "role_description_custom": "自定义角色是可选路由，不属于 registry 启动必需角色。",
+    "delete_endpoint_title": "删除端点",
+    "delete_endpoint_confirm": "删除 {role} 端点？删除后对应角色将不再可用。",
+    "delete_endpoint_confirm_cta": "确认删除",
+    "delete_endpoint_pending": "删除中…",
+    "delete_cancel": "取消"
   },
   "providersDialog": {
     "drift_title": "配置冲突",
@@ -125,6 +130,28 @@
       "error": "文字识别失败",
       "unavailable": "OCR 未安装；仍可用文字工具手动添加文本。",
       "empty": "未检测到 OCR 文字区域"
+    },
+    "canvas": {
+      "imageLoadError": "图片加载失败，画布工具仍可继续使用。"
+    },
+    "miniPaint": {
+      "fullEditor": "完整 miniPaint 编辑器",
+      "loading": "正在载入图片到 miniPaint…",
+      "ready": "miniPaint 已就绪",
+      "blankReady": "空白画布已就绪",
+      "saving": "正在保存 miniPaint 输出…",
+      "reload": "重新载入图片",
+      "newCanvas": "新建空白画布",
+      "download": "下载 PNG",
+      "home": "返回主页",
+      "blankLayer": "空白图层",
+      "errors": {
+        "network": "连接图片服务失败，请确认后端服务已启动。",
+        "bundle": "编辑器资源加载失败，请刷新页面重试。",
+        "init": "编辑器初始化超时，请刷新页面重试。",
+        "decode": "图片数据解析失败，请重新载入图片。",
+        "saveBlank": "空白入口未绑定原图，请使用下载 PNG 保存。"
+      }
     },
     "save": {
       "pending": "保存本次编辑：",
@@ -264,7 +291,11 @@
     "download_image": "下载",
     "edit_image": "打开编辑器",
     "delete_image": "删除图片",
+    "delete_image_dialog_title": "删除图片",
     "delete_image_confirm": "删除 {name} 的 {image} 图片？",
+    "delete_image_confirm_cta": "确认删除",
+    "delete_image_pending": "删除中…",
+    "delete_cancel": "取消",
     "delete_image_error": "删除图片失败",
     "drawer_title": "SKU 详情",
     "drawer_close_aria": "关闭抽屉",
@@ -371,6 +402,7 @@
       "job_label": "任务 {id}",
       "edit": "编辑",
       "download": "下载",
+      "recover": "重新生成",
       "status": {
         "draft": "草稿",
         "planned": "待启动",

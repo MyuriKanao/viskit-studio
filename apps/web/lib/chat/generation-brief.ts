@@ -1,5 +1,10 @@
 import type { KitSellingPoint, KitSkuMetaPayload } from '@/hooks/use-kit-pipeline';
-import type { FieldInference, InferredSpec, Locale } from '@/lib/chat/types';
+import {
+  type FieldInference,
+  type InferredSpec,
+  type Locale,
+  inferenceText,
+} from '@/lib/chat/types';
 import type { GenerationPlan, GenerationPlanItem } from '@/lib/generation/types';
 
 const PRODUCT_TYPES = ['blue_hat', 'sports', 'general_food', 'other'] as const;
@@ -69,14 +74,16 @@ export function buildGenerationBriefDraft(
 ): GenerationBriefDraft {
   return {
     product: {
-      name: inferred.name?.value ?? '',
-      brand: inferred.brand.value,
-      category: inferred.category.value,
-      product_type: normalizeProductType(inferred.product_type.value),
-      brand_color_hex: inferred.brand_color_hex.value,
-      price: inferred.price?.value ?? 0,
+      name: inferenceText(inferred.name),
+      brand: inferenceText(inferred.brand),
+      category: inferenceText(inferred.category),
+      product_type: normalizeProductType(inferenceText(inferred.product_type)),
+      brand_color_hex: inferenceText(inferred.brand_color_hex),
+      price: typeof inferred.price?.value === 'number' ? inferred.price.value : 0,
     },
-    selling_points: inferred.selling_points.map((sp) => stringValue(sp.value)).filter(Boolean),
+    selling_points: (inferred.selling_points ?? [])
+      .map((sp) => stringValue(sp.value))
+      .filter(Boolean),
     outputs: plan.items.map((item) => ({
       id: item.id,
       enabled: item.enabled,

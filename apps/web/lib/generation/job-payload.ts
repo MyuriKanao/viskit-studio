@@ -61,6 +61,8 @@ function sizeForItem(item: GenerationPlanItem): { width: number; height: number 
     return { width: 1024, height: 1536 };
   if (ratio === '16:9') return { width: 1536, height: 864 };
   if (ratio === '9:16') return { width: 864, height: 1536 };
+  if (ratio === '4:5') return { width: 1088, height: 1360 };
+  if (ratio === '5:4') return { width: 1360, height: 1088 };
   if (ratio === '3:4') return { width: 1024, height: 1536 };
   if (ratio === '4:3') return { width: 1536, height: 1024 };
   if (item.output_kind === 'banner' || item.output_kind === 'poster')
@@ -127,6 +129,14 @@ function outputKey(item: GenerationPlanItem, index: number): string {
   return clean(item.slot_id) || clean(item.id) || `output-${index + 1}`;
 }
 
+function createClientJobId(kitClientId: string): string {
+  const randomId =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${kitClientId}:${randomId}`;
+}
+
 export function buildGenerationJobCreateRequest(
   input: BuildGenerationJobPayloadInput
 ): GenerationJobCreateRequest {
@@ -154,7 +164,7 @@ export function buildGenerationJobCreateRequest(
     source_image_ref: input.sourceImage.source_image_ref,
     user_prompt: input.userPrompt ?? '',
     locale: input.locale,
-    client_job_id: input.kitClientId,
+    client_job_id: createClientJobId(input.kitClientId),
     marketing_kit_id: input.marketingKitId ?? null,
     planner_payload: {
       kit_client_id: input.kitClientId,

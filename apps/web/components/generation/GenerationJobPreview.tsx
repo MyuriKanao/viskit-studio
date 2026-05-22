@@ -71,6 +71,27 @@ export function GenerationJobPreview({
     job?.status === 'stopping';
   const isStopPending = isStopping || phase === 'stopping' || job?.status === 'stopping';
   const canStop = isActive && !isStopPending;
+  const outputByKey = React.useMemo(() => {
+    const byKey = new Map<string, GenerationOutput>();
+    for (const output of outputs) {
+      byKey.set(output.output_key, output);
+      byKey.set(output.output_id, output);
+      byKey.set(output.id, output);
+    }
+    return byKey;
+  }, [outputs]);
+  const previewItems = React.useMemo(() => {
+    if (planItems.length === 0) {
+      return outputs.map((output, index) => ({ output, index, planItem: null }));
+    }
+    return planItems.map((planItem, index) => ({
+      planItem,
+      index,
+      output:
+        outputByKey.get(planItem.id) ??
+        (planItem.slot_id ? outputByKey.get(planItem.slot_id) : undefined),
+    }));
+  }, [outputByKey, outputs, planItems]);
 
   async function handleStop() {
     setIsStopping(true);
@@ -131,50 +152,75 @@ export function GenerationJobPreview({
         ) : null}
       </section>
 
-      {outputs.length > 0 ? (
+      {previewItems.length > 0 ? (
         <section className="grid gap-s-3 sm:grid-cols-2">
-          {outputs.map((output) => (
-            <OutputTile key={output.output_id} output={output} locale={locale} />
-          ))}
+          {previewItems.map(({ output, planItem, index }) =>
+            output ? (
+              <OutputTile
+                key={output.output_id}
+                output={output}
+                title={planItem?.title}
+                aspectRatio={planItem?.aspect_ratio}
+                locale={locale}
+              />
+            ) : planItem ? (
+              <PlanPlaceholderTile key={planItem.id} item={planItem} index={index} />
+            ) : null
+          )}
         </section>
       ) : (
         <section className="grid gap-s-3 sm:grid-cols-2">
-          {planItems.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border-subtle bg-surface-01 p-s-4 text-sm text-ink-faint">
-              上传商品图并确认输出计划后，这里会显示生成进度、下载和编辑入口。
-            </div>
-          ) : (
-            planItems.map((item, index) => (
-              <div
-                key={item.id}
-                className="rounded-xl border border-border-subtle bg-surface-01 p-s-3"
-              >
-                <div className="aspect-[4/3] rounded-input bg-surface-03" />
-                <div className="mt-s-2 flex items-start justify-between gap-s-2">
-                  <div>
-                    <p className="text-sm font-medium text-ink-primary">{item.title}</p>
-                    <p className="mt-1 text-xs text-ink-muted">
-                      {item.destination_type === 'kit_slot'
-                        ? `套包槽位 ${item.slot_id || '待选'}`
-                        : '独立资产'}
-                      · {item.aspect_ratio || '自适应'} · 待确认
-                    </p>
-                  </div>
-                  <span className="rounded-input bg-surface-03 px-s-2 py-1 font-mono text-[10px] uppercase text-ink-faint">
-                    #{index + 1}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
+          <div className="rounded-xl border border-dashed border-border-subtle bg-surface-01 p-s-4 text-sm text-ink-faint">
+            上传商品图并确认输出计划后，这里会显示生成进度、下载和编辑入口。
+          </div>
         </section>
       )}
     </div>
   );
 }
 
-function OutputTile({ output, locale }: { output: GenerationOutput; locale: string }) {
+function PlanPlaceholderTile({
+  item,
+  index,
+}: {
+  item: GenerationPlan['items'][number];
+  index: number;
+}) {
+  return (
+    <div className="rounded-xl border border-border-subtle bg-surface-01 p-s-3">
+      <div className="aspect-[4/3] rounded-input bg-surface-03" />
+      <div className="mt-s-2 flex items-start justify-between gap-s-2">
+        <div>
+          <p className="text-sm font-medium text-ink-primary">{item.title}</p>
+          <p className="mt-1 text-xs text-ink-muted">
+            {item.destination_type === 'kit_slot'
+              ? `套包槽位 ${item.slot_id || '待选'}`
+              : '独立资产'}
+            · {item.aspect_ratio || '自适应'} · 待确认
+          </p>
+        </div>
+        <span className="rounded-input bg-surface-03 px-s-2 py-1 font-mono text-[10px] uppercase text-ink-faint">
+          #{index + 1}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function OutputTile({
+  output,
+  title,
+  aspectRatio,
+  locale,
+}: {
+  output: GenerationOutput;
+  title?: string;
+  aspectRatio?: string | null;
+  locale: string;
+}) {
   const imageSrc = outputImageSrc(output);
+  const [imageFailed, setImageFailed] = React.useState(false);
+  const showImage = Boolean(imageSrc) && !imageFailed;
   const complete = isComplete(output);
   const downloadHref = resolveApiImageSrc(
     output.download_url ?? output.image_url ?? output.png_path
@@ -188,12 +234,13 @@ function OutputTile({ output, locale }: { output: GenerationOutput; locale: stri
       className="overflow-hidden rounded-xl border border-border-subtle bg-surface-01"
     >
       <div className="relative aspect-[4/3] bg-surface-03">
-        {imageSrc ? (
+        {showImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageSrc}
             alt={`${output.title} preview`}
             loading="lazy"
+            onError={() => setImageFailed(true)}
             className="absolute inset-0 h-full w-full object-cover"
           />
         ) : (
@@ -210,12 +257,12 @@ function OutputTile({ output, locale }: { output: GenerationOutput; locale: stri
       </div>
       <div className="flex flex-col gap-s-2 p-s-3">
         <div>
-          <p className="text-sm font-medium text-ink-primary">{output.title}</p>
+          <p className="text-sm font-medium text-ink-primary">{title || output.title}</p>
           <p className="mt-1 text-xs text-ink-muted">
             {output.destination_type === 'kit_slot'
               ? `套包槽位 ${output.slot_id || '未指定'}`
               : '独立资产'}
-            · {output.output_kind}
+            · {aspectRatio || output.aspect_ratio || output.output_kind}
           </p>
         </div>
         {output.error_message ? (

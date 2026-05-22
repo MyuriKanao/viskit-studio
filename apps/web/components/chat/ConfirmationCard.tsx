@@ -13,7 +13,12 @@ import {
 } from '@/lib/chat/generation-brief';
 import type { GenerationBriefDraft, GenerationBriefOutputDraft } from '@/lib/chat/generation-brief';
 import { useChatStore } from '@/lib/chat/store';
-import type { ConfirmationMode, FieldInference, InferredSpec } from '@/lib/chat/types';
+import {
+  type ConfirmationMode,
+  type FieldInference,
+  type InferredSpec,
+  normalizeInferredSpec,
+} from '@/lib/chat/types';
 import type {
   GenerationPlan,
   GenerationPlanItem,
@@ -63,6 +68,12 @@ const FULL_KIT_SLOTS = [
   'M8',
   'M9',
 ] as const;
+
+type ManualPlanKind = 'white_bg' | 'model_showcase' | 'ugc_style' | 'banner';
+
+function manualPlanId(kind: ManualPlanKind): string {
+  return `manual-${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
 
 const WORKFLOW_STEPS = [
   {
@@ -125,15 +136,48 @@ function makeFullKitPlanItem(slotId: string): GenerationPlanItem {
   };
 }
 
-function makeManualPlanItem(kind: 'white_bg' | 'banner'): GenerationPlanItem {
+function makeManualPlanItem(kind: ManualPlanKind, locale: 'zh' | 'en'): GenerationPlanItem {
+  const presets: Record<
+    ManualPlanKind,
+    Pick<
+      GenerationPlanItem,
+      'output_kind' | 'title' | 'template_ref' | 'template_name' | 'aspect_ratio'
+    >
+  > = {
+    white_bg: {
+      output_kind: 'white_bg',
+      title: '白底产品主图',
+      template_ref: `builtin:${locale}:hero-image`,
+      template_name: '白底/纯色底产品主图',
+      aspect_ratio: '1:1',
+    },
+    model_showcase: {
+      output_kind: 'custom',
+      title: '模特展示图',
+      template_ref: `builtin:${locale}:model-showcase`,
+      template_name: '模特展示图',
+      aspect_ratio: '4:5',
+    },
+    ugc_style: {
+      output_kind: 'custom',
+      title: '试穿 / 买家秀',
+      template_ref: `builtin:${locale}:ugc-style`,
+      template_name: 'UGC风格/买家秀',
+      aspect_ratio: '4:5',
+    },
+    banner: {
+      output_kind: 'banner',
+      title: '促销海报 / Banner',
+      template_ref: `builtin:${locale}:poster-banner`,
+      template_name: '促销海报 / Banner',
+      aspect_ratio: '16:9',
+    },
+  };
+  const preset = presets[kind];
   return {
-    id: `manual-${kind}-${Date.now().toString(36)}`,
-    output_kind: kind,
-    title: kind === 'white_bg' ? '白底产品主图' : '促销海报 / Banner',
+    id: manualPlanId(kind),
+    ...preset,
     reason: '用户手动添加',
-    template_ref: null,
-    template_name: null,
-    aspect_ratio: kind === 'white_bg' ? '1:1' : '16:9',
     destination_type: 'asset',
     slot_id: null,
     enabled: true,
@@ -145,6 +189,15 @@ function sourceLabel(source: GenerationPlan['plan_source']): string {
   if (source === 'fallback') return '默认计划';
   if (source === 'manual') return '手动编辑';
   return '智能推荐';
+}
+
+function textValue(value: unknown): string {
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function colorValue(value: unknown): string {
+  const text = textValue(value).trim();
+  return /^#[0-9a-f]{6}$/i.test(text) ? text : '#1D9AB2';
 }
 
 // ---------------------------------------------------------------------------
@@ -178,15 +231,15 @@ function EditableCell({
         <span className="flex items-center gap-s-2">
           <input
             type="color"
-            value={field.value}
+            value={colorValue(field.value)}
             onChange={(e) => onChange(e.target.value)}
             className="h-8 w-10 cursor-pointer rounded-input border border-border-subtle bg-surface-02 p-s-1"
           />
-          <span className="font-mono text-sm text-ink-secondary">{field.value}</span>
+          <span className="font-mono text-sm text-ink-secondary">{textValue(field.value)}</span>
         </span>
       ) : isProductType ? (
         <select
-          value={normalizeProductType(field.value)}
+          value={normalizeProductType(textValue(field.value))}
           onChange={(e) => onChange(e.target.value)}
           className={FIELD_INPUT_CLS}
         >
@@ -199,7 +252,7 @@ function EditableCell({
       ) : (
         <input
           type="text"
-          value={field.value}
+          value={textValue(field.value)}
           onChange={(e) => onChange(e.target.value)}
           className={FIELD_INPUT_CLS}
         />
@@ -211,18 +264,6 @@ function EditableCell({
 // ---------------------------------------------------------------------------
 // Color swatch (read-only, minimal mode)
 // ---------------------------------------------------------------------------
-function ColorSwatch({ hex }: { hex: string }) {
-  return (
-    <span className="inline-flex items-center gap-s-2">
-      <span
-        className="inline-block h-5 w-5 rounded-sm border border-border-subtle"
-        style={{ backgroundColor: hex }}
-      />
-      <span className="font-mono text-sm text-ink-secondary">{hex}</span>
-    </span>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -240,7 +281,7 @@ export function ConfirmationCard({
   const activeJobId = useChatStore((s) => s.active_job_id);
 
   // Local editable copy of spec fields
-  const [spec, setSpec] = React.useState<InferredSpec>(() => inferred);
+  const [spec, setSpec] = React.useState<InferredSpec>(() => normalizeInferredSpec(inferred));
   const [plan, setPlan] = React.useState<GenerationPlan>(() => outputPlan);
   const [guardNote, setGuardNote] = React.useState<string | null>(null);
   const schemesQuery = useTemplateSchemes(locale);
@@ -253,7 +294,9 @@ export function ConfirmationCard({
   const [rewriteCacheKey, setRewriteCacheKey] = React.useState<string | null>(null);
   const [rewriteError, setRewriteError] = React.useState<string | null>(null);
   const [sellingPointKeys, setSellingPointKeys] = React.useState<string[]>(() =>
-    inferred.selling_points.map((_, index) => `selling-point-${Date.now().toString(36)}-${index}`)
+    (inferred.selling_points ?? []).map(
+      (_, index) => `selling-point-${Date.now().toString(36)}-${index}`
+    )
   );
 
   // Determine effective mode — default to minimal when store is null
@@ -264,9 +307,10 @@ export function ConfirmationCard({
   }, [outputPlan]);
 
   React.useEffect(() => {
-    setSpec(inferred);
+    const nextSpec = normalizeInferredSpec(inferred);
+    setSpec(nextSpec);
     setSellingPointKeys(
-      inferred.selling_points.map((_, index) => `selling-point-${Date.now().toString(36)}-${index}`)
+      nextSpec.selling_points.map((_, index) => `selling-point-${Date.now().toString(36)}-${index}`)
     );
   }, [inferred]);
 
@@ -281,27 +325,6 @@ export function ConfirmationCard({
       })),
     [briefDraft.selling_points, sellingPointKeys]
   );
-
-  // Low-confidence fields for "asking" mode
-  const lowConfFields = React.useMemo(() => {
-    const fields: Array<{ key: keyof InferredSpec; label: string }> = [];
-    if (spec.brand.confidence < LOW_CONF_THRESHOLD) fields.push({ key: 'brand', label: '品牌' });
-    if (spec.category.confidence < LOW_CONF_THRESHOLD)
-      fields.push({ key: 'category', label: '品类' });
-    if (spec.product_type.confidence < LOW_CONF_THRESHOLD)
-      fields.push({ key: 'product_type', label: '风格' });
-    if (spec.brand_color_hex.confidence < LOW_CONF_THRESHOLD)
-      fields.push({ key: 'brand_color_hex', label: '品牌色' });
-    return fields;
-  }, [spec]);
-
-  // Auto-activate asking mode when low-conf fields exist
-  React.useEffect(() => {
-    if (lowConfFields.length > 0 && mode === 'minimal') {
-      setConfirmationMode('asking');
-      onModeChange('asking');
-    }
-  }, [lowConfFields.length, mode, onModeChange, setConfirmationMode]);
 
   function handleSetMode(m: ConfirmationMode) {
     setConfirmationMode(m);
@@ -358,11 +381,11 @@ export function ConfirmationCard({
     });
   }
 
-  function addPlanItem(kind: 'white_bg' | 'banner') {
+  function addPlanItem(kind: ManualPlanKind) {
     commitPlan({
       ...plan,
       plan_source: 'manual',
-      items: [...plan.items, makeManualPlanItem(kind)],
+      items: [...plan.items, makeManualPlanItem(kind, locale)],
     });
   }
 
@@ -446,11 +469,6 @@ export function ConfirmationCard({
       setGuardNote('当前环境未接入 LLM 改写接口，可直接确认进入生图流。');
       return;
     }
-    if (!briefDraft.product.brand.trim() || !briefDraft.product.category.trim()) {
-      handleSetMode('asking');
-      setGuardNote('请先补全品牌和品类，再进行 LLM 改写。');
-      return;
-    }
     setRewriteStatus('loading');
     setRewriteError(null);
     try {
@@ -466,19 +484,6 @@ export function ConfirmationCard({
 
   // Polish Queue #1 — onStart guard
   function handleStart() {
-    if (!spec.brand.value.trim() || !spec.category.value.trim()) {
-      handleSetMode('asking');
-      setGuardNote('请先补全品牌和品类');
-      return;
-    }
-    if (
-      spec.brand.confidence < LOW_CONF_THRESHOLD ||
-      spec.category.confidence < LOW_CONF_THRESHOLD
-    ) {
-      handleSetMode('asking');
-      setGuardNote('请先确认品牌或品类');
-      return;
-    }
     const selectedItems = plan.items.filter((item) => item.enabled);
     if (selectedItems.length === 0) {
       setGuardNote('请至少保留一个输出项');
@@ -499,13 +504,6 @@ export function ConfirmationCard({
     );
   }
 
-  // Check if asking mode still has unresolved low-conf fields
-  const askingBlocked =
-    mode === 'asking' &&
-    (spec.brand.confidence < LOW_CONF_THRESHOLD ||
-      spec.category.confidence < LOW_CONF_THRESHOLD ||
-      spec.product_type.confidence < LOW_CONF_THRESHOLD ||
-      spec.brand_color_hex.confidence < LOW_CONF_THRESHOLD);
   const selectedPlanCount = plan.items.filter((item) => item.enabled).length;
   const planBlocked = selectedPlanCount === 0;
   const isJobActive = Boolean(activeJobId);
@@ -836,54 +834,6 @@ export function ConfirmationCard({
         </div>
       )}
 
-      {/* ── MINIMAL / ASKING shared preview ── */}
-      {(mode === 'minimal' || mode === 'asking') && (
-        <div className="flex flex-col gap-s-2 text-sm">
-          <div data-testid="field-category" className="flex items-center gap-s-2">
-            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">
-              品类
-            </span>
-            <span className="text-ink-primary">{spec.category.value}</span>
-            <ConfidenceBadge field={spec.category} />
-          </div>
-          <div data-testid="field-product_type" className="flex items-center gap-s-2">
-            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">
-              风格
-            </span>
-            <span className="text-ink-primary">{spec.product_type.value}</span>
-            <ConfidenceBadge field={spec.product_type} />
-          </div>
-          <div data-testid="field-brand_color_hex" className="flex items-center gap-s-2">
-            <span className="font-mono uppercase tracking-wider text-xs text-ink-faint w-16">
-              品牌色
-            </span>
-            <ColorSwatch hex={spec.brand_color_hex.value} />
-            <ConfidenceBadge field={spec.brand_color_hex} />
-          </div>
-        </div>
-      )}
-
-      {/* ── ASKING mode — low-conf editable cells ── */}
-      {mode === 'asking' && lowConfFields.length > 0 && (
-        <div className="flex flex-col gap-s-3 border-t border-border-subtle pt-s-3">
-          <p className="text-xs text-ink-muted">以下字段置信度较低，请确认：</p>
-          {lowConfFields.map(({ key, label }) => {
-            const f = spec[key] as FieldInference<string>;
-            return (
-              <EditableCell
-                key={key}
-                label={label}
-                field={f}
-                fieldName={key}
-                onChange={(val) => updateField(key, val)}
-                isColor={key === 'brand_color_hex'}
-                isProductType={key === 'product_type'}
-              />
-            );
-          })}
-        </div>
-      )}
-
       {/* ── EXPANDED mode — all fields ── */}
       {mode === 'expanded' && (
         <div className="flex flex-col gap-s-3">
@@ -1021,6 +971,20 @@ export function ConfirmationCard({
             </button>
             <button
               type="button"
+              onClick={() => addPlanItem('model_showcase')}
+              className="rounded-input border border-border-subtle px-s-2 py-s-1 text-ink-secondary hover:border-accent hover:text-accent"
+            >
+              + 模特图
+            </button>
+            <button
+              type="button"
+              onClick={() => addPlanItem('ugc_style')}
+              className="rounded-input border border-border-subtle px-s-2 py-s-1 text-ink-secondary hover:border-accent hover:text-accent"
+            >
+              + 试穿/买家秀
+            </button>
+            <button
+              type="button"
               onClick={() => addPlanItem('banner')}
               className="rounded-input border border-border-subtle px-s-2 py-s-1 text-ink-secondary hover:border-accent hover:text-accent"
             >
@@ -1040,7 +1004,7 @@ export function ConfirmationCard({
         <div className="flex flex-col gap-s-2">
           {plan.items.length === 0 ? (
             <div className="rounded-input border border-dashed border-border-subtle p-s-3 text-ink-muted">
-              暂无输出项，请添加白底主图、Banner 或完整 14 图计划。
+              暂无输出项，请添加白底主图、模特图、买家秀、Banner 或完整 14 图计划。
             </div>
           ) : (
             plan.items.map((item, index) => (
@@ -1157,7 +1121,7 @@ export function ConfirmationCard({
           data-testid="start-button"
           type="button"
           onClick={handleStart}
-          disabled={askingBlocked || planBlocked || isJobActive}
+          disabled={planBlocked || isJobActive}
           className={cn(
             'inline-flex items-center justify-center rounded-input bg-accent px-s-4 py-s-2 text-sm font-medium text-ink-base-l',
             'transition-colors duration-fast hover:bg-accent-soft',

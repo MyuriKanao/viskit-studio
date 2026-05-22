@@ -97,6 +97,7 @@ export interface GenerationJobSnapshot {
   user_prompt: string | null;
   locale: Locale | string | null;
   marketing_kit_id: number | null;
+  planner_payload: Record<string, unknown>;
   outputs: GenerationOutput[];
   error_message: string | null;
   created_at?: string | null;

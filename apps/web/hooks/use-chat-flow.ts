@@ -26,7 +26,13 @@ import type { SpecResponse } from '@/hooks/use-kit-pipeline';
 import { LOW_CONF_THRESHOLD } from '@/lib/chat/constants';
 import { buildGenerationBriefDraft, buildRewriteSpecPayload } from '@/lib/chat/generation-brief';
 import { useChatStore } from '@/lib/chat/store';
-import type { InferredSpec, ProgressEvent } from '@/lib/chat/types';
+import {
+  type InferredSpec,
+  type ProgressEvent,
+  inferenceConfidence,
+  inferenceText,
+  normalizeInferredSpec,
+} from '@/lib/chat/types';
 import { buildGenerationJobCreateRequest } from '@/lib/generation/job-payload';
 import type {
   GenerationJobStatus,
@@ -56,13 +62,13 @@ function sellingPointValue(value: unknown): string {
 
 function buildProductProfile(inferred: InferredSpec): ProductProfilePayload {
   return {
-    name: inferred.name?.value ?? null,
-    brand: inferred.brand.value,
-    category: inferred.category.value,
-    product_type: normalizeProductType(inferred.product_type.value),
-    price: inferred.price?.value ?? null,
-    brand_color_hex: inferred.brand_color_hex.value,
-    selling_points: inferred.selling_points
+    name: inferenceText(inferred.name) || null,
+    brand: inferenceText(inferred.brand),
+    category: inferenceText(inferred.category),
+    product_type: normalizeProductType(inferenceText(inferred.product_type)),
+    price: typeof inferred.price?.value === 'number' ? inferred.price.value : null,
+    brand_color_hex: inferenceText(inferred.brand_color_hex),
+    selling_points: (inferred.selling_points ?? [])
       .map((sp) => sellingPointValue(sp.value))
       .filter(Boolean),
   };
@@ -70,12 +76,13 @@ function buildProductProfile(inferred: InferredSpec): ProductProfilePayload {
 
 function buildSellingPoints(inferred: InferredSpec, userPrompt: string | null): KitSellingPoint[] {
   const promptText = userPrompt?.trim();
-  const pointTexts = inferred.selling_points
+  const pointTexts = (inferred.selling_points ?? [])
     .map((sp) => sellingPointValue(sp.value))
     .filter(Boolean);
   const defaultPoint =
-    [inferred.brand.value, inferred.category.value, promptText].filter(Boolean).join(' ') ||
-    '商品基础展示';
+    [inferenceText(inferred.brand), inferenceText(inferred.category), promptText]
+      .filter(Boolean)
+      .join(' ') || '商品基础展示';
   return (pointTexts.length > 0 ? pointTexts : [defaultPoint]).filter(Boolean).map((point) => ({
     title: point,
     evidence: promptText ? `${point}；用户提示：${promptText}` : point,
@@ -201,21 +208,23 @@ export function useChatImageFlow() {
           }));
         setSourceImage(sourceImage);
 
-        const inferred = await extract({
-          kitClientId,
-          imageUrl: imagePayload.imageUrl,
-          description,
-        });
+        const inferred = normalizeInferredSpec(
+          await extract({
+            kitClientId,
+            imageUrl: imagePayload.imageUrl,
+            description,
+          })
+        );
 
         // 6a. Persist inferred spec
         setInferredSpec(inferred);
 
         // 6b. Set initial confirmation mode based on required-field confidence
         const hasLowConf =
-          inferred.brand.confidence < LOW_CONF_THRESHOLD ||
-          inferred.category.confidence < LOW_CONF_THRESHOLD ||
-          inferred.product_type.confidence < LOW_CONF_THRESHOLD ||
-          inferred.brand_color_hex.confidence < LOW_CONF_THRESHOLD;
+          inferenceConfidence(inferred.brand) < LOW_CONF_THRESHOLD ||
+          inferenceConfidence(inferred.category) < LOW_CONF_THRESHOLD ||
+          inferenceConfidence(inferred.product_type) < LOW_CONF_THRESHOLD ||
+          inferenceConfidence(inferred.brand_color_hex) < LOW_CONF_THRESHOLD;
         setConfirmationMode(hasLowConf ? 'asking' : 'minimal');
 
         updateMessage(pendingMessageId, {
@@ -346,16 +355,16 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
       confirmedPlan?: GenerationPlan,
       rewrittenSpec?: SpecResponse
     ) => {
-      // Polish Queue #1 guard: refuse when brand/category confidence is still low
-      if (
-        inferred.brand.confidence < LOW_CONF_THRESHOLD ||
-        inferred.category.confidence < LOW_CONF_THRESHOLD
-      ) {
+      const normalizedInferred = normalizeInferredSpec(inferred);
+      const brand = inferenceText(normalizedInferred.brand);
+      const category = inferenceText(normalizedInferred.category);
+
+      if (!brand || !category) {
         setConfirmationMode('asking');
         appendMessage({
           role: 'ai',
           type: 'text',
-          content: '请先确认品牌和品类后再开始生成。',
+          content: '请先填写品牌和品类后再开始生成。',
         });
         return;
       }
@@ -374,18 +383,19 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
       // Build SkuMetaIn payload (sku/name are optional — server fills defaults per HIGH-3)
       const skuMeta: KitSkuMetaPayload = {
         sku: '', // server will synthesize KIT-{ts} when empty string / null coerced server-side
-        name: inferred.name?.value ?? '',
-        brand: inferred.brand.value,
-        category: inferred.category.value,
-        product_type: normalizeProductType(inferred.product_type.value),
-        price: inferred.price?.value ?? 0,
+        name: inferenceText(normalizedInferred.name),
+        brand,
+        category,
+        product_type: normalizeProductType(inferenceText(normalizedInferred.product_type)),
+        price:
+          typeof normalizedInferred.price?.value === 'number' ? normalizedInferred.price.value : 0,
       };
 
       const promptText = userPrompt?.trim();
-      const sellingPoints = buildSellingPoints(inferred, userPrompt);
+      const sellingPoints = buildSellingPoints(normalizedInferred, userPrompt);
 
       // Append AI progress placeholder
-      appendMessage({ role: 'ai', type: 'text', content: '输出计划已确认，正在生成规格…' });
+      appendMessage({ role: 'ai', type: 'text', content: '输出计划已确认，正在整理生成说明…' });
 
       try {
         // Step 1: /spec. If the user already ran the LLM brief rewrite and did
@@ -404,8 +414,8 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
           role: 'ai',
           type: 'text',
           content: rewrittenSpec
-            ? `已使用改写后的 brief，正在创建后台生成任务（${enabledItems.length} 个输出）…`
-            : `规格完成，正在创建后台生成任务（${enabledItems.length} 个输出）…`,
+            ? `已使用改写后的生成说明，正在创建后台生成任务（${enabledItems.length} 个输出）…`
+            : `生成说明已准备好，正在创建后台生成任务（${enabledItems.length} 个输出）…`,
         });
 
         // Step 2: create durable generation job. Job progress is observed through
@@ -417,8 +427,11 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
           items: enabledItems,
           requires_confirmation: true,
         };
-        const product = buildProductProfile(inferred);
-        const stylePrompt = [promptText, ...inferred.selling_points.map((sp) => sp.value)]
+        const product = buildProductProfile(normalizedInferred);
+        const stylePrompt = [
+          promptText,
+          ...(normalizedInferred.selling_points ?? []).map((sp) => sp.value),
+        ]
           .filter(Boolean)
           .join('、');
         if (isFullKitPlan(selectedPlan)) {
@@ -426,12 +439,12 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
           // flow and is not used as a catch-all fallback for durable job failures.
           const result = await startGenerate({
             kit_id: kitClientId,
-            brand_color_hex: inferred.brand_color_hex.value,
+            brand_color_hex: inferenceText(normalizedInferred.brand_color_hex),
             locale: locale as 'zh' | 'en',
             spec: specResp.spec,
             style_prompt: stylePrompt,
-            template_scheme_ref: inferred.template_scheme_ref ?? null,
-            template_slot_overrides: inferred.template_slot_overrides ?? {},
+            template_scheme_ref: normalizedInferred.template_scheme_ref ?? null,
+            template_slot_overrides: normalizedInferred.template_slot_overrides ?? {},
             onProgress: (e: ProgressEvent) => {
               onProgress?.(e);
               const existingId = progressMessages.get(e.slot);
@@ -474,12 +487,12 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
             stylePrompt,
             product,
             outputPlan: selectedPlan,
-            inferred,
+            inferred: normalizedInferred,
             spec: specResp.spec,
             specMarkdown: specResp.spec_markdown,
             compliance: specResp.compliance,
-            templateSchemeRef: inferred.template_scheme_ref ?? null,
-            templateSlotOverrides: inferred.template_slot_overrides ?? {},
+            templateSchemeRef: normalizedInferred.template_scheme_ref ?? null,
+            templateSlotOverrides: normalizedInferred.template_slot_overrides ?? {},
           })
         );
 
@@ -516,7 +529,7 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
 
   const handleRewriteBrief = useCallback(
     async (inferred: InferredSpec, plan: GenerationPlan) => {
-      const draft = buildGenerationBriefDraft(inferred, plan);
+      const draft = buildGenerationBriefDraft(normalizeInferredSpec(inferred), plan);
       const payload = buildRewriteSpecPayload(draft, locale as 'zh' | 'en', userPrompt);
       return createSpec({
         kit_id: kitClientId,
