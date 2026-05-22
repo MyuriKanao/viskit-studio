@@ -28,7 +28,7 @@
 ```yaml
 services:
   app:
-    image: myurikanao/viskit-studio:latest
+    image: mayurikano/viskit-studio:latest
     ports:
       - "3068:3000"
     environment:
