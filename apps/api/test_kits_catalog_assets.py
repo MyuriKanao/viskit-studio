@@ -50,6 +50,8 @@ class KitsCatalogAssetsTest(unittest.TestCase):
         self.asset_path = self.output_dir / "assets" / "asset_42.png"
         self.asset_path.parent.mkdir(parents=True, exist_ok=True)
         self.asset_path.write_bytes(b"asset png")
+        self.asset_path_43 = self.output_dir / "assets" / "asset_43.png"
+        self.asset_path_43.write_bytes(b"asset png 43")
 
         with session_scope() as session:
             session.execute(
@@ -101,9 +103,12 @@ class KitsCatalogAssetsTest(unittest.TestCase):
                     "  created_at, updated_at)"
                     " VALUES (42, 'Standalone Main', 'product_main', :png_path,"
                     "  'job_asset', '{\"job_id\":\"job_asset\"}',"
-                    "  '2026-05-21T10:00:00', '2026-05-21T10:00:00')"
+                    "  '2026-05-21T10:00:00', '2026-05-21T10:00:00'),"
+                    " (43, 'Social Main', 'social_media', :png_path_43,"
+                    "  'job_asset', '{\"job_id\":\"job_asset\"}',"
+                    "  '2026-05-21T10:00:01', '2026-05-21T10:00:01')"
                 ),
-                {"png_path": str(self.asset_path)},
+                {"png_path": str(self.asset_path), "png_path_43": str(self.asset_path_43)},
             )
 
         app = FastAPI()
@@ -122,10 +127,11 @@ class KitsCatalogAssetsTest(unittest.TestCase):
 
         self.assertEqual(body["total"], 2)
         asset = next(item for item in body["items"] if item["source_type"] == "asset")
-        self.assertEqual(asset["asset_id"], "42")
-        self.assertEqual(asset["sku"], "ASSET-42")
-        self.assertEqual(asset["image_ids"][0], "asset:42")
-        self.assertTrue(asset["thumbs"][0].startswith("/api/assets/42/image?v="))
+        self.assertEqual(asset["asset_id"], "43")
+        self.assertEqual(asset["sku"], "JOB-job_asset")
+        self.assertEqual(asset["image_ids"][:2], ["asset:43", "asset:42"])
+        self.assertTrue(asset["thumbs"][0].startswith("/api/assets/43/image?v="))
+        self.assertTrue(asset["thumbs"][1].startswith("/api/assets/42/image?v="))
 
     def test_catalog_filters_exclude_assets_when_not_applicable(self) -> None:
         response = self.client.get("/api/kits?min_score=80")

@@ -849,40 +849,96 @@ def _catalog_sort_value(item: Any, sort: Literal["created_at", "updated_at", "sc
     return _iso_or_none(raw)
 
 
+def _asset_catalog_items(rows: list[Any]) -> list[KitListItem]:
+    groups: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+
+    for row in rows:
+        asset_id = _valid_asset_id(row.id)
+        if asset_id is None:
+            continue
+        thumb = _asset_thumb_if_exists(asset_id, row.png_path)
+        if thumb is None:
+            continue
+
+        source_job_id = str(getattr(row, "source_job_id", "") or "").strip()
+        group_key = f"job:{source_job_id}" if source_job_id else f"asset:{asset_id}"
+        if group_key not in groups:
+            product = _asset_product_from_row(row)
+            product_name = (
+                str(product.get("name")).strip()
+                if isinstance(product, dict) and product.get("name")
+                else ""
+            )
+            prompt_name = str(getattr(row, "user_prompt", "") or "").strip()
+            name = product_name or prompt_name or str(row.name).strip() or f"Asset {asset_id}"
+            category = (
+                str(product.get("category")).strip()
+                if isinstance(product, dict) and product.get("category")
+                else str(row.output_kind or "asset")
+            )
+            created_at = _iso_or_none(getattr(row, "created_at", None))
+            groups[group_key] = {
+                "first_asset_id": asset_id,
+                "source_job_id": source_job_id,
+                "name": name,
+                "category": category,
+                "locale": row.locale if row.locale in {"zh", "en"} else None,
+                "created_at": created_at,
+                "updated_at": _iso_or_none(getattr(row, "updated_at", None)) or created_at,
+                "thumbs": [],
+                "image_ids": [],
+            }
+            order.append(group_key)
+
+        group = groups[group_key]
+        if len(group["thumbs"]) >= 14:
+            continue
+        group["thumbs"].append(thumb)
+        group["image_ids"].append(f"asset:{asset_id}")
+
+    items: list[KitListItem] = []
+    for group_key in order:
+        group = groups[group_key]
+        first_asset_id = str(group["first_asset_id"])
+        source_job_id = str(group["source_job_id"])
+        identity = source_job_id or first_asset_id
+        numeric_id = (
+            int(first_asset_id)
+            if not source_job_id and first_asset_id.isdecimal()
+            else zlib.crc32(group_key.encode("utf-8"))
+        )
+        thumbs = list(group["thumbs"])[:14]
+        image_ids = list(group["image_ids"])[:14]
+        while len(thumbs) < 14:
+            thumbs.append(None)
+        while len(image_ids) < 14:
+            image_ids.append(None)
+        sku = f"ASSET-{first_asset_id}" if not source_job_id else f"JOB-{identity}"
+        items.append(
+            KitListItem(
+                id=-numeric_id,
+                sku=sku,
+                name=str(group["name"]),
+                name_en=None,
+                source_type="asset",
+                asset_id=first_asset_id,
+                image_ids=image_ids,
+                status="ready",
+                score=None,
+                locale=group["locale"],
+                category=str(group["category"]),
+                created_at=group["created_at"],
+                updated_at=group["updated_at"],
+                thumbs=thumbs,
+            )
+        )
+    return items
+
+
 def _asset_catalog_item(row: Any) -> KitListItem | None:
-    asset_id = _valid_asset_id(row.id)
-    if asset_id is None:
-        return None
-    thumb = _asset_thumb_if_exists(asset_id, row.png_path)
-    if thumb is None:
-        return None
-    product = _asset_product_from_row(row)
-    name = str(row.name).strip() or f"Asset {asset_id}"
-    category = (
-        str(product.get("category")).strip()
-        if isinstance(product, dict) and product.get("category")
-        else str(row.output_kind or "asset")
-    )
-    locale = row.locale if row.locale in {"zh", "en"} else None
-    created_at = _iso_or_none(getattr(row, "created_at", None))
-    updated_at = _iso_or_none(getattr(row, "updated_at", None)) or created_at
-    numeric_id = int(asset_id) if asset_id.isdecimal() else zlib.crc32(asset_id.encode("utf-8"))
-    return KitListItem(
-        id=-numeric_id,
-        sku=f"ASSET-{asset_id}",
-        name=name,
-        name_en=None,
-        source_type="asset",
-        asset_id=asset_id,
-        image_ids=[f"asset:{asset_id}"] + [None] * 13,
-        status="ready",
-        score=None,
-        locale=locale,
-        category=category,
-        created_at=created_at,
-        updated_at=updated_at,
-        thumbs=[thumb] + [None] * 13,
-    )
+    items = _asset_catalog_items([row])
+    return items[0] if items else None
 
 
 def _kit_catalog_item(session: Session, row: Any) -> KitListItem:
@@ -1045,7 +1101,8 @@ def list_kits(
         asset_rows = session.execute(
             text(
                 "SELECT ga.id, ga.name, ga.output_kind, ga.png_path, ga.metadata,"
-                " ga.created_at, ga.updated_at, gj.locale, gj.planner_payload"
+                " ga.source_job_id, ga.created_at, ga.updated_at,"
+                " gj.locale, gj.user_prompt, gj.planner_payload"
                 " FROM generated_assets ga"
                 " LEFT JOIN generation_jobs gj ON gj.id = ga.source_job_id"
                 f" {asset_where}"
@@ -1053,7 +1110,7 @@ def list_kits(
             ),
             asset_params,
         ).all()
-        asset_items = [item for row in asset_rows if (item := _asset_catalog_item(row)) is not None]
+        asset_items = _asset_catalog_items(list(asset_rows))
         if category is not None:
             asset_items = [item for item in asset_items if item.category == category]
         items.extend(asset_items)

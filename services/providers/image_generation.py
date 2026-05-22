@@ -319,6 +319,24 @@ def _resolution_from_size(size: str) -> str | None:
     return "1K"
 
 
+def _normalise_size_to_multiple(size: str, multiple: int) -> str:
+    parts = size.strip().lower().split("x", 1)
+    if len(parts) != 2:
+        return size
+    try:
+        width = int(parts[0])
+        height = int(parts[1])
+    except ValueError:
+        return size
+    if width <= 0 or height <= 0:
+        return size
+
+    def _round_up(value: int) -> int:
+        return ((value + multiple - 1) // multiple) * multiple
+
+    return f"{_round_up(width)}x{_round_up(height)}"
+
+
 def _normalise_resolution(value: str | None) -> str | None:
     if not value:
         return None
@@ -443,15 +461,18 @@ class UniversalImageGenerationAdapter:
         task_id = kwargs.pop("image_id", None)
         images = self._normalise_reference_images(kwargs)
         mask = self._normalise_mask_image(kwargs)
+        provider_size = (
+            _normalise_size_to_multiple(size, 16) if self.adapter == "chatgpt2api" else size
+        )
         request = _ImageRequest(
             prompt=prompt,
             images=images,
             mask=mask,
-            size=size,
+            size=provider_size,
             aspect_ratio=str(kwargs.pop("aspect_ratio", "") or "")
-            or _aspect_ratio_from_size(size),
+            or _aspect_ratio_from_size(provider_size),
             resolution=_normalise_resolution(
-                str(kwargs.pop("resolution", "") or "") or _resolution_from_size(size)
+                str(kwargs.pop("resolution", "") or "") or _resolution_from_size(provider_size)
             ),
             n=max(1, n),
             task_id=str(task_id) if task_id is not None else None,
@@ -462,12 +483,12 @@ class UniversalImageGenerationAdapter:
             role=self.role,
             provider_name=self._provider_name(),
             image_count=len(generated) or n,
-            resolution=size,
-            cost_usd=_image_cost(size, len(generated) or n),
+            resolution=provider_size,
+            cost_usd=_image_cost(provider_size, len(generated) or n),
         )
         return ImageGenResponse(
             images=generated,
-            resolution=size,
+            resolution=provider_size,
             model=self._model_name(),
             raw=raw,
             task_id=request.task_id,
@@ -759,8 +780,8 @@ class UniversalImageGenerationAdapter:
                 "n": str(request.n),
                 "response_format": "b64_json",
             }
-            if request.aspect_ratio and request.aspect_ratio != "自动":
-                form["size"] = request.aspect_ratio
+            if request.size and request.size != "自动":
+                form["size"] = request.size
             files = [
                 ("image", (f"image_{index}.png", image.data, image.mime_type))
                 for index, image in enumerate(request.images, start=1)
@@ -781,8 +802,8 @@ class UniversalImageGenerationAdapter:
                 "n": request.n,
                 "response_format": "b64_json",
             }
-            if request.aspect_ratio and request.aspect_ratio != "自动":
-                payload["size"] = request.aspect_ratio
+            if request.size and request.size != "自动":
+                payload["size"] = request.size
             data = self._post_json(
                 _append_v1(self._base_url(), "/images/generations"),
                 payload,

@@ -1310,6 +1310,10 @@ components:
       type: object
     OcrResponse:
       properties:
+        available:
+          default: true
+          title: Available
+          type: boolean
         boxes:
           items:
             $ref: '#/components/schemas/TextBoxOut'
@@ -1318,6 +1322,11 @@ components:
         engine:
           title: Engine
           type: string
+        unavailable_reason:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Unavailable Reason
         version:
           title: Version
           type: string

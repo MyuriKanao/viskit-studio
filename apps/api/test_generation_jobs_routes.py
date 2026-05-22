@@ -21,6 +21,7 @@ from apps.api.lib import db as db_mod
 from apps.api.lib.db import get_session
 from apps.api.routes.generation_jobs import (
     GenerationEventBus,
+    _provider_safe_size,
     _run_generation_job,
 )
 from apps.api.routes.generation_jobs import (
@@ -52,6 +53,9 @@ class GenerationJobsRouteTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.output_dir = self.root / "imagegen"
+        self.previous_database_url = os.environ.get("DATABASE_URL")
+        self.previous_imagegen_output_dir = os.environ.get("IMAGEGEN_OUTPUT_DIR")
+        self.previous_bootstrap_workspace = os.environ.get("VISKIT_BOOTSTRAP_WORKSPACE")
         os.environ["DATABASE_URL"] = f"sqlite:///{self.root / 'viskit-test.db'}"
         os.environ["IMAGEGEN_OUTPUT_DIR"] = str(self.output_dir)
         os.environ["VISKIT_BOOTSTRAP_WORKSPACE"] = "0"
@@ -106,6 +110,18 @@ class GenerationJobsRouteTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
+        if self.previous_database_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = self.previous_database_url
+        if self.previous_imagegen_output_dir is None:
+            os.environ.pop("IMAGEGEN_OUTPUT_DIR", None)
+        else:
+            os.environ["IMAGEGEN_OUTPUT_DIR"] = self.previous_imagegen_output_dir
+        if self.previous_bootstrap_workspace is None:
+            os.environ.pop("VISKIT_BOOTSTRAP_WORKSPACE", None)
+        else:
+            os.environ["VISKIT_BOOTSTRAP_WORKSPACE"] = self.previous_bootstrap_workspace
         db_mod._engine = None
         db_mod._SessionLocal = None
 
@@ -143,6 +159,98 @@ class GenerationJobsRouteTest(unittest.TestCase):
         self.assertEqual(body["limit"], 1)
         self.assertEqual(body["offset"], 1)
         self.assertEqual([job["id"] for job in body["jobs"]], ["job_running"])
+
+    def test_create_generation_job_reuses_existing_client_job_id(self) -> None:
+        payload = {
+            "source_image_ref": "src_test",
+            "user_prompt": "retry prompt",
+            "locale": "zh",
+            "client_job_id": "client-retry-key",
+            "planner_payload": {"kit_client_id": "kit-retry"},
+            "outputs": [
+                {
+                    "output_key": "product_main",
+                    "output_kind": "product_main",
+                    "template_ref": "builtin:zh:hero-image",
+                    "width": 1024,
+                    "height": 1024,
+                    "prompt": "prompt",
+                    "destination_type": "asset",
+                }
+            ],
+        }
+
+        first = self.client.post("/api/generation/jobs", json=payload)
+        self.assertEqual(first.status_code, 201)
+        second = self.client.post("/api/generation/jobs", json=payload)
+        self.assertEqual(second.status_code, 201)
+
+        first_body = first.json()
+        second_body = second.json()
+        self.assertEqual(second_body["job_id"], first_body["job_id"])
+        self.assertEqual(second_body["output_count"], 1)
+
+        with session_scope() as session:
+            job_count = session.execute(
+                text(
+                    "SELECT COUNT(*) FROM generation_jobs"
+                    " WHERE client_job_id = 'client-retry-key'"
+                )
+            ).scalar_one()
+            output_count = session.execute(
+                text(
+                    "SELECT COUNT(*) FROM generation_outputs"
+                    " WHERE job_id = :job_id"
+                ),
+                {"job_id": first_body["job_id"]},
+            ).scalar_one()
+
+        self.assertEqual(job_count, 1)
+        self.assertEqual(output_count, 1)
+
+    def test_provider_safe_size_rounds_dimensions_to_multiples_of_16(self) -> None:
+        self.assertEqual(_provider_safe_size(1080, 1350), "1088x1360")
+        self.assertEqual(_provider_safe_size(1350, 1080), "1360x1088")
+        self.assertEqual(_provider_safe_size(1536, 864), "1536x864")
+
+    def test_generation_output_image_falls_back_to_job_artifact_path(self) -> None:
+        fallback_path = self.output_dir / "jobs" / "job_missing_path" / "social.png"
+        fallback_path.parent.mkdir(parents=True, exist_ok=True)
+        fallback_path.write_bytes(b"fallback png")
+
+        with session_scope() as session:
+            session.execute(
+                text(
+                    "INSERT INTO generation_jobs"
+                    " (id, status, source_image_ref, user_prompt, locale,"
+                    "  planner_payload, created_at)"
+                    " VALUES ('job_missing_path', 'succeeded', 'src_test', 'missing path',"
+                    "  'zh', '{}', '2026-05-21T12:00:00')"
+                )
+            )
+            session.execute(
+                text(
+                    "INSERT INTO generation_outputs"
+                    " (id, job_id, output_key, output_kind, template_ref, width, height,"
+                    "  prompt, status, destination_type, png_path, sort_order)"
+                    " VALUES ('out_missing_path', 'job_missing_path', 'social', 'poster',"
+                    "  'builtin:zh:social-media', 1024, 1024, 'prompt', 'succeeded',"
+                    "  'asset', :png_path, 0)"
+                ),
+                {"png_path": str(self.output_dir / "assets" / "missing.png")},
+            )
+
+        list_response = self.client.get("/api/generation/jobs?limit=1")
+        self.assertEqual(list_response.status_code, 200)
+        output = list_response.json()["jobs"][0]["outputs"][0]
+        self.assertEqual(
+            output["image_url"],
+            "/api/generation/jobs/job_missing_path/outputs/out_missing_path/image",
+        )
+
+        image_response = self.client.get(output["image_url"])
+        self.assertEqual(image_response.status_code, 200)
+        self.assertEqual(image_response.content, b"fallback png")
 
     def test_run_generation_job_processes_outputs_concurrently(self) -> None:
         with session_scope() as session:

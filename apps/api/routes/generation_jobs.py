@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import bindparam, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from apps.api.lib.db import generated_assets_use_text_ids, get_session, json_param, session_scope
@@ -283,10 +284,31 @@ def _output_image_id(row: Any) -> str | None:
     return None
 
 
+def _existing_output_png_path(row: Any, job_id: str) -> Path | None:
+    candidates: list[Path] = []
+    if row.png_path is not None:
+        try:
+            candidates.append(
+                require_within(resolve_stored_path(str(row.png_path)), imagegen_output_dir())
+            )
+        except ValueError:
+            logger.warning(
+                "generation output path escapes image output root: job_id=%s output_id=%s",
+                job_id,
+                row.id,
+            )
+    candidates.append(_output_file_path(job_id, str(row.output_key), str(row.id)))
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _output_image_url(row: Any, job_id: str) -> str | None:
     return (
         f"/api/generation/jobs/{job_id}/outputs/{row.id}/image"
-        if row.png_path is not None
+        if _existing_output_png_path(row, job_id) is not None
         else None
     )
 
@@ -364,6 +386,28 @@ def _job_response(session: Session, job_id: str) -> GenerationJobOut:
     return _job_out_from_rows(job, list(outputs))
 
 
+def _created_response_for_existing_client_job(
+    session: Session, client_job_id: str
+) -> GenerationJobCreated | None:
+    row = session.execute(
+        text(
+            "SELECT gj.id, gj.status, COUNT(go.id) AS output_count"
+            " FROM generation_jobs gj"
+            " LEFT JOIN generation_outputs go ON go.job_id = gj.id"
+            " WHERE gj.client_job_id = :client_job_id"
+            " GROUP BY gj.id, gj.status"
+        ),
+        {"client_job_id": client_job_id},
+    ).first()
+    if row is None:
+        return None
+    return GenerationJobCreated(
+        job_id=str(row.id),
+        status=_as_job_status(str(row.status)),
+        output_count=int(row.output_count),
+    )
+
+
 @router.get("", response_model=GenerationJobListResponse)
 def list_generation_jobs(
     session: Annotated[Session, Depends(get_session)],
@@ -431,27 +475,40 @@ def create_generation_job(
         if item.destination_type == "kit_slot" and item.marketing_kit_id is None:
             raise HTTPException(status_code=422, detail="kit_slot outputs require marketing_kit_id")
 
+    if payload.client_job_id is not None:
+        existing = _created_response_for_existing_client_job(session, payload.client_job_id)
+        if existing is not None:
+            return existing
+
     job_id = f"gen_{uuid.uuid4().hex}"
-    session.execute(
-        text(
-            "INSERT INTO generation_jobs"
-            " (id, client_job_id, status, cancel_requested, source_image_ref,"
-            "  user_prompt, locale, marketing_kit_id, planner_payload)"
-            " VALUES (:id, :client_job_id, 'planned', :cancel_requested, :source_image_ref,"
-            "  :user_prompt, :locale, :marketing_kit_id, "
-            f"{json_param(session, 'planner_payload')})"
-        ),
-        {
-            "id": job_id,
-            "client_job_id": payload.client_job_id,
-            "cancel_requested": False,
-            "source_image_ref": payload.source_image_ref,
-            "user_prompt": payload.user_prompt,
-            "locale": payload.locale,
-            "marketing_kit_id": payload.marketing_kit_id,
-            "planner_payload": json.dumps(payload.planner_payload, ensure_ascii=False),
-        },
-    )
+    try:
+        session.execute(
+            text(
+                "INSERT INTO generation_jobs"
+                " (id, client_job_id, status, cancel_requested, source_image_ref,"
+                "  user_prompt, locale, marketing_kit_id, planner_payload)"
+                " VALUES (:id, :client_job_id, 'planned', :cancel_requested, :source_image_ref,"
+                "  :user_prompt, :locale, :marketing_kit_id, "
+                f"{json_param(session, 'planner_payload')})"
+            ),
+            {
+                "id": job_id,
+                "client_job_id": payload.client_job_id,
+                "cancel_requested": False,
+                "source_image_ref": payload.source_image_ref,
+                "user_prompt": payload.user_prompt,
+                "locale": payload.locale,
+                "marketing_kit_id": payload.marketing_kit_id,
+                "planner_payload": json.dumps(payload.planner_payload, ensure_ascii=False),
+            },
+        )
+    except IntegrityError as exc:
+        session.rollback()
+        if payload.client_job_id is not None:
+            existing = _created_response_for_existing_client_job(session, payload.client_job_id)
+            if existing is not None:
+                return existing
+        raise exc
     for idx, item in enumerate(payload.outputs):
         session.execute(
             text(
@@ -480,6 +537,7 @@ def create_generation_job(
                 "sort_order": idx,
             },
         )
+    session.commit()
     return GenerationJobCreated(job_id=job_id, status="planned", output_count=len(payload.outputs))
 
 
@@ -603,16 +661,16 @@ def get_generation_output_image(
     session: Annotated[Session, Depends(get_session)],
 ) -> FileResponse:
     row = session.execute(
-        text("SELECT png_path FROM generation_outputs WHERE job_id = :job_id AND id = :output_id"),
+        text(
+            "SELECT id, output_key, png_path FROM generation_outputs"
+            " WHERE job_id = :job_id AND id = :output_id"
+        ),
         {"job_id": job_id, "output_id": output_id},
     ).first()
-    if row is None or row.png_path is None:
+    if row is None:
         raise HTTPException(status_code=404, detail="generation output image not found")
-    try:
-        path = require_within(resolve_stored_path(str(row.png_path)), imagegen_output_dir())
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail="generation output image not found") from exc
-    if not path.is_file():
+    path = _existing_output_png_path(row, job_id)
+    if path is None:
         raise HTTPException(status_code=404, detail="generation output image missing")
     return FileResponse(path, media_type="image/png", headers={"Cache-Control": "no-store"})
 
@@ -692,6 +750,14 @@ def _generate_image_sync(app: Any, prompt: str, size: str, job_id: str, output_i
     return bytes(response.images[0])
 
 
+def _provider_safe_dimension(value: int) -> int:
+    return max(16, min(4096, ((value + 15) // 16) * 16))
+
+
+def _provider_safe_size(width: int, height: int) -> str:
+    return f"{_provider_safe_dimension(width)}x{_provider_safe_dimension(height)}"
+
+
 def _claim_queued_outputs(session: Session, job_id: str, limit: int) -> list[Any]:
     outputs = session.execute(
         text(
@@ -721,7 +787,7 @@ async def _run_generation_output(app: Any, job_id: str, output: Any) -> None:
         job_id,
         {"type": "output", "job_id": job_id, "output_id": output_id, "status": "running"},
     )
-    size = f"{int(output.width)}x{int(output.height)}"
+    size = _provider_safe_size(int(output.width), int(output.height))
     try:
         png_bytes = await asyncio.to_thread(
             _generate_image_sync,
@@ -878,11 +944,7 @@ async def _run_generation_job(app: Any, job_id: str) -> None:
                         ),
                         {"id": job_id, "status": final_status},
                     )
-                    await _EVENT_BUS.publish(
-                        job_id,
-                        {"type": "job", "job_id": job_id, "status": final_status},
-                    )
-                    return
+                    break
                 outputs = _claim_queued_outputs(session, job_id, concurrency)
                 if not outputs:
                     final_status = _final_job_status(session, job_id)
@@ -894,14 +956,14 @@ async def _run_generation_job(app: Any, job_id: str) -> None:
                         ),
                         {"id": job_id, "status": final_status},
                     )
-                    await _EVENT_BUS.publish(
-                        job_id,
-                        {"type": "job", "job_id": job_id, "status": final_status},
-                    )
-                    return
+                    break
             await asyncio.gather(
                 *(_run_generation_output(app, job_id, output) for output in outputs)
             )
+        await _EVENT_BUS.publish(
+            job_id,
+            {"type": "job", "job_id": job_id, "status": final_status},
+        )
     finally:
         _TASKS.pop(job_id, None)
         _EVENT_BUS.close(job_id)

@@ -1784,10 +1784,17 @@ export interface components {
         };
         /** OcrResponse */
         OcrResponse: {
+            /**
+             * Available
+             * @default true
+             */
+            available: boolean;
             /** Boxes */
             boxes: components["schemas"]["TextBoxOut"][];
             /** Engine */
             engine: string;
+            /** Unavailable Reason */
+            unavailable_reason?: string | null;
             /** Version */
             version: string;
         };

@@ -112,7 +112,46 @@ def _normalize_provider_payload(data: dict[str, Any]) -> dict[str, Any]:
 
     selling_points = data["selling_points"]
     if isinstance(selling_points, dict) and isinstance(selling_points.get("value"), list):
-        data["selling_points"] = selling_points["value"]
+        selling_points = selling_points["value"]
+
+    if isinstance(selling_points, list):
+        normalized: list[Any] = []
+        for point in selling_points:
+            if isinstance(point, dict) and {"value", "confidence", "reasoning"} <= set(point):
+                normalized.append(point)
+                continue
+            if isinstance(point, dict):
+                title = str(point.get("title") or point.get("name") or "").strip()
+                evidence = str(point.get("evidence") or point.get("description") or "").strip()
+                value = {
+                    "title": title or evidence or "卖点",
+                    "priority": point.get("priority") or "medium",
+                    "evidence": evidence or title,
+                }
+                normalized.append(
+                    {
+                        "value": value,
+                        "confidence": float(point.get("confidence") or 0.75),
+                        "reasoning": str(
+                            point.get("reasoning") or evidence or title or "模型返回卖点"
+                        ),
+                    }
+                )
+                continue
+            text_value = str(point).strip()
+            if text_value:
+                normalized.append(
+                    {
+                        "value": {
+                            "title": text_value,
+                            "priority": "medium",
+                            "evidence": text_value,
+                        },
+                        "confidence": 0.7,
+                        "reasoning": "模型返回文本卖点",
+                    }
+                )
+        data["selling_points"] = normalized
 
     return data
 
