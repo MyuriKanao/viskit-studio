@@ -7,15 +7,17 @@ import * as React from 'react';
 
 import { KitCard } from '@/components/dashboard/kit-card';
 import { KPICard } from '@/components/dashboard/kpi-card';
-import { QueueRow } from '@/components/dashboard/queue-row';
+import {
+  GenerationTaskRecordCard,
+  isGenerationJobActive,
+} from '@/components/generation/GenerationTaskRecordCard';
 import { Sidebar } from '@/components/shell/sidebar';
 import { Topbar } from '@/components/shell/topbar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useQueueActive } from '@/hooks/use-queue-active';
+import { useGenerationJobRecords } from '@/hooks/use-generation-job';
 import { useRecentKits } from '@/hooks/use-recent-kits';
 import { useWeeklyMetrics } from '@/hooks/use-weekly-metrics';
 
@@ -32,8 +34,10 @@ export default function DashboardPage() {
   const router = useRouter();
   const metrics = useWeeklyMetrics();
   const kits = useRecentKits({ limit: 6 });
-  const queue = useQueueActive();
-  const queueCount = queue.data?.jobs.length ?? 0;
+  const queue = useGenerationJobRecords({ limit: 6 });
+  const queueJobs = queue.data?.jobs ?? [];
+  const queueCount = queueJobs.length;
+  const activeQueueCount = queueJobs.filter((job) => isGenerationJobActive(job.status)).length;
   const kitCount = kits.data?.items.length ?? 0;
   const isRefreshing = metrics.isFetching || kits.isFetching || queue.isFetching;
 
@@ -76,7 +80,7 @@ export default function DashboardPage() {
                 {t('kpis_title')}
               </h1>
               <p className="text-sm leading-6 text-ink-muted">
-                {t('queue_subtitle_pattern', { count: queueCount })}
+                {t('queue_subtitle_pattern', { count: activeQueueCount })}
               </p>
             </div>
           </div>
@@ -147,7 +151,10 @@ export default function DashboardPage() {
               </TabsTrigger>
               <TabsTrigger value="queue" className="gap-s-2">
                 <span>{t('queue_title')}</span>
-                <Badge variant={queueCount > 0 ? 'default' : 'secondary'} className="font-mono">
+                <Badge
+                  variant={activeQueueCount > 0 ? 'default' : 'secondary'}
+                  className="font-mono"
+                >
                   {queueCount}
                 </Badge>
               </TabsTrigger>
@@ -186,18 +193,20 @@ export default function DashboardPage() {
           <TabsContent value="queue" className="min-h-0">
             <section aria-label={t('queue_title')} className="flex flex-col gap-s-3">
               <div className="rounded-card border border-border-subtle bg-surface-01 p-s-3">
-                {queue.data && queue.data.jobs.length > 0 ? (
-                  <div className="flex flex-col">
-                    {queue.data.jobs.map((job, index) => (
-                      <React.Fragment key={job.kit_id}>
-                        {index > 0 ? <Separator className="my-s-2" /> : null}
-                        <QueueRow row={job} />
-                      </React.Fragment>
+                {queueJobs.length > 0 ? (
+                  <div className="grid gap-s-3 xl:grid-cols-2">
+                    {queueJobs.map((job) => (
+                      <GenerationTaskRecordCard
+                        key={job.job_id}
+                        job={job}
+                        locale={locale}
+                        compact
+                      />
                     ))}
                   </div>
                 ) : (
                   <p className="p-s-4 text-sm text-ink-muted">
-                    {queue.isLoading ? '…' : t('queue_subtitle_pattern', { count: 0 })}
+                    {queue.isLoading ? '…' : tAll('queue.empty_hint')}
                   </p>
                 )}
               </div>

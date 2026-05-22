@@ -3,8 +3,15 @@
 import { useLocale } from 'next-intl';
 import * as React from 'react';
 
+import type { SpecResponse } from '@/hooks/use-kit-pipeline';
 import { useTemplateSchemes } from '@/hooks/use-templates';
 import { LOW_CONF_THRESHOLD } from '@/lib/chat/constants';
+import {
+  applyGenerationBriefDraft,
+  buildGenerationBriefDraft,
+  generationBriefCacheKey,
+} from '@/lib/chat/generation-brief';
+import type { GenerationBriefDraft, GenerationBriefOutputDraft } from '@/lib/chat/generation-brief';
 import { useChatStore } from '@/lib/chat/store';
 import type { ConfirmationMode, FieldInference, InferredSpec } from '@/lib/chat/types';
 import type {
@@ -20,7 +27,8 @@ import { cn } from '@/lib/utils';
 export interface ConfirmationCardProps {
   inferred: InferredSpec;
   outputPlan: GenerationPlan;
-  onStart: (spec: InferredSpec, plan: GenerationPlan) => void;
+  onStart: (spec: InferredSpec, plan: GenerationPlan, rewrittenSpec?: SpecResponse) => void;
+  onRewriteBrief?: (spec: InferredSpec, plan: GenerationPlan) => Promise<SpecResponse>;
   onModeChange: (mode: ConfirmationMode) => void;
 }
 
@@ -29,6 +37,8 @@ export interface ConfirmationCardProps {
 // ---------------------------------------------------------------------------
 const FIELD_INPUT_CLS =
   'rounded-input border border-border-subtle bg-surface-02 px-s-2 py-s-1 text-sm text-ink-primary w-full focus:outline-none focus:ring-1 focus:ring-accent';
+const TEXTAREA_INPUT_CLS =
+  'min-h-20 rounded-input border border-border-subtle bg-surface-02 px-s-2 py-s-1 text-sm text-ink-primary w-full focus:outline-none focus:ring-1 focus:ring-accent';
 
 const PRODUCT_TYPE_OPTIONS = [
   { value: 'blue_hat', label: '蓝帽/保健' },
@@ -52,6 +62,29 @@ const FULL_KIT_SLOTS = [
   'M7',
   'M8',
   'M9',
+] as const;
+
+const WORKFLOW_STEPS = [
+  {
+    id: 'input',
+    title: '输入 / 提取',
+    desc: '源图与需求已转成商品字段',
+  },
+  {
+    id: 'brief',
+    title: 'LLM Brief',
+    desc: '编辑结构化生成文本',
+  },
+  {
+    id: 'rewrite',
+    title: '二次改写',
+    desc: '查看 LLM 输出规格',
+  },
+  {
+    id: 'generate',
+    title: '进入生图流',
+    desc: '确认后创建生成任务',
+  },
 ] as const;
 
 function normalizeProductType(value: string): string {
@@ -109,7 +142,7 @@ function makeManualPlanItem(kind: 'white_bg' | 'banner'): GenerationPlanItem {
 
 function sourceLabel(source: GenerationPlan['plan_source']): string {
   if (source === 'explicit') return '用户指定';
-  if (source === 'fallback') return '规则兜底';
+  if (source === 'fallback') return '默认计划';
   if (source === 'manual') return '手动编辑';
   return '智能推荐';
 }
@@ -197,6 +230,7 @@ export function ConfirmationCard({
   inferred,
   outputPlan,
   onStart,
+  onRewriteBrief,
   onModeChange,
 }: ConfirmationCardProps) {
   const locale = useLocale() as 'zh' | 'en';
@@ -212,6 +246,15 @@ export function ConfirmationCard({
   const schemesQuery = useTemplateSchemes(locale);
   const schemes = schemesQuery.data ?? [];
   const [selectedSchemeRef, setSelectedSchemeRef] = React.useState<string>('builtin:default');
+  const [rewriteStatus, setRewriteStatus] = React.useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('idle');
+  const [rewriteSpecResponse, setRewriteSpecResponse] = React.useState<SpecResponse | null>(null);
+  const [rewriteCacheKey, setRewriteCacheKey] = React.useState<string | null>(null);
+  const [rewriteError, setRewriteError] = React.useState<string | null>(null);
+  const [sellingPointKeys, setSellingPointKeys] = React.useState<string[]>(() =>
+    inferred.selling_points.map((_, index) => `selling-point-${Date.now().toString(36)}-${index}`)
+  );
 
   // Determine effective mode — default to minimal when store is null
   const mode: ConfirmationMode = confirmation_mode ?? 'minimal';
@@ -219,6 +262,25 @@ export function ConfirmationCard({
   React.useEffect(() => {
     setPlan(outputPlan);
   }, [outputPlan]);
+
+  React.useEffect(() => {
+    setSpec(inferred);
+    setSellingPointKeys(
+      inferred.selling_points.map((_, index) => `selling-point-${Date.now().toString(36)}-${index}`)
+    );
+  }, [inferred]);
+
+  const briefDraft = React.useMemo(() => buildGenerationBriefDraft(spec, plan), [plan, spec]);
+  const briefCacheKey = React.useMemo(() => generationBriefCacheKey(briefDraft), [briefDraft]);
+  const rewriteIsStale = Boolean(rewriteSpecResponse && rewriteCacheKey !== briefCacheKey);
+  const sellingPointRows = React.useMemo(
+    () =>
+      briefDraft.selling_points.map((point, index) => ({
+        key: sellingPointKeys[index] ?? `selling-point-current-${index}`,
+        point,
+      })),
+    [briefDraft.selling_points, sellingPointKeys]
+  );
 
   // Low-confidence fields for "asking" mode
   const lowConfFields = React.useMemo(() => {
@@ -276,6 +338,8 @@ export function ConfirmationCard({
         | 'slot_id'
         | 'output_kind'
         | 'aspect_ratio'
+        | 'template_name'
+        | 'reason'
       >
     >
   ) {
@@ -314,8 +378,99 @@ export function ConfirmationCard({
     });
   }
 
+  function commitBriefDraft(nextDraft: GenerationBriefDraft) {
+    setGuardNote(null);
+    const applied = applyGenerationBriefDraft(nextDraft, spec, plan);
+    setSpec(applied.spec);
+    commitPlan(applied.plan);
+  }
+
+  function updateBriefProduct<Field extends keyof GenerationBriefDraft['product']>(
+    field: Field,
+    rawValue: string
+  ) {
+    const value =
+      field === 'price'
+        ? Number.parseFloat(rawValue) || 0
+        : field === 'product_type'
+          ? (rawValue as GenerationBriefDraft['product']['product_type'])
+          : rawValue;
+    commitBriefDraft({
+      ...briefDraft,
+      product: {
+        ...briefDraft.product,
+        [field]: value,
+      },
+    });
+  }
+
+  function updateBriefSellingPoint(index: number, value: string) {
+    commitBriefDraft({
+      ...briefDraft,
+      selling_points: briefDraft.selling_points.map((point, pointIndex) =>
+        pointIndex === index ? value : point
+      ),
+    });
+  }
+
+  function addBriefSellingPoint() {
+    setSellingPointKeys((prev) => [
+      ...prev,
+      `selling-point-${Date.now().toString(36)}-${prev.length}`,
+    ]);
+    commitBriefDraft({
+      ...briefDraft,
+      selling_points: [...briefDraft.selling_points, '新的卖点'],
+    });
+  }
+
+  function removeBriefSellingPoint(index: number) {
+    setSellingPointKeys((prev) => prev.filter((_, pointIndex) => pointIndex !== index));
+    commitBriefDraft({
+      ...briefDraft,
+      selling_points: briefDraft.selling_points.filter((_, pointIndex) => pointIndex !== index),
+    });
+  }
+
+  function updateBriefOutput(id: string, patch: Partial<GenerationBriefOutputDraft>) {
+    commitBriefDraft({
+      ...briefDraft,
+      outputs: briefDraft.outputs.map((output) =>
+        output.id === id ? { ...output, ...patch } : output
+      ),
+    });
+  }
+
+  async function handleRewriteBrief() {
+    if (!onRewriteBrief) {
+      setGuardNote('当前环境未接入 LLM 改写接口，可直接确认进入生图流。');
+      return;
+    }
+    if (!briefDraft.product.brand.trim() || !briefDraft.product.category.trim()) {
+      handleSetMode('asking');
+      setGuardNote('请先补全品牌和品类，再进行 LLM 改写。');
+      return;
+    }
+    setRewriteStatus('loading');
+    setRewriteError(null);
+    try {
+      const response = await onRewriteBrief(spec, plan);
+      setRewriteSpecResponse(response);
+      setRewriteCacheKey(briefCacheKey);
+      setRewriteStatus('success');
+    } catch (err) {
+      setRewriteStatus('error');
+      setRewriteError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   // Polish Queue #1 — onStart guard
   function handleStart() {
+    if (!spec.brand.value.trim() || !spec.category.value.trim()) {
+      handleSetMode('asking');
+      setGuardNote('请先补全品牌和品类');
+      return;
+    }
     if (
       spec.brand.confidence < LOW_CONF_THRESHOLD ||
       spec.category.confidence < LOW_CONF_THRESHOLD
@@ -339,7 +494,8 @@ export function ConfirmationCard({
         ...plan,
         items: selectedItems,
         requires_confirmation: true,
-      }
+      },
+      rewriteSpecResponse && !rewriteIsStale ? rewriteSpecResponse : undefined
     );
   }
 
@@ -350,8 +506,15 @@ export function ConfirmationCard({
       spec.category.confidence < LOW_CONF_THRESHOLD ||
       spec.product_type.confidence < LOW_CONF_THRESHOLD ||
       spec.brand_color_hex.confidence < LOW_CONF_THRESHOLD);
-  const planBlocked = plan.items.filter((item) => item.enabled).length === 0;
+  const selectedPlanCount = plan.items.filter((item) => item.enabled).length;
+  const planBlocked = selectedPlanCount === 0;
   const isJobActive = Boolean(activeJobId);
+  const workflowCurrentStep = isJobActive
+    ? 'generate'
+    : rewriteSpecResponse && !rewriteIsStale
+      ? 'rewrite'
+      : 'brief';
+  const rewriteCanFeedGeneration = Boolean(rewriteSpecResponse && !rewriteIsStale);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -364,6 +527,308 @@ export function ConfirmationCard({
     >
       {/* Hidden testid element for mode */}
       <span data-testid={`card-mode-${mode}`} className="sr-only" />
+
+      <div
+        data-testid="workflow-visualization"
+        className="rounded-input border border-border-subtle bg-surface-02 p-s-3"
+      >
+        <div className="mb-s-3 flex items-center justify-between gap-s-2">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-wider text-ink-faint">工作流导向</p>
+            <h2 className="mt-1 text-base font-semibold text-ink-primary">
+              从结构化 brief 到生图任务
+            </h2>
+          </div>
+          <span className="rounded-full border border-accent/40 px-s-2 py-s-1 text-xs text-accent">
+            已选 {selectedPlanCount} 个输出
+          </span>
+        </div>
+        <ol className="m-0 grid list-none gap-s-2 p-0 sm:grid-cols-4" aria-label="套包生成工作流">
+          {WORKFLOW_STEPS.map((step, index) => {
+            const isCurrent = step.id === workflowCurrentStep;
+            const isCompleted =
+              step.id === 'input' ||
+              (step.id === 'brief' && Boolean(rewriteSpecResponse || isJobActive)) ||
+              (step.id === 'rewrite' && rewriteCanFeedGeneration) ||
+              (step.id === 'generate' && isJobActive);
+            return (
+              <li
+                key={step.id}
+                aria-current={isCurrent ? 'step' : undefined}
+                className={cn(
+                  'rounded-input border p-s-2 transition-colors',
+                  isCurrent
+                    ? 'border-accent bg-accent/10 text-ink-primary'
+                    : isCompleted
+                      ? 'border-border-subtle bg-surface-01 text-ink-secondary'
+                      : 'border-border-subtle bg-surface-01 text-ink-faint'
+                )}
+              >
+                <div className="flex items-center gap-s-2">
+                  <span
+                    className={cn(
+                      'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold',
+                      isCurrent || isCompleted
+                        ? 'border-accent text-accent'
+                        : 'border-border-subtle text-ink-faint'
+                    )}
+                  >
+                    {index + 1}
+                  </span>
+                  <span className="text-sm font-medium">{step.title}</span>
+                </div>
+                <p className="mt-s-1 text-xs leading-relaxed text-ink-muted">{step.desc}</p>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+
+      <div
+        data-testid="generation-brief-editor"
+        className="rounded-input border border-border-subtle bg-surface-02 p-s-3 text-xs"
+      >
+        <div className="mb-s-3 flex flex-wrap items-start justify-between gap-s-2">
+          <div>
+            <h3 className="font-mono uppercase tracking-wider text-ink-faint">
+              Combined LLM Brief
+            </h3>
+            <p className="mt-1 text-ink-muted">
+              这里是 LLM 改写和后续生图共用的结构化文本；编辑后会同步商品字段与输出计划。
+            </p>
+          </div>
+          <button
+            data-testid="generation-brief-rewrite"
+            type="button"
+            onClick={() => void handleRewriteBrief()}
+            disabled={rewriteStatus === 'loading' || isJobActive}
+            className={cn(
+              'rounded-input border border-accent px-s-3 py-s-1 text-accent transition-colors hover:bg-accent hover:text-ink-base-l',
+              'disabled:pointer-events-none disabled:opacity-50'
+            )}
+          >
+            {rewriteStatus === 'loading' ? 'LLM 改写中…' : 'LLM 改写 brief'}
+          </button>
+        </div>
+
+        <div className="grid gap-s-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="grid gap-s-2">
+            <div className="grid gap-s-2 sm:grid-cols-2">
+              <label className="flex flex-col gap-s-1">
+                <span className="font-mono uppercase tracking-wider text-ink-faint">产品名</span>
+                <input
+                  type="text"
+                  value={briefDraft.product.name}
+                  onChange={(e) => updateBriefProduct('name', e.target.value)}
+                  className={FIELD_INPUT_CLS}
+                />
+              </label>
+              <label className="flex flex-col gap-s-1">
+                <span className="font-mono uppercase tracking-wider text-ink-faint">品牌</span>
+                <input
+                  type="text"
+                  value={briefDraft.product.brand}
+                  onChange={(e) => updateBriefProduct('brand', e.target.value)}
+                  className={FIELD_INPUT_CLS}
+                />
+              </label>
+              <label className="flex flex-col gap-s-1">
+                <span className="font-mono uppercase tracking-wider text-ink-faint">品类</span>
+                <input
+                  type="text"
+                  value={briefDraft.product.category}
+                  onChange={(e) => updateBriefProduct('category', e.target.value)}
+                  className={FIELD_INPUT_CLS}
+                />
+              </label>
+              <label className="flex flex-col gap-s-1">
+                <span className="font-mono uppercase tracking-wider text-ink-faint">商品类型</span>
+                <select
+                  value={briefDraft.product.product_type}
+                  onChange={(e) => updateBriefProduct('product_type', e.target.value)}
+                  className={FIELD_INPUT_CLS}
+                >
+                  {PRODUCT_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-s-1">
+                <span className="font-mono uppercase tracking-wider text-ink-faint">品牌色</span>
+                <span className="flex items-center gap-s-2">
+                  <input
+                    type="color"
+                    value={briefDraft.product.brand_color_hex}
+                    onChange={(e) => updateBriefProduct('brand_color_hex', e.target.value)}
+                    className="h-8 w-10 cursor-pointer rounded-input border border-border-subtle bg-surface-01 p-s-1"
+                  />
+                  <input
+                    type="text"
+                    value={briefDraft.product.brand_color_hex}
+                    onChange={(e) => updateBriefProduct('brand_color_hex', e.target.value)}
+                    className={FIELD_INPUT_CLS}
+                  />
+                </span>
+              </label>
+              <label className="flex flex-col gap-s-1">
+                <span className="font-mono uppercase tracking-wider text-ink-faint">价格</span>
+                <input
+                  type="number"
+                  value={briefDraft.product.price}
+                  onChange={(e) => updateBriefProduct('price', e.target.value)}
+                  className={FIELD_INPUT_CLS}
+                />
+              </label>
+            </div>
+
+            <div className="rounded-input border border-border-subtle bg-surface-01 p-s-2">
+              <div className="mb-s-2 flex items-center justify-between gap-s-2">
+                <span className="font-mono uppercase tracking-wider text-ink-faint">卖点</span>
+                <button
+                  type="button"
+                  onClick={addBriefSellingPoint}
+                  className="text-accent underline-offset-4 hover:underline"
+                >
+                  添加卖点
+                </button>
+              </div>
+              <div className="flex flex-col gap-s-2">
+                {briefDraft.selling_points.length === 0 ? (
+                  <p className="text-ink-muted">暂无卖点；可添加后交给 LLM 改写。</p>
+                ) : (
+                  sellingPointRows.map(({ key, point }, index) => (
+                    <div key={key} className="flex items-start gap-s-2">
+                      <textarea
+                        value={point}
+                        onChange={(e) => updateBriefSellingPoint(index, e.target.value)}
+                        className={TEXTAREA_INPUT_CLS}
+                        aria-label={`卖点 ${index + 1}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeBriefSellingPoint(index)}
+                        className="pt-s-1 text-ink-faint hover:text-danger"
+                        aria-label={`移除卖点 ${index + 1}`}
+                      >
+                        移除
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-input border border-border-subtle bg-surface-01 p-s-2">
+            <div className="mb-s-2 flex items-center justify-between gap-s-2">
+              <span className="font-mono uppercase tracking-wider text-ink-faint">输出 brief</span>
+              <span className="text-ink-muted">{briefDraft.outputs.length} 项</span>
+            </div>
+            <div className="max-h-[360px] space-y-s-2 overflow-auto pr-s-1">
+              {briefDraft.outputs.length === 0 ? (
+                <p className="text-ink-muted">暂无输出项；可在下方输出计划添加。</p>
+              ) : (
+                briefDraft.outputs.map((output, index) => (
+                  <div
+                    key={output.id}
+                    className={cn(
+                      'rounded-input border border-border-subtle bg-surface-02 p-s-2',
+                      output.enabled ? 'opacity-100' : 'opacity-55'
+                    )}
+                  >
+                    <label className="mb-s-2 flex items-start gap-s-2">
+                      <input
+                        type="checkbox"
+                        checked={output.enabled}
+                        onChange={(e) =>
+                          updateBriefOutput(output.id, { enabled: e.target.checked })
+                        }
+                        className="mt-1"
+                      />
+                      <span className="min-w-0 text-sm font-medium text-ink-primary">
+                        {index + 1}. {output.title || '未命名输出'}
+                      </span>
+                    </label>
+                    <div className="grid gap-s-2">
+                      <input
+                        type="text"
+                        value={output.title}
+                        onChange={(e) => updateBriefOutput(output.id, { title: e.target.value })}
+                        className={FIELD_INPUT_CLS}
+                        aria-label={`输出 ${index + 1} 标题`}
+                      />
+                      <textarea
+                        value={output.reason}
+                        onChange={(e) => updateBriefOutput(output.id, { reason: e.target.value })}
+                        className={TEXTAREA_INPUT_CLS}
+                        aria-label={`输出 ${index + 1} 生成意图`}
+                        placeholder="写清这个输出的画面目标、文案方向或模板理由"
+                      />
+                      <div className="grid gap-s-2 sm:grid-cols-2">
+                        <input
+                          type="text"
+                          value={output.output_kind}
+                          onChange={(e) =>
+                            updateBriefOutput(output.id, { output_kind: e.target.value })
+                          }
+                          className={FIELD_INPUT_CLS}
+                          aria-label={`输出 ${index + 1} 类型`}
+                        />
+                        <input
+                          type="text"
+                          value={output.aspect_ratio}
+                          onChange={(e) =>
+                            updateBriefOutput(output.id, { aspect_ratio: e.target.value })
+                          }
+                          className={FIELD_INPUT_CLS}
+                          aria-label={`输出 ${index + 1} 比例`}
+                          placeholder="1:1 / 16:9 / 3:4"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {rewriteStatus === 'error' && (
+          <div className="mt-s-3 rounded-input bg-danger/10 px-s-3 py-s-2 text-xs text-danger">
+            LLM 改写失败：{rewriteError ?? '未知错误'}
+          </div>
+        )}
+        {rewriteSpecResponse && (
+          <div
+            data-testid="generation-brief-preview"
+            className="mt-s-3 rounded-input border border-border-subtle bg-surface-01 p-s-3"
+          >
+            <div className="mb-s-2 flex flex-wrap items-center justify-between gap-s-2">
+              <div>
+                <p className="font-mono uppercase tracking-wider text-ink-faint">LLM 改写结果</p>
+                <p className="mt-1 text-ink-muted">
+                  {rewriteIsStale
+                    ? 'brief 已再次编辑；重新改写后才会把这版结果带入生图。'
+                    : '这版规格会随确认动作进入生图任务。'}
+                </p>
+              </div>
+              <span
+                className={cn(
+                  'rounded-full px-s-2 py-s-1',
+                  rewriteIsStale ? 'bg-amber-400/10 text-amber-600' : 'bg-accent/10 text-accent'
+                )}
+              >
+                {rewriteIsStale ? '已过期' : '可用于生成'}
+              </span>
+            </div>
+            <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-input bg-surface-02 p-s-2 text-[11px] leading-relaxed text-ink-secondary">
+              {rewriteSpecResponse.spec_markdown}
+            </pre>
+          </div>
+        )}
+      </div>
 
       {guardNote && (
         <div className="rounded-input bg-amber-400/10 px-s-3 py-s-2 text-xs text-amber-600">

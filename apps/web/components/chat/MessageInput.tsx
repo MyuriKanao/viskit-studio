@@ -29,10 +29,10 @@ export function MessageInput() {
   const outputPlan = useChatStore((s) => s.output_plan);
   const confirmation_mode = useChatStore((s) => s.confirmation_mode);
 
-  const { handleImageDrop, isExtracting } = useChatImageFlow();
+  const { handleImageDrop, handleImageUpload, isExtracting } = useChatImageFlow();
 
   const isDisabled = confirmation_mode !== null || isExtracting;
-  const isImportedImageWaitingForPrompt = Boolean(heroImage && !outputPlan && !confirmation_mode);
+  const isImageWaitingForPrompt = Boolean(heroImage && !outputPlan && !confirmation_mode);
   const isDisabledRef = React.useRef(isDisabled);
 
   React.useEffect(() => {
@@ -49,20 +49,18 @@ export function MessageInput() {
       }
       try {
         const url = await fileToDataUrl(file);
-        // Pass current text as optional description alongside the image
-        await handleImageDrop(url, file.type, text.trim() || undefined);
-        setText('');
+        await handleImageUpload(url, file.type);
       } catch {
         setError('图片读取失败，请重试');
       }
     },
-    [handleImageDrop, text]
+    [handleImageUpload]
   );
 
   async function handleSend() {
     const trimmed = text.trim();
     if (!trimmed || isDisabled) return;
-    if (isImportedImageWaitingForPrompt && heroImage) {
+    if (isImageWaitingForPrompt && heroImage) {
       setError(null);
       await handleImageDrop(heroImage.url, heroImage.mime, trimmed, {
         appendImageMessage: false,
@@ -192,8 +190,8 @@ export function MessageInput() {
           placeholder={
             isDisabled
               ? '请先完成确认'
-              : isImportedImageWaitingForPrompt
-                ? '描述想怎么修改这张图…'
+              : isImageWaitingForPrompt
+                ? '输入需求后开始生成 brief…'
                 : '输入消息…'
           }
           className={cn(
@@ -213,7 +211,7 @@ export function MessageInput() {
             'disabled:opacity-50 disabled:pointer-events-none'
           )}
         >
-          {isImportedImageWaitingForPrompt ? '再生成' : '发送'}
+          {isImageWaitingForPrompt ? '开始生成' : '发送'}
         </button>
       </div>
     </div>

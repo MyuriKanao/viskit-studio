@@ -62,6 +62,22 @@ async function deleteKitImage({
   }
 }
 
+async function deleteCatalogAsset(assetId: string): Promise<void> {
+  const response = await fetch(`${baseUrl}/api/assets/${encodeURIComponent(assetId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    let detail = `Delete asset failed (${response.status})`;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === 'string') detail = body.detail;
+    } catch {
+      // Keep status fallback for non-JSON responses.
+    }
+    throw new Error(detail);
+  }
+}
+
 export default function CatalogPage() {
   const t = useTranslations('catalog');
   const locale = useLocale() as 'zh' | 'en';
@@ -124,7 +140,13 @@ export default function CatalogPage() {
     }
   }, [imagePreview, isLoading, selectedPreviewKit]);
   const deleteImage = useMutation({
-    mutationFn: deleteKitImage,
+    mutationFn: async ({ kit, imageId }: { kit: KitListItem; imageId: string }) => {
+      if (kit.source_type === 'asset' && kit.asset_id) {
+        await deleteCatalogAsset(kit.asset_id);
+        return;
+      }
+      await deleteKitImage({ kitId: kit.id, imageId });
+    },
     onSuccess: async () => {
       setDeleteError(null);
       await queryClient.invalidateQueries({ queryKey: ['kits'] });
@@ -152,7 +174,14 @@ export default function CatalogPage() {
   );
 
   const onRowClick = React.useCallback(
-    (kit: KitListItem) => updateSkuParam(kit.sku),
+    (kit: KitListItem) => {
+      if (kit.source_type === 'asset') {
+        const imageIndex = (kit.thumbs ?? []).findIndex(Boolean);
+        if (imageIndex >= 0) setImagePreview({ kitId: kit.id, imageIndex });
+        return;
+      }
+      updateSkuParam(kit.sku);
+    },
     [updateSkuParam]
   );
   const onKitClick = onRowClick;
@@ -165,7 +194,7 @@ export default function CatalogPage() {
       const ok = window.confirm(t('delete_image_confirm', { image: imageId, name: kit.name }));
       if (!ok) return;
       deleteImage.mutate(
-        { kitId: kit.id, imageId },
+        { kit, imageId },
         {
           onSuccess: () => setImagePreview(null),
         }
@@ -175,7 +204,8 @@ export default function CatalogPage() {
   );
   const handleEditImage = React.useCallback(
     (kit: KitListItem, imageId: string) => {
-      const sourceImageId = encodeKitSlotImageId(kit.id, imageId);
+      const sourceImageId =
+        kit.source_type === 'asset' ? imageId : encodeKitSlotImageId(kit.id, imageId);
       const params = new URLSearchParams({ source_image_id: sourceImageId });
       const href =
         locale === 'zh'

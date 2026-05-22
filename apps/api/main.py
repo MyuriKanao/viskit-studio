@@ -19,6 +19,7 @@ from apps.api.routes.assets import router as assets_router
 from apps.api.routes.copywriter import router as copywriter_router
 from apps.api.routes.extract import router as extract_router
 from apps.api.routes.generation_jobs import router as generation_jobs_router
+from apps.api.routes.generation_plan import router as generation_plan_router
 from apps.api.routes.health import router as health_router
 from apps.api.routes.images import router as images_router
 from apps.api.routes.kits import router as kits_router
@@ -129,6 +130,7 @@ app.include_router(health_router)
 app.include_router(copywriter_router)
 app.include_router(images_router)
 app.include_router(source_images_router)
+app.include_router(generation_plan_router)
 app.include_router(generation_jobs_router)
 app.include_router(assets_router)
 app.include_router(kits_router)

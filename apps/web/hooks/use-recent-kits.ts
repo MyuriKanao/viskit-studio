@@ -14,10 +14,14 @@ export interface KitListItem {
   sku: string;
   name: string;
   name_en: string | null;
+  source_type?: 'kit' | 'asset';
+  asset_id?: string | null;
+  image_ids?: (string | null)[] | null;
   status: string;
   score: number | null;
   locale: string | null;
   category?: string | null;
+  created_at?: string | null;
   updated_at?: string | null;
   thumbs: (string | null)[];
 }

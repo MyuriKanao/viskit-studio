@@ -5,7 +5,7 @@ import * as React from 'react';
 import { StatusChip } from '@/components/atoms/status-chip';
 import type { KitListItem } from '@/hooks/use-recent-kits';
 import { resolveApiImageSrc } from '@/lib/api/images';
-import { imageIdForIndex } from '@/lib/kits/images';
+import { imageIdForCatalogItem } from '@/lib/kits/images';
 import { cn } from '@/lib/utils';
 
 import { AdvisoryBadge } from './AdvisoryBadge';
@@ -90,7 +90,7 @@ export function CatalogTable({ kits, labels, onRowClick, onImageClick }: Catalog
               const isEn = (kit.locale ?? '').toLowerCase().startsWith('en');
               const thumbIndex = (kit.thumbs ?? []).findIndex(Boolean);
               const thumb = thumbIndex >= 0 ? kit.thumbs[thumbIndex] : null;
-              const thumbImageId = thumbIndex >= 0 ? imageIdForIndex(thumbIndex) : null;
+              const thumbImageId = thumbIndex >= 0 ? imageIdForCatalogItem(kit, thumbIndex) : null;
               return (
                 <tr
                   key={kit.id}

@@ -1,5 +1,22 @@
 components:
   schemas:
+    AssetDeleteResponse:
+      properties:
+        asset_id:
+          title: Asset Id
+          type: string
+        deleted:
+          title: Deleted
+          type: boolean
+        file_deleted:
+          title: File Deleted
+          type: boolean
+      required:
+        - asset_id
+        - deleted
+        - file_deleted
+      title: AssetDeleteResponse
+      type: object
     AssetEditContext:
       properties:
         asset_id:
@@ -564,6 +581,29 @@ components:
         - output_count
       title: GenerationJobCreated
       type: object
+    GenerationJobListResponse:
+      properties:
+        jobs:
+          items:
+            $ref: '#/components/schemas/GenerationJobOut'
+          title: Jobs
+          type: array
+        limit:
+          title: Limit
+          type: integer
+        offset:
+          title: Offset
+          type: integer
+        total:
+          title: Total
+          type: integer
+      required:
+        - jobs
+        - total
+        - limit
+        - offset
+      title: GenerationJobListResponse
+      type: object
     GenerationJobOut:
       properties:
         cancel_requested:
@@ -876,6 +916,140 @@ components:
         - sort_order
       title: GenerationOutputOut
       type: object
+    GenerationPlanItemOut:
+      properties:
+        aspect_ratio:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Aspect Ratio
+        destination_type:
+          default: asset
+          enum:
+            - kit_slot
+            - asset
+          title: Destination Type
+          type: string
+        enabled:
+          default: true
+          title: Enabled
+          type: boolean
+        id:
+          title: Id
+          type: string
+        output_kind:
+          title: Output Kind
+          type: string
+        reason:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Reason
+        slot_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Slot Id
+        template_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Template Name
+        template_ref:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Template Ref
+        title:
+          title: Title
+          type: string
+      required:
+        - id
+        - output_kind
+        - title
+      title: GenerationPlanItemOut
+      type: object
+    GenerationPlanOut:
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/GenerationPlanItemOut'
+          title: Items
+          type: array
+        plan_id:
+          title: Plan Id
+          type: string
+        plan_source:
+          enum:
+            - explicit
+            - recommended
+            - fallback
+            - manual
+          title: Plan Source
+          type: string
+        planner_note:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Planner Note
+        planner_payload:
+          additionalProperties: true
+          title: Planner Payload
+          type: object
+        requires_confirmation:
+          title: Requires Confirmation
+          type: boolean
+        source_image_ref:
+          title: Source Image Ref
+          type: string
+        user_prompt:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: User Prompt
+      required:
+        - plan_id
+        - source_image_ref
+        - plan_source
+        - requires_confirmation
+        - items
+      title: GenerationPlanOut
+      type: object
+    GenerationPlanRequest:
+      properties:
+        explicit_template_refs:
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+          title: Explicit Template Refs
+        kit_client_id:
+          title: Kit Client Id
+          type: string
+        locale:
+          default: zh
+          enum:
+            - zh
+            - en
+          title: Locale
+          type: string
+        product:
+          $ref: '#/components/schemas/ProductProfileIn'
+        source_image_ref:
+          title: Source Image Ref
+          type: string
+        user_prompt:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: User Prompt
+      required:
+        - kit_client_id
+        - source_image_ref
+        - product
+      title: GenerationPlanRequest
+      type: object
     HTTPValidationError:
       properties:
         detail:
@@ -923,14 +1097,33 @@ components:
       type: object
     KitListItem:
       properties:
+        asset_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Asset Id
         category:
           anyOf:
             - type: string
             - type: 'null'
           title: Category
+        created_at:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Created At
         id:
           title: Id
           type: integer
+        image_ids:
+          anyOf:
+            - items:
+                anyOf:
+                  - type: string
+                  - type: 'null'
+              type: array
+            - type: 'null'
+          title: Image Ids
         locale:
           anyOf:
             - type: string
@@ -951,6 +1144,13 @@ components:
           title: Score
         sku:
           title: Sku
+          type: string
+        source_type:
+          default: kit
+          enum:
+            - kit
+            - asset
+          title: Source Type
           type: string
         status:
           title: Status
@@ -1188,6 +1388,41 @@ components:
         - latency_ms
         - models
       title: ProbeCandidateResponse
+      type: object
+    ProductProfileIn:
+      properties:
+        brand:
+          default: ''
+          title: Brand
+          type: string
+        brand_color_hex:
+          default: ''
+          title: Brand Color Hex
+          type: string
+        category:
+          default: ''
+          title: Category
+          type: string
+        name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Name
+        price:
+          anyOf:
+            - type: number
+            - type: 'null'
+          title: Price
+        product_type:
+          default: ''
+          title: Product Type
+          type: string
+        selling_points:
+          items:
+            type: string
+          title: Selling Points
+          type: array
+      title: ProductProfileIn
       type: object
     ProviderHealthRow:
       properties:
@@ -1654,6 +1889,46 @@ components:
         - product_type
         - price
       title: SkuMetaIn
+      type: object
+    SourceImageImportIn:
+      properties:
+        image_id:
+          maxLength: 160
+          minLength: 1
+          title: Image Id
+          type: string
+      required:
+        - image_id
+      title: SourceImageImportIn
+      type: object
+    SourceImageImportOut:
+      properties:
+        data_url:
+          title: Data Url
+          type: string
+        mime_type:
+          title: Mime Type
+          type: string
+        preview_url:
+          title: Preview Url
+          type: string
+        sha256:
+          title: Sha256
+          type: string
+        size_bytes:
+          title: Size Bytes
+          type: integer
+        source_image_ref:
+          title: Source Image Ref
+          type: string
+      required:
+        - source_image_ref
+        - preview_url
+        - mime_type
+        - size_bytes
+        - sha256
+        - data_url
+      title: SourceImageImportOut
       type: object
     SourceImageOut:
       properties:
@@ -2306,6 +2581,32 @@ paths:
       summary: List Assets
       tags:
         - assets
+  /api/assets/{asset_id}:
+    delete:
+      operationId: delete_asset_api_assets__asset_id__delete
+      parameters:
+        - in: path
+          name: asset_id
+          required: true
+          schema:
+            title: Asset Id
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetDeleteResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Delete Asset
+      tags:
+        - assets
   /api/assets/{asset_id}/download:
     get:
       operationId: download_asset_api_assets__asset_id__download_get
@@ -2383,6 +2684,61 @@ paths:
       tags:
         - assets
   /api/generation/jobs:
+    get:
+      description: Return recent durable generation jobs as queue/history records.
+      operationId: list_generation_jobs_api_generation_jobs_get
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            default: 50
+            maximum: 100
+            minimum: 1
+            title: Limit
+            type: integer
+        - in: query
+          name: offset
+          required: false
+          schema:
+            default: 0
+            minimum: 0
+            title: Offset
+            type: integer
+        - in: query
+          name: status
+          required: false
+          schema:
+            anyOf:
+              - enum:
+                  - planned
+                  - queued
+                  - running
+                  - stopping
+                  - stopped
+                  - succeeded
+                  - failed
+                  - partial
+                  - interrupted
+                type: string
+              - type: 'null'
+            title: Status
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationJobListResponse'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: List Generation Jobs
+      tags:
+        - generation-jobs
     post:
       operationId: create_generation_job_api_generation_jobs_post
       requestBody:
@@ -2572,6 +2928,37 @@ paths:
       summary: Stop Generation Job
       tags:
         - generation-jobs
+  /api/generation/plan:
+    post:
+      description: |-
+        Create the initial editable output plan for the generation workflow.
+
+        This endpoint intentionally owns the compatibility/default planning
+        contract so the frontend can fail loudly when the backend route is broken
+        instead of silently manufacturing a local plan.
+      operationId: create_generation_plan_api_generation_plan_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationPlanRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerationPlanOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Generation Plan
+      tags:
+        - generation-plan
   /api/images/{image_id}/bytes:
     get:
       operationId: get_image_bytes_api_images__image_id__bytes_get
@@ -2791,7 +3178,13 @@ paths:
         up-to-9 detail png_paths (M1..M9) — 14 slots total, NULL-padded for any
         missing rows.  Callers render placeholder cells for NULL entries.
 
-        ``recent`` is advisory; sort defaults to ``created_at DESC`` to preserve
+        Standalone generated assets are also returned as catalog entries with
+        ``source_type='asset'`` so non-kit generations remain visible in Catalog.
+
+        ``recent=true`` preserves the Dashboard contract by returning kit rows
+        only. Catalog calls leave ``recent`` false and receive kit plus asset rows.
+
+        ``recent`` is otherwise advisory; sort defaults to ``created_at DESC`` to preserve
         the EPIC-7 Dashboard call shape (``?recent=true&limit=6``).  Catalog
         (EPIC-8) passes ``offset``, ``status``, ``locale``, ``min_score``,
         ``category``, ``sort``, ``order`` for filtered/paginated views.
@@ -3582,6 +3975,31 @@ paths:
                 $ref: '#/components/schemas/SourceImageOut'
           description: Successful Response
       summary: Create Source Image
+      tags:
+        - source-images
+  /api/source-images/from-image:
+    post:
+      operationId: create_source_image_from_existing_api_source_images_from_image_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SourceImageImportIn'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceImageImportOut'
+          description: Successful Response
+        '422':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+          description: Validation Error
+      summary: Create Source Image From Existing
       tags:
         - source-images
   /api/source-images/{source_image_ref}/image:

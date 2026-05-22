@@ -10,6 +10,33 @@ from typing import Annotated, Any
 from pydantic import BaseModel, Field, RootModel
 
 
+class AssetDeleteResponse(BaseModel):
+    asset_id: Annotated[str, Field(title='Asset Id')]
+    deleted: Annotated[bool, Field(title='Deleted')]
+    file_deleted: Annotated[bool, Field(title='File Deleted')]
+
+
+class AssetEditContext(BaseModel):
+    asset_id: Annotated[str, Field(title='Asset Id')]
+    image_id: Annotated[str, Field(title='Image Id')]
+    image_url: Annotated[str, Field(title='Image Url')]
+    target: Annotated[dict[str, str], Field(title='Target')]
+
+
+class AssetOut(BaseModel):
+    download_url: Annotated[str, Field(title='Download Url')]
+    id: Annotated[str, Field(title='Id')]
+    image_id: Annotated[str, Field(title='Image Id')]
+    image_url: Annotated[str, Field(title='Image Url')]
+    metadata: Annotated[dict[str, Any] | None, Field(title='Metadata')] = None
+    name: Annotated[str, Field(title='Name')]
+    output_kind: Annotated[str | None, Field(title='Output Kind')] = None
+    source_image_ref: Annotated[str | None, Field(title='Source Image Ref')] = None
+    source_job_id: Annotated[str | None, Field(title='Source Job Id')] = None
+    source_output_id: Annotated[str | None, Field(title='Source Output Id')] = None
+    template_ref: Annotated[str | None, Field(title='Template Ref')] = None
+
+
 class ConfigStateResponse(BaseModel):
     sha256: Annotated[str, Field(title='Sha256')]
     yaml: Annotated[str, Field(title='Yaml')]
@@ -81,6 +108,18 @@ class EditRequest(BaseModel):
     new_text: Annotated[str, Field(title='New Text')]
 
 
+class EditResultCreate(BaseModel):
+    metadata: Annotated[dict[str, Any] | None, Field(title='Metadata')] = None
+    result_data_url: Annotated[str, Field(max_length=14000000, title='Result Data Url')]
+    source_image_ref: Annotated[str | None, Field(title='Source Image Ref')] = None
+
+
+class EditResultOut(BaseModel):
+    edit_result_ref: Annotated[str, Field(title='Edit Result Ref')]
+    result_url: Annotated[str, Field(title='Result Url')]
+    status: Annotated[str, Field(title='Status')]
+
+
 class EndpointSecretResponse(BaseModel):
     api_key: Annotated[str, Field(title='Api Key')]
 
@@ -124,6 +163,136 @@ class GenerateResponse(BaseModel):
     png_paths: Annotated[list[str], Field(title='Png Paths')]
 
 
+class ClientJobId(RootModel[str]):
+    root: Annotated[str, Field(max_length=120, title='Client Job Id')]
+
+
+class Status(Enum):
+    planned = 'planned'
+    queued = 'queued'
+    running = 'running'
+    stopping = 'stopping'
+    stopped = 'stopped'
+    succeeded = 'succeeded'
+    failed = 'failed'
+    partial = 'partial'
+    interrupted = 'interrupted'
+
+
+class GenerationJobCreated(BaseModel):
+    job_id: Annotated[str, Field(title='Job Id')]
+    output_count: Annotated[int, Field(title='Output Count')]
+    status: Annotated[Status, Field(title='Status')]
+
+
+class GenerationJobStartResponse(BaseModel):
+    job_id: Annotated[str, Field(title='Job Id')]
+    scheduled: Annotated[bool, Field(title='Scheduled')]
+    status: Annotated[Status, Field(title='Status')]
+
+
+class GenerationJobStopResponse(BaseModel):
+    cancel_requested: Annotated[bool, Field(title='Cancel Requested')]
+    job_id: Annotated[str, Field(title='Job Id')]
+    status: Annotated[Status, Field(title='Status')]
+
+
+class DestinationType(Enum):
+    kit_slot = 'kit_slot'
+    asset = 'asset'
+
+
+class OutputKind(Enum):
+    product_main = 'product_main'
+    white_bg = 'white_bg'
+    solid_bg = 'solid_bg'
+    banner = 'banner'
+    poster = 'poster'
+    hero = 'hero'
+    detail = 'detail'
+    custom = 'custom'
+
+
+class SlotId(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[HM][1-9]$', title='Slot Id')]
+
+
+class GenerationOutputCreate(BaseModel):
+    aspect_ratio: Annotated[str | None, Field(title='Aspect Ratio')] = None
+    destination_type: Annotated[
+        DestinationType | None, Field(title='Destination Type')
+    ] = DestinationType.asset
+    height: Annotated[int | None, Field(gt=0, le=4096, title='Height')] = 1024
+    marketing_kit_id: Annotated[int | None, Field(title='Marketing Kit Id')] = None
+    output_key: Annotated[
+        str, Field(pattern='^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$', title='Output Key')
+    ]
+    output_kind: Annotated[OutputKind | None, Field(title='Output Kind')] = (
+        OutputKind.custom
+    )
+    prompt: Annotated[str, Field(max_length=20000, min_length=1, title='Prompt')]
+    slot_id: Annotated[SlotId | None, Field(title='Slot Id')] = None
+    template_name: Annotated[str | None, Field(title='Template Name')] = None
+    template_ref: Annotated[str, Field(title='Template Ref')]
+    width: Annotated[int | None, Field(gt=0, le=4096, title='Width')] = 1024
+
+
+class GenerationOutputOut(BaseModel):
+    aspect_ratio: Annotated[str | None, Field(title='Aspect Ratio')]
+    asset_id: Annotated[str | None, Field(title='Asset Id')]
+    destination_type: Annotated[str, Field(title='Destination Type')]
+    error_message: Annotated[str | None, Field(title='Error Message')]
+    height: Annotated[int, Field(title='Height')]
+    id: Annotated[str, Field(title='Id')]
+    image_id: Annotated[str | None, Field(title='Image Id')]
+    image_url: Annotated[str | None, Field(title='Image Url')]
+    marketing_kit_id: Annotated[int | None, Field(title='Marketing Kit Id')]
+    output_key: Annotated[str, Field(title='Output Key')]
+    output_kind: Annotated[str, Field(title='Output Kind')]
+    prompt: Annotated[str, Field(title='Prompt')]
+    slot_id: Annotated[str | None, Field(title='Slot Id')]
+    sort_order: Annotated[int, Field(title='Sort Order')]
+    status: Annotated[str, Field(title='Status')]
+    template_name: Annotated[str | None, Field(title='Template Name')]
+    template_ref: Annotated[str, Field(title='Template Ref')]
+    width: Annotated[int, Field(title='Width')]
+
+
+class GenerationPlanItemOut(BaseModel):
+    aspect_ratio: Annotated[str | None, Field(title='Aspect Ratio')] = None
+    destination_type: Annotated[
+        DestinationType | None, Field(title='Destination Type')
+    ] = DestinationType.asset
+    enabled: Annotated[bool | None, Field(title='Enabled')] = True
+    id: Annotated[str, Field(title='Id')]
+    output_kind: Annotated[str, Field(title='Output Kind')]
+    reason: Annotated[str | None, Field(title='Reason')] = None
+    slot_id: Annotated[str | None, Field(title='Slot Id')] = None
+    template_name: Annotated[str | None, Field(title='Template Name')] = None
+    template_ref: Annotated[str | None, Field(title='Template Ref')] = None
+    title: Annotated[str, Field(title='Title')]
+
+
+class PlanSource(Enum):
+    explicit = 'explicit'
+    recommended = 'recommended'
+    fallback = 'fallback'
+    manual = 'manual'
+
+
+class GenerationPlanOut(BaseModel):
+    items: Annotated[list[GenerationPlanItemOut], Field(title='Items')]
+    plan_id: Annotated[str, Field(title='Plan Id')]
+    plan_source: Annotated[PlanSource, Field(title='Plan Source')]
+    planner_note: Annotated[str | None, Field(title='Planner Note')] = None
+    planner_payload: Annotated[
+        dict[str, Any] | None, Field(title='Planner Payload')
+    ] = None
+    requires_confirmation: Annotated[bool, Field(title='Requires Confirmation')]
+    source_image_ref: Annotated[str, Field(title='Source Image Ref')]
+    user_prompt: Annotated[str | None, Field(title='User Prompt')] = None
+
+
 class Id2(Enum):
     H1 = 'H1'
     H2 = 'H2'
@@ -132,14 +301,25 @@ class Id2(Enum):
     H5 = 'H5'
 
 
+class SourceType(Enum):
+    kit = 'kit'
+    asset = 'asset'
+
+
 class KitListItem(BaseModel):
+    asset_id: Annotated[str | None, Field(title='Asset Id')] = None
     category: Annotated[str | None, Field(title='Category')] = None
+    created_at: Annotated[str | None, Field(title='Created At')] = None
     id: Annotated[int, Field(title='Id')]
+    image_ids: Annotated[list[str | None] | None, Field(title='Image Ids')] = None
     locale: Annotated[str | None, Field(title='Locale')]
     name: Annotated[str, Field(title='Name')]
     name_en: Annotated[str | None, Field(title='Name En')]
     score: Annotated[int | None, Field(title='Score')]
     sku: Annotated[str, Field(title='Sku')]
+    source_type: Annotated[SourceType | None, Field(title='Source Type')] = (
+        SourceType.kit
+    )
     status: Annotated[str, Field(title='Status')]
     thumbs: Annotated[list[str | None], Field(title='Thumbs')]
     updated_at: Annotated[str | None, Field(title='Updated At')] = None
@@ -208,7 +388,17 @@ class ProbeCandidateResponse(BaseModel):
     ok: Annotated[bool, Field(title='Ok')]
 
 
-class Status(Enum):
+class ProductProfileIn(BaseModel):
+    brand: Annotated[str | None, Field(title='Brand')] = ''
+    brand_color_hex: Annotated[str | None, Field(title='Brand Color Hex')] = ''
+    category: Annotated[str | None, Field(title='Category')] = ''
+    name: Annotated[str | None, Field(title='Name')] = None
+    price: Annotated[float | None, Field(title='Price')] = None
+    product_type: Annotated[str | None, Field(title='Product Type')] = ''
+    selling_points: Annotated[list[str] | None, Field(title='Selling Points')] = None
+
+
+class Status4(Enum):
     ok = 'ok'
     warn = 'warn'
     error = 'error'
@@ -220,7 +410,7 @@ class ProviderHealthRow(BaseModel):
     last_check: Annotated[str | None, Field(title='Last Check')]
     latency_ms: Annotated[int | None, Field(title='Latency Ms')]
     role: Annotated[str, Field(title='Role')]
-    status: Annotated[Status | None, Field(title='Status')]
+    status: Annotated[Status4 | None, Field(title='Status')]
     unbound: Annotated[list[str] | None, Field(title='Unbound')] = None
 
 
@@ -267,7 +457,27 @@ class SaveEndpointsResponse(BaseModel):
     warning: Annotated[str | None, Field(title='Warning')] = None
 
 
-class SlotId(Enum):
+class Mode(Enum):
+    replace = 'replace'
+    copy = 'copy'
+
+
+class SaveImageRequest(BaseModel):
+    edit_result_ref: Annotated[
+        str, Field(pattern='^edit-result:[A-Za-z0-9_-]{1,64}$', title='Edit Result Ref')
+    ]
+    mode: Annotated[Mode, Field(title='Mode')]
+
+
+class SaveImageResponse(BaseModel):
+    asset_id: Annotated[int | None, Field(title='Asset Id')] = None
+    image_id: Annotated[str, Field(title='Image Id')]
+    image_url: Annotated[str, Field(title='Image Url')]
+    mode: Annotated[Mode, Field(title='Mode')]
+    replaced: Annotated[bool, Field(title='Replaced')]
+
+
+class SlotId1(Enum):
     H1 = 'H1'
     H2 = 'H2'
     H3 = 'H3'
@@ -285,7 +495,7 @@ class SlotId(Enum):
 
 
 class SchemeSlot(BaseModel):
-    slot_id: Annotated[SlotId, Field(title='Slot Id')]
+    slot_id: Annotated[SlotId1, Field(title='Slot Id')]
     template_ref: Annotated[str, Field(title='Template Ref')]
 
 
@@ -358,6 +568,27 @@ class SkuMetaIn(BaseModel):
     price: Annotated[float, Field(title='Price')]
     product_type: Annotated[ProductType, Field(title='Product Type')]
     sku: Annotated[str | None, Field(title='Sku')] = None
+
+
+class SourceImageImportIn(BaseModel):
+    image_id: Annotated[str, Field(max_length=160, min_length=1, title='Image Id')]
+
+
+class SourceImageImportOut(BaseModel):
+    data_url: Annotated[str, Field(title='Data Url')]
+    mime_type: Annotated[str, Field(title='Mime Type')]
+    preview_url: Annotated[str, Field(title='Preview Url')]
+    sha256: Annotated[str, Field(title='Sha256')]
+    size_bytes: Annotated[int, Field(title='Size Bytes')]
+    source_image_ref: Annotated[str, Field(title='Source Image Ref')]
+
+
+class SourceImageOut(BaseModel):
+    mime_type: Annotated[str, Field(title='Mime Type')]
+    preview_url: Annotated[str, Field(title='Preview Url')]
+    sha256: Annotated[str, Field(title='Sha256')]
+    size_bytes: Annotated[int, Field(title='Size Bytes')]
+    source_image_ref: Annotated[str, Field(title='Source Image Ref')]
 
 
 class Sparks(BaseModel):
@@ -507,6 +738,11 @@ class WeeklyMetricsResponse(BaseModel):
     sparks: Sparks
 
 
+class AssetListResponse(BaseModel):
+    items: Annotated[list[AssetOut], Field(title='Items')]
+    total: Annotated[int, Field(title='Total')]
+
+
 class ComplianceOut(BaseModel):
     advisory: Annotated[bool, Field(title='Advisory')]
     locale: Annotated[str, Field(title='Locale')]
@@ -532,6 +768,52 @@ class ExtractResponse(BaseModel):
     price: FieldInference | None
     product_type: FieldInference
     selling_points: Annotated[list[FieldInference], Field(title='Selling Points')]
+
+
+class GenerationJobCreate(BaseModel):
+    client_job_id: Annotated[ClientJobId | None, Field(title='Client Job Id')] = None
+    locale: Annotated[Locale | None, Field(title='Locale')] = Locale.zh
+    marketing_kit_id: Annotated[int | None, Field(title='Marketing Kit Id')] = None
+    outputs: Annotated[
+        list[GenerationOutputCreate],
+        Field(max_length=100, min_length=1, title='Outputs'),
+    ]
+    planner_payload: Annotated[
+        dict[str, Any] | None, Field(title='Planner Payload')
+    ] = None
+    source_image_ref: Annotated[str, Field(title='Source Image Ref')]
+    user_prompt: Annotated[str | None, Field(max_length=20000, title='User Prompt')] = (
+        ''
+    )
+
+
+class GenerationJobOut(BaseModel):
+    cancel_requested: Annotated[bool, Field(title='Cancel Requested')]
+    client_job_id: Annotated[str | None, Field(title='Client Job Id')]
+    created_at: Annotated[str | None, Field(title='Created At')]
+    error_message: Annotated[str | None, Field(title='Error Message')]
+    finished_at: Annotated[str | None, Field(title='Finished At')]
+    id: Annotated[str, Field(title='Id')]
+    locale: Annotated[str, Field(title='Locale')]
+    marketing_kit_id: Annotated[int | None, Field(title='Marketing Kit Id')]
+    outputs: Annotated[list[GenerationOutputOut], Field(title='Outputs')]
+    planner_payload: Annotated[dict[str, Any], Field(title='Planner Payload')]
+    source_image_ref: Annotated[str, Field(title='Source Image Ref')]
+    started_at: Annotated[str | None, Field(title='Started At')]
+    status: Annotated[Status, Field(title='Status')]
+    updated_at: Annotated[str | None, Field(title='Updated At')]
+    user_prompt: Annotated[str, Field(title='User Prompt')]
+
+
+class GenerationPlanRequest(BaseModel):
+    explicit_template_refs: Annotated[
+        list[str] | None, Field(title='Explicit Template Refs')
+    ] = None
+    kit_client_id: Annotated[str, Field(title='Kit Client Id')]
+    locale: Annotated[Locale | None, Field(title='Locale')] = Locale.zh
+    product: ProductProfileIn
+    source_image_ref: Annotated[str, Field(title='Source Image Ref')]
+    user_prompt: Annotated[str | None, Field(title='User Prompt')] = None
 
 
 class HTTPValidationError(BaseModel):
@@ -618,3 +900,10 @@ class GenerateRequest(BaseModel):
     template_slot_overrides: Annotated[
         dict[str, str] | None, Field(title='Template Slot Overrides')
     ] = None
+
+
+class GenerationJobListResponse(BaseModel):
+    jobs: Annotated[list[GenerationJobOut], Field(title='Jobs')]
+    limit: Annotated[int, Field(title='Limit')]
+    offset: Annotated[int, Field(title='Offset')]
+    total: Annotated[int, Field(title='Total')]

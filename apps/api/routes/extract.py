@@ -104,6 +104,19 @@ def _build_prompt(description: str | None) -> str:
     return base
 
 
+def _normalize_provider_payload(data: dict[str, Any]) -> dict[str, Any]:
+    """Tolerate provider wrappers while preserving the public response schema."""
+    if "selling_points" not in data:
+        data["selling_points"] = []
+        return data
+
+    selling_points = data["selling_points"]
+    if isinstance(selling_points, dict) and isinstance(selling_points.get("value"), list):
+        data["selling_points"] = selling_points["value"]
+
+    return data
+
+
 def _parse_vision_response(raw_text: str) -> ExtractResponse:
     """Parse the vision provider's JSON text into ExtractResponse.
 
@@ -119,8 +132,7 @@ def _parse_vision_response(raw_text: str) -> ExtractResponse:
         logger.warning("vision provider returned non-object JSON during extract: %r", data)
         raise HTTPException(status_code=502, detail="vision provider returned invalid JSON")
 
-    if "selling_points" not in data:
-        data["selling_points"] = []
+    data = _normalize_provider_payload(data)
 
     try:
         return ExtractResponse.model_validate(data)
