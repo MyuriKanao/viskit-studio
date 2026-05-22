@@ -23,19 +23,24 @@
 
 ## Docker 部署
 
-Docker：
+`docker-compose.yml`：
 
-```bash
-cp .env.example .env
-mkdir -p data
-cp config.yaml.example data/config.yaml
-docker compose up -d
-```
-
-访问：
-
-```text
-http://localhost:3068
+```yaml
+services:
+  app:
+    image: myurikanao/viskit-studio:latest
+    ports:
+      - "3068:3000"
+    environment:
+      DATABASE_URL: sqlite:////app/data/viskit.db
+      CONFIG_PATH: /app/data/config.yaml
+      IMAGEGEN_OUTPUT_DIR: /app/data/imagegen
+      VISKIT_AUTO_MIGRATE: "1"
+      VISKIT_BOOTSTRAP_WORKSPACE: "1"
+      NEXT_SERVER_API_BASE_URL: http://127.0.0.1:8000
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
 ```
 
 ## 源码部署

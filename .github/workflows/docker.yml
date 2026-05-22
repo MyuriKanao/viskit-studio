@@ -23,9 +23,10 @@ jobs:
         shell: bash
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if [[ -n "${DOCKERHUB_USERNAME}" ]]; then
+          if [[ -n "${DOCKERHUB_USERNAME}" && -n "${DOCKERHUB_TOKEN}" ]]; then
             echo "enabled=true" >> "${GITHUB_OUTPUT}"
             echo "image=docker.io/${DOCKERHUB_USERNAME}/viskit-studio" >> "${GITHUB_OUTPUT}"
           else
