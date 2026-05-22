@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Asset */
+        delete: operations["delete_asset_api_assets__asset_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{asset_id}/download": {
         parameters: {
             query?: never;
@@ -79,7 +96,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Generation Jobs
+         * @description Return recent durable generation jobs as queue/history records.
+         */
+        get: operations["list_generation_jobs_api_generation_jobs_get"];
         put?: never;
         /** Create Generation Job */
         post: operations["create_generation_job_api_generation_jobs_post"];
@@ -185,6 +206,30 @@ export interface paths {
         put?: never;
         /** Stop Generation Job */
         post: operations["stop_generation_job_api_generation_jobs__job_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/generation/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Generation Plan
+         * @description Create the initial editable output plan for the generation workflow.
+         *
+         *     This endpoint intentionally owns the compatibility/default planning
+         *     contract so the frontend can fail loudly when the backend route is broken
+         *     instead of silently manufacturing a local plan.
+         */
+        post: operations["create_generation_plan_api_generation_plan_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -328,7 +373,13 @@ export interface paths {
          *     up-to-9 detail png_paths (M1..M9) — 14 slots total, NULL-padded for any
          *     missing rows.  Callers render placeholder cells for NULL entries.
          *
-         *     ``recent`` is advisory; sort defaults to ``created_at DESC`` to preserve
+         *     Standalone generated assets are also returned as catalog entries with
+         *     ``source_type='asset'`` so non-kit generations remain visible in Catalog.
+         *
+         *     ``recent=true`` preserves the Dashboard contract by returning kit rows
+         *     only. Catalog calls leave ``recent`` false and receive kit plus asset rows.
+         *
+         *     ``recent`` is otherwise advisory; sort defaults to ``created_at DESC`` to preserve
          *     the EPIC-7 Dashboard call shape (``?recent=true&limit=6``).  Catalog
          *     (EPIC-8) passes ``offset``, ``status``, ``locale``, ``min_score``,
          *     ``category``, ``sort``, ``order`` for filtered/paginated views.
@@ -852,6 +903,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source-images/from-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Source Image From Existing */
+        post: operations["create_source_image_from_existing_api_source_images_from_image_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/source-images/{source_image_ref}/image": {
         parameters: {
             query?: never;
@@ -998,6 +1066,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AssetDeleteResponse */
+        AssetDeleteResponse: {
+            /** Asset Id */
+            asset_id: string;
+            /** Deleted */
+            deleted: boolean;
+            /** File Deleted */
+            file_deleted: boolean;
+        };
         /** AssetEditContext */
         AssetEditContext: {
             /** Asset Id */
@@ -1284,6 +1361,17 @@ export interface components {
              */
             status: "planned" | "queued" | "running" | "stopping" | "stopped" | "succeeded" | "failed" | "partial" | "interrupted";
         };
+        /** GenerationJobListResponse */
+        GenerationJobListResponse: {
+            /** Jobs */
+            jobs: components["schemas"]["GenerationJobOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
         /** GenerationJobOut */
         GenerationJobOut: {
             /** Cancel Requested */
@@ -1424,6 +1512,78 @@ export interface components {
             /** Width */
             width: number;
         };
+        /** GenerationPlanItemOut */
+        GenerationPlanItemOut: {
+            /** Aspect Ratio */
+            aspect_ratio?: string | null;
+            /**
+             * Destination Type
+             * @default asset
+             * @enum {string}
+             */
+            destination_type: "kit_slot" | "asset";
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /** Output Kind */
+            output_kind: string;
+            /** Reason */
+            reason?: string | null;
+            /** Slot Id */
+            slot_id?: string | null;
+            /** Template Name */
+            template_name?: string | null;
+            /** Template Ref */
+            template_ref?: string | null;
+            /** Title */
+            title: string;
+        };
+        /** GenerationPlanOut */
+        GenerationPlanOut: {
+            /** Items */
+            items: components["schemas"]["GenerationPlanItemOut"][];
+            /** Plan Id */
+            plan_id: string;
+            /**
+             * Plan Source
+             * @enum {string}
+             */
+            plan_source: "explicit" | "recommended" | "fallback" | "manual";
+            /** Planner Note */
+            planner_note?: string | null;
+            /** Planner Payload */
+            planner_payload?: {
+                [key: string]: unknown;
+            };
+            /** Requires Confirmation */
+            requires_confirmation: boolean;
+            /** Source Image Ref */
+            source_image_ref: string;
+            /** User Prompt */
+            user_prompt?: string | null;
+        };
+        /** GenerationPlanRequest */
+        GenerationPlanRequest: {
+            /** Explicit Template Refs */
+            explicit_template_refs?: string[] | null;
+            /** Kit Client Id */
+            kit_client_id: string;
+            /**
+             * Locale
+             * @default zh
+             * @enum {string}
+             */
+            locale: "zh" | "en";
+            product: components["schemas"]["ProductProfileIn"];
+            /** Source Image Ref */
+            source_image_ref: string;
+            /** User Prompt */
+            user_prompt?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1449,10 +1609,16 @@ export interface components {
         };
         /** KitListItem */
         KitListItem: {
+            /** Asset Id */
+            asset_id?: string | null;
             /** Category */
             category?: string | null;
+            /** Created At */
+            created_at?: string | null;
             /** Id */
             id: number;
+            /** Image Ids */
+            image_ids?: (string | null)[] | null;
             /** Locale */
             locale: string | null;
             /** Name */
@@ -1463,6 +1629,12 @@ export interface components {
             score: number | null;
             /** Sku */
             sku: string;
+            /**
+             * Source Type
+             * @default kit
+             * @enum {string}
+             */
+            source_type: "kit" | "asset";
             /** Status */
             status: string;
             /** Thumbs */
@@ -1602,6 +1774,35 @@ export interface components {
             models: string[];
             /** Ok */
             ok: boolean;
+        };
+        /** ProductProfileIn */
+        ProductProfileIn: {
+            /**
+             * Brand
+             * @default
+             */
+            brand: string;
+            /**
+             * Brand Color Hex
+             * @default
+             */
+            brand_color_hex: string;
+            /**
+             * Category
+             * @default
+             */
+            category: string;
+            /** Name */
+            name?: string | null;
+            /** Price */
+            price?: number | null;
+            /**
+             * Product Type
+             * @default
+             */
+            product_type: string;
+            /** Selling Points */
+            selling_points?: string[];
         };
         /** ProviderHealthRow */
         ProviderHealthRow: {
@@ -1831,6 +2032,26 @@ export interface components {
             product_type: "blue_hat" | "sports" | "general_food" | "other";
             /** Sku */
             sku?: string | null;
+        };
+        /** SourceImageImportIn */
+        SourceImageImportIn: {
+            /** Image Id */
+            image_id: string;
+        };
+        /** SourceImageImportOut */
+        SourceImageImportOut: {
+            /** Data Url */
+            data_url: string;
+            /** Mime Type */
+            mime_type: string;
+            /** Preview Url */
+            preview_url: string;
+            /** Sha256 */
+            sha256: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Source Image Ref */
+            source_image_ref: string;
         };
         /** SourceImageOut */
         SourceImageOut: {
@@ -2193,6 +2414,37 @@ export interface operations {
             };
         };
     };
+    delete_asset_api_assets__asset_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetDeleteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_asset_api_assets__asset_id__download_get: {
         parameters: {
             query?: never;
@@ -2273,6 +2525,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_generation_jobs_api_generation_jobs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                status?: ("planned" | "queued" | "running" | "stopping" | "stopped" | "succeeded" | "failed" | "partial" | "interrupted") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationJobListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2494,6 +2779,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GenerationJobStopResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_generation_plan_api_generation_plan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerationPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerationPlanOut"];
                 };
             };
             /** @description Validation Error */
@@ -3490,6 +3808,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceImageOut"];
+                };
+            };
+        };
+    };
+    create_source_image_from_existing_api_source_images_from_image_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceImageImportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceImageImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

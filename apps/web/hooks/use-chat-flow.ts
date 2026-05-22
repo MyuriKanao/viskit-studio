@@ -22,9 +22,12 @@ import {
 } from '@/hooks/use-generation-job';
 import { useGenerateKit, useKitSpec } from '@/hooks/use-kit-pipeline';
 import type { KitSellingPoint, KitSkuMetaPayload } from '@/hooks/use-kit-pipeline';
+import type { SpecResponse } from '@/hooks/use-kit-pipeline';
 import { LOW_CONF_THRESHOLD } from '@/lib/chat/constants';
+import { buildGenerationBriefDraft, buildRewriteSpecPayload } from '@/lib/chat/generation-brief';
 import { useChatStore } from '@/lib/chat/store';
 import type { InferredSpec, ProgressEvent } from '@/lib/chat/types';
+import { buildGenerationJobCreateRequest } from '@/lib/generation/job-payload';
 import type {
   GenerationJobStatus,
   GenerationPlan,
@@ -70,10 +73,10 @@ function buildSellingPoints(inferred: InferredSpec, userPrompt: string | null): 
   const pointTexts = inferred.selling_points
     .map((sp) => sellingPointValue(sp.value))
     .filter(Boolean);
-  const fallbackPoint =
+  const defaultPoint =
     [inferred.brand.value, inferred.category.value, promptText].filter(Boolean).join(' ') ||
     '商品基础展示';
-  return (pointTexts.length > 0 ? pointTexts : [fallbackPoint]).filter(Boolean).map((point) => ({
+  return (pointTexts.length > 0 ? pointTexts : [defaultPoint]).filter(Boolean).map((point) => ({
     title: point,
     evidence: promptText ? `${point}；用户提示：${promptText}` : point,
     priority: 'high' as const,
@@ -184,7 +187,7 @@ export function useChatImageFlow() {
       const pendingMessageId = appendMessage({
         role: 'ai',
         type: 'text',
-        content: '正在保存源图并推断…',
+        content: '正在推断商品信息…',
       });
 
       // 5. Persist source image, then fire /extract and /generation/plan.
@@ -197,9 +200,6 @@ export function useChatImageFlow() {
             mime: imagePayload.mime,
           }));
         setSourceImage(sourceImage);
-        updateMessage(pendingMessageId, {
-          content: '源图已保存，正在推断商品信息…',
-        });
 
         const inferred = await extract({
           kitClientId,
@@ -259,8 +259,49 @@ export function useChatImageFlow() {
     ]
   );
 
+  const handleImageUpload = useCallback(
+    async (imageUrl: string, mime: string) => {
+      setHeroImage({ url: imageUrl, mime });
+      setSourceImage(null);
+      setUserPrompt(null);
+      setInferredSpec(null);
+      setOutputPlan(null);
+      setConfirmationMode(null);
+      setActiveJobId(null);
+      appendMessage({ role: 'user', type: 'image_ref', content: imageUrl });
+
+      try {
+        const imagePayload = await prepareImagePayload(imageUrl, mime);
+        const sourceImage = await persistSourceImage({
+          imageUrl: imagePayload.imageUrl,
+          mime: imagePayload.mime,
+        });
+        setSourceImage(sourceImage);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        appendMessage({
+          role: 'ai',
+          type: 'text',
+          content: `图片保存失败：${msg}。请重新上传图片。`,
+        });
+      }
+    },
+    [
+      appendMessage,
+      persistSourceImage,
+      setActiveJobId,
+      setConfirmationMode,
+      setHeroImage,
+      setInferredSpec,
+      setOutputPlan,
+      setSourceImage,
+      setUserPrompt,
+    ]
+  );
+
   return {
     handleImageDrop,
+    handleImageUpload,
     isExtracting:
       extractMutation.isPending || persistSourceImageMutation.isPending || planMutation.isPending,
   };
@@ -300,7 +341,11 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
   } = useGenerationJob({ onProgress });
 
   const handleStart = useCallback(
-    async (inferred: InferredSpec, confirmedPlan?: GenerationPlan) => {
+    async (
+      inferred: InferredSpec,
+      confirmedPlan?: GenerationPlan,
+      rewrittenSpec?: SpecResponse
+    ) => {
       // Polish Queue #1 guard: refuse when brand/category confidence is still low
       if (
         inferred.brand.confidence < LOW_CONF_THRESHOLD ||
@@ -343,18 +388,24 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
       appendMessage({ role: 'ai', type: 'text', content: '输出计划已确认，正在生成规格…' });
 
       try {
-        // Step 1: /spec
-        const specResp = await createSpec({
-          kit_id: kitClientId,
-          locale: locale as 'zh' | 'en',
-          sku_meta: skuMeta,
-          selling_points: sellingPoints,
-        });
+        // Step 1: /spec. If the user already ran the LLM brief rewrite and did
+        // not edit after it, reuse that response so the visible brief feeds the
+        // exact downstream generation payload.
+        const specResp =
+          rewrittenSpec ??
+          (await createSpec({
+            kit_id: kitClientId,
+            locale: locale as 'zh' | 'en',
+            sku_meta: skuMeta,
+            selling_points: sellingPoints,
+          }));
 
         appendMessage({
           role: 'ai',
           type: 'text',
-          content: `规格完成，正在创建后台生成任务（${enabledItems.length} 个输出）…`,
+          content: rewrittenSpec
+            ? `已使用改写后的 brief，正在创建后台生成任务（${enabledItems.length} 个输出）…`
+            : `规格完成，正在创建后台生成任务（${enabledItems.length} 个输出）…`,
         });
 
         // Step 2: create durable generation job. Job progress is observed through
@@ -366,42 +417,19 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
           items: enabledItems,
           requires_confirmation: true,
         };
-        const snapshot = await startGenerationJob({
-          kit_client_id: kitClientId,
-          source_image_ref: sourceImage.source_image_ref,
-          locale: locale as 'zh' | 'en',
-          user_prompt: promptText ?? null,
-          brand_color_hex: inferred.brand_color_hex.value,
-          style_prompt: [promptText, ...inferred.selling_points.map((sp) => sp.value)]
-            .filter(Boolean)
-            .join('、'),
-          product: buildProductProfile(inferred),
-          output_plan: selectedPlan,
-          spec: specResp.spec,
-          template_scheme_ref: inferred.template_scheme_ref ?? null,
-          template_slot_overrides: inferred.template_slot_overrides ?? {},
-        });
-
-        // Compatibility fallback: if the new durable job endpoint is not yet available in
-        // an older local backend, preserve the legacy full-kit path instead of silently
-        // dropping the user action. The durable endpoint remains the primary path.
-        if (!snapshot) {
-          if (!isFullKitPlan(selectedPlan)) {
-            appendMessage({
-              role: 'ai',
-              type: 'text',
-              content: '后台生成任务创建失败，未启动旧版 14 图兼容生成以避免输出数量不匹配。',
-            });
-            return;
-          }
+        const product = buildProductProfile(inferred);
+        const stylePrompt = [promptText, ...inferred.selling_points.map((sp) => sp.value)]
+          .filter(Boolean)
+          .join('、');
+        if (isFullKitPlan(selectedPlan)) {
+          // Explicit legacy 14-slot kit path: this preserves the existing full-kit
+          // flow and is not used as a catch-all fallback for durable job failures.
           const result = await startGenerate({
             kit_id: kitClientId,
             brand_color_hex: inferred.brand_color_hex.value,
             locale: locale as 'zh' | 'en',
             spec: specResp.spec,
-            style_prompt: [promptText, ...inferred.selling_points.map((sp) => sp.value)]
-              .filter(Boolean)
-              .join('、'),
+            style_prompt: stylePrompt,
             template_scheme_ref: inferred.template_scheme_ref ?? null,
             template_slot_overrides: inferred.template_slot_overrides ?? {},
             onProgress: (e: ProgressEvent) => {
@@ -437,6 +465,24 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
           return;
         }
 
+        const snapshot = await startGenerationJob(
+          buildGenerationJobCreateRequest({
+            kitClientId,
+            sourceImage,
+            locale: locale as 'zh' | 'en',
+            userPrompt: promptText ?? null,
+            stylePrompt,
+            product,
+            outputPlan: selectedPlan,
+            inferred,
+            spec: specResp.spec,
+            specMarkdown: specResp.spec_markdown,
+            compliance: specResp.compliance,
+            templateSchemeRef: inferred.template_scheme_ref ?? null,
+            templateSlotOverrides: inferred.template_slot_overrides ?? {},
+          })
+        );
+
         setActiveJobId(isActiveGenerationStatus(snapshot.status) ? snapshot.job_id : null);
         appendMessage({
           role: 'ai',
@@ -468,6 +514,18 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
     ]
   );
 
+  const handleRewriteBrief = useCallback(
+    async (inferred: InferredSpec, plan: GenerationPlan) => {
+      const draft = buildGenerationBriefDraft(inferred, plan);
+      const payload = buildRewriteSpecPayload(draft, locale as 'zh' | 'en', userPrompt);
+      return createSpec({
+        kit_id: kitClientId,
+        ...payload,
+      });
+    },
+    [createSpec, kitClientId, locale, userPrompt]
+  );
+
   const handleStop = useCallback(async () => {
     const stopped = await stopGenerationJob();
     if (stopped) {
@@ -494,6 +552,7 @@ export function useChatStartFlow(onProgress?: (event: ProgressEvent) => void) {
 
   return {
     handleStart,
+    handleRewriteBrief,
     specPhase: specMut.status,
     genPhase: generationJobPhase,
     job: generationJobSnapshot,

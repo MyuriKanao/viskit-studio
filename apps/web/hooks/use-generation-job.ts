@@ -1,6 +1,11 @@
 'use client';
 
-import { useMutation } from '@tanstack/react-query';
+import {
+  type UseQueryResult,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+} from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { ProgressEvent } from '@/lib/chat/types';
@@ -27,6 +32,18 @@ export interface SourceImageUploadInput {
   imageUrl: string;
   mime: string;
   fileName?: string;
+}
+
+export interface GenerationJobListSnapshot {
+  jobs: GenerationJobSnapshot[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface UseGenerationJobRecordsOptions {
+  limit?: number;
+  offset?: number;
 }
 
 export type GenerationJobPhase =
@@ -214,8 +231,11 @@ function normalizeGenerationJob(raw: unknown, fallbackJobId?: string): Generatio
     : [];
   return {
     job_id: jobId,
+    client_job_id: asString(job.client_job_id),
     status: normalizeJobStatus(job.status),
     source_image_ref: asString(job.source_image_ref),
+    user_prompt: asString(job.user_prompt),
+    locale: asString(job.locale),
     marketing_kit_id: asNumber(job.marketing_kit_id),
     outputs,
     error_message: asString(job.error_message) ?? asString(job.error),
@@ -273,7 +293,11 @@ async function postGenerationPlan(request: GenerationPlanRequest): Promise<Gener
     body: JSON.stringify(request),
   });
   const body = await readJsonOrThrow(response, '/api/generation/plan');
-  return normalizeGenerationPlan(body, request);
+  const plan = normalizeGenerationPlan(body, request);
+  if (plan.items.length === 0) {
+    throw new Error('/api/generation/plan failed: empty output plan');
+  }
+  return plan;
 }
 
 async function postGenerationJob(
@@ -291,6 +315,20 @@ async function postGenerationJob(
   }
   if (snapshot.outputs.length > 0) return snapshot;
   return fetchGenerationJob(snapshot.job_id);
+}
+
+async function postStartGenerationJob(jobId: string): Promise<GenerationJobSnapshot> {
+  const response = await fetch(
+    `${baseUrl}/api/generation/jobs/${encodeURIComponent(jobId)}/start`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    }
+  );
+  if (!response.ok) {
+    await readJsonOrThrow(response, `/api/generation/jobs/${jobId}/start`);
+  }
+  return fetchGenerationJob(jobId);
 }
 
 async function fetchGenerationJob(jobId: string): Promise<GenerationJobSnapshot> {
@@ -315,6 +353,34 @@ async function postStopGenerationJob(jobId: string): Promise<GenerationJobSnapsh
   return snapshot.outputs.length > 0 ? snapshot : fetchGenerationJob(jobId);
 }
 
+async function fetchGenerationJobs(limit: number, offset = 0): Promise<GenerationJobListSnapshot> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  const response = await fetch(`${baseUrl}/api/generation/jobs?${params.toString()}`, {
+    cache: 'no-store',
+  });
+  const body = await readJsonOrThrow(response, '/api/generation/jobs');
+  const record = asRecord(body);
+  const rawJobs = Array.isArray(body)
+    ? body
+    : Array.isArray(record.jobs)
+      ? record.jobs
+      : Array.isArray(record.items)
+        ? record.items
+        : [];
+  const jobs = rawJobs
+    .map((item) => normalizeGenerationJob(item))
+    .filter((job) => Boolean(job.job_id));
+  return {
+    jobs,
+    total: asNumber(record.total) ?? jobs.length,
+    limit: asNumber(record.limit) ?? limit,
+    offset: asNumber(record.offset) ?? offset,
+  };
+}
+
 export function usePersistSourceImage() {
   return useMutation<SourceImageRef, Error, SourceImageUploadInput>({
     mutationFn: postSourceImage,
@@ -324,6 +390,52 @@ export function usePersistSourceImage() {
 export function useGenerationPlan() {
   return useMutation<GenerationPlan, Error, GenerationPlanRequest>({
     mutationFn: postGenerationPlan,
+  });
+}
+
+export function useGenerationJobRecords(
+  options: UseGenerationJobRecordsOptions = {}
+): UseQueryResult<GenerationJobListSnapshot, Error> {
+  const limit = options.limit ?? 50;
+  const offset = options.offset ?? 0;
+  return useQuery<GenerationJobListSnapshot, Error>({
+    queryKey: ['generation-jobs', 'records', limit, offset],
+    queryFn: () => fetchGenerationJobs(limit, offset),
+    refetchInterval: (query) => {
+      const jobs = query.state.data?.jobs ?? [];
+      const hasLiveJob = jobs.some(
+        (job) =>
+          job.status === 'planned' ||
+          job.status === 'queued' ||
+          job.status === 'running' ||
+          job.status === 'stopping'
+      );
+      return hasLiveJob ? 4000 : 15000;
+    },
+  });
+}
+
+export function useGenerationJobRecordPages(options: UseGenerationJobRecordsOptions = {}) {
+  const limit = options.limit ?? 50;
+  return useInfiniteQuery<GenerationJobListSnapshot, Error>({
+    queryKey: ['generation-jobs', 'records', 'pages', limit],
+    initialPageParam: options.offset ?? 0,
+    queryFn: ({ pageParam }) => fetchGenerationJobs(limit, Number(pageParam) || 0),
+    getNextPageParam: (lastPage) => {
+      const nextOffset = lastPage.offset + lastPage.jobs.length;
+      return nextOffset < lastPage.total ? nextOffset : undefined;
+    },
+    refetchInterval: (query) => {
+      const jobs = query.state.data?.pages.flatMap((page) => page.jobs) ?? [];
+      const hasLiveJob = jobs.some(
+        (job) =>
+          job.status === 'planned' ||
+          job.status === 'queued' ||
+          job.status === 'running' ||
+          job.status === 'stopping'
+      );
+      return hasLiveJob ? 4000 : 15000;
+    },
   });
 }
 
@@ -387,13 +499,15 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}) {
       setPhase('creating');
       setErrorMessage(null);
       try {
-        const snapshot = await postGenerationJob(request);
+        const created = await postGenerationJob(request);
+        const snapshot = await postStartGenerationJob(created.job_id);
         setSnapshot(snapshot);
         return snapshot;
       } catch (err) {
-        setErrorMessage((err as Error).message);
+        const error = err instanceof Error ? err : new Error(String(err));
+        setErrorMessage(error.message);
         setPhase('error');
-        return null;
+        throw error;
       }
     },
     [setSnapshot]
@@ -428,7 +542,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}) {
 
     try {
       eventSource = new EventSource(eventsUrl);
-      eventSource.addEventListener('message', (event) => {
+      const handleSnapshotEvent = (event: MessageEvent<string>) => {
         try {
           const parsed = JSON.parse(event.data) as unknown;
           const snapshot = normalizeGenerationJob(parsed, jobId);
@@ -441,7 +555,13 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}) {
           // A missed or malformed event is recovered by polling/GET snapshot.
           void refresh(jobId);
         }
-      });
+      };
+      const handleUpdateEvent = () => {
+        void refresh(jobId);
+      };
+      eventSource.addEventListener('message', handleSnapshotEvent);
+      eventSource.addEventListener('snapshot', handleSnapshotEvent);
+      eventSource.addEventListener('update', handleUpdateEvent);
       eventSource.addEventListener('error', () => {
         void refresh(jobId);
       });

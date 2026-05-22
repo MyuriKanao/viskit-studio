@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import type { KitListItem } from '@/hooks/use-recent-kits';
 import { resolveApiImageSrc } from '@/lib/api/images';
-import { imageIdForIndex, normalizeKitThumbs } from '@/lib/kits/images';
+import { imageIdForCatalogItem, normalizeKitThumbs } from '@/lib/kits/images';
 import { cn } from '@/lib/utils';
 
 export interface CatalogImagePreviewLabels {
@@ -49,10 +49,10 @@ export function CatalogImagePreview({
 }: CatalogImagePreviewProps) {
   const thumbs = normalizeKitThumbs(kit?.thumbs);
   const selectedSrc = thumbs[imageIndex] ?? null;
-  const selectedImageId = imageIdForIndex(imageIndex);
+  const selectedImageId = kit ? imageIdForCatalogItem(kit, imageIndex) : '';
   const resolvedSrc = resolveApiImageSrc(selectedSrc);
   const availableImages = thumbs
-    .map((src, index) => ({ src, index, imageId: imageIdForIndex(index) }))
+    .map((src, index) => ({ src, index, imageId: kit ? imageIdForCatalogItem(kit, index) : '' }))
     .filter((image): image is { src: string; index: number; imageId: string } =>
       Boolean(image.src)
     );

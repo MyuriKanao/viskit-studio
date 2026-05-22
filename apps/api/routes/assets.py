@@ -47,6 +47,12 @@ class AssetEditContext(BaseModel):
     target: dict[str, str]
 
 
+class AssetDeleteResponse(BaseModel):
+    asset_id: str
+    deleted: bool
+    file_deleted: bool
+
+
 def _metadata_obj(value: Any) -> dict[str, Any]:
     import json
 
@@ -139,6 +145,20 @@ def download_asset(
         filename=filename,
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.delete("/{asset_id}", response_model=AssetDeleteResponse)
+def delete_asset(
+    asset_id: str,
+    session: Annotated[Session, Depends(get_session)],
+) -> AssetDeleteResponse:
+    path, _row = _asset_file(session, asset_id)
+    session.execute(text("DELETE FROM generated_assets WHERE id = :id"), {"id": asset_id})
+    file_deleted = False
+    if path.is_file():
+        path.unlink()
+        file_deleted = True
+    return AssetDeleteResponse(asset_id=asset_id, deleted=True, file_deleted=file_deleted)
 
 
 @router.post("/{asset_id}/edit", response_model=AssetEditContext)

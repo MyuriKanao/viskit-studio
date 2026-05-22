@@ -5,6 +5,8 @@
 /* ===== Viskit Studio — Design Tokens ===== */
 
 :root {
+  color-scheme: dark;
+
   /* surfaces — cooler ink, warm tone reserved for text + accent */
   --ink-base: #0b0b0e;
   --ink-base-l: #faf7f2;
@@ -70,6 +72,8 @@
 }
 
 html[data-theme="light"] {
+  color-scheme: light;
+
   --ink-base: #eef5ff;
   --ink-base-l: #ffffff;
   --surface-01: #f8fbff;
@@ -106,4 +110,28 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans);
   margin: 0;
+}
+
+* {
+  scrollbar-color: var(--border-strong) var(--ink-base);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--ink-base);
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+  border: 2px solid var(--ink-base);
+  border-radius: var(--r-pill);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-faint);
 }

@@ -64,7 +64,7 @@ def mark_stale_generation_jobs_interrupted() -> None:
                 "UPDATE generation_jobs"
                 " SET status = 'interrupted', error_message = :error,"
                 "     updated_at = CURRENT_TIMESTAMP, finished_at = CURRENT_TIMESTAMP"
-                " WHERE status IN ('running', 'stopping')"
+                " WHERE status IN ('queued', 'running', 'stopping')"
             ),
             {"error": "interrupted by API restart"},
         )

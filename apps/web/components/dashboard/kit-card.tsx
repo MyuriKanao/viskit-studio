@@ -7,7 +7,7 @@ import { LocaleFlag } from '@/components/atoms/locale-flag';
 import { StatusChip } from '@/components/atoms/status-chip';
 import type { KitListItem } from '@/hooks/use-recent-kits';
 import { resolveApiImageSrc } from '@/lib/api/images';
-import { imageIdForIndex, normalizeKitThumbs } from '@/lib/kits/images';
+import { imageIdForCatalogItem, normalizeKitThumbs } from '@/lib/kits/images';
 import { cn } from '@/lib/utils';
 
 export interface KitCardProps {
@@ -56,12 +56,12 @@ export function KitCard({ kit, locale, onClick, onImageClick, openImageLabel }: 
   const displayName = locale === 'zh' ? kit.name : (kit.name_en ?? kit.name);
   const thumbs = normalizeKitThumbs(kit.thumbs);
   const availableThumbs = thumbs
-    .map((src, index) => ({ src, index, imageId: imageIdForIndex(index) }))
+    .map((src, index) => ({ src, index, imageId: imageIdForCatalogItem(kit, index) }))
     .filter((thumb): thumb is { src: string; index: number; imageId: string } =>
       Boolean(thumb.src)
     );
   const emptyThumbs = thumbs
-    .map((src, index) => ({ src, imageId: imageIdForIndex(index) }))
+    .map((src, index) => ({ src, imageId: imageIdForCatalogItem(kit, index) }))
     .filter((thumb) => !thumb.src);
   const localeBadge: 'zh' | 'en' = (kit.locale ?? '').toLowerCase().startsWith('en') ? 'en' : 'zh';
   const kind = statusKind(kit.status);

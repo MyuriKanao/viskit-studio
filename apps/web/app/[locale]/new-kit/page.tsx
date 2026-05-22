@@ -34,8 +34,16 @@ export default function NewKitPage() {
   const sourceImageId = searchParams.get('source_image_id');
   const importedSourceRef = React.useRef<string | null>(null);
 
-  const { handleStart, genPhase, job, activeJobId, errorMessage, handleStop, resumeJob } =
-    useChatStartFlow();
+  const {
+    handleStart,
+    handleRewriteBrief,
+    genPhase,
+    job,
+    activeJobId,
+    errorMessage,
+    handleStop,
+    resumeJob,
+  } = useChatStartFlow();
 
   React.useEffect(() => {
     resetChat();
@@ -140,7 +148,10 @@ export default function NewKitPage() {
           aria-label="套包生成对话"
           className="flex min-h-0 flex-col border-r border-border-subtle bg-surface-01"
         >
-          <MessageList onStart={(spec, plan) => void handleStart(spec, plan)} />
+          <MessageList
+            onStart={(spec, plan, rewrittenSpec) => void handleStart(spec, plan, rewrittenSpec)}
+            onRewriteBrief={handleRewriteBrief}
+          />
           <MessageInput />
         </section>
 

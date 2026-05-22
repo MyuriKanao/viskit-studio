@@ -3,6 +3,7 @@
 import * as React from 'react';
 
 import { ConfirmationCard } from '@/components/chat/ConfirmationCard';
+import type { SpecResponse } from '@/hooks/use-kit-pipeline';
 import { useChatStore } from '@/lib/chat/store';
 import type { ChatMessage, InferredSpec } from '@/lib/chat/types';
 import type { GenerationPlan } from '@/lib/generation/types';
@@ -13,7 +14,9 @@ import { cn } from '@/lib/utils';
 // ---------------------------------------------------------------------------
 export interface MessageListProps {
   /** Forwarded to ConfirmationCard when a 'card' message is rendered (D2). */
-  onStart: (spec: InferredSpec, plan: GenerationPlan) => void;
+  onStart: (spec: InferredSpec, plan: GenerationPlan, rewrittenSpec?: SpecResponse) => void;
+  /** Optional LLM rewrite callback for the editable generation brief. */
+  onRewriteBrief?: (spec: InferredSpec, plan: GenerationPlan) => Promise<SpecResponse>;
 }
 
 // ---------------------------------------------------------------------------
@@ -22,12 +25,17 @@ export interface MessageListProps {
 function MessageBubble({
   msg,
   onStart,
-}: { msg: ChatMessage; onStart: (spec: InferredSpec, plan: GenerationPlan) => void }) {
+  onRewriteBrief,
+}: {
+  msg: ChatMessage;
+  onStart: (spec: InferredSpec, plan: GenerationPlan, rewrittenSpec?: SpecResponse) => void;
+  onRewriteBrief?: (spec: InferredSpec, plan: GenerationPlan) => Promise<SpecResponse>;
+}) {
   const isUser = msg.role === 'user';
 
   // D2: card-type message renders ConfirmationCard inline
   if (msg.type === 'card') {
-    return <CardMessage onStart={onStart} />;
+    return <CardMessage onStart={onStart} onRewriteBrief={onRewriteBrief} />;
   }
 
   if (msg.type === 'image_ref') {
@@ -70,7 +78,13 @@ function MessageBubble({
 // ---------------------------------------------------------------------------
 // Card message — reads inferred_spec from store, renders ConfirmationCard
 // ---------------------------------------------------------------------------
-function CardMessage({ onStart }: { onStart: (spec: InferredSpec, plan: GenerationPlan) => void }) {
+function CardMessage({
+  onStart,
+  onRewriteBrief,
+}: {
+  onStart: (spec: InferredSpec, plan: GenerationPlan, rewrittenSpec?: SpecResponse) => void;
+  onRewriteBrief?: (spec: InferredSpec, plan: GenerationPlan) => Promise<SpecResponse>;
+}) {
   const inferred_spec = useChatStore((s) => s.inferred_spec);
   const output_plan = useChatStore((s) => s.output_plan);
   const setConfirmationMode = useChatStore((s) => s.setConfirmationMode);
@@ -90,6 +104,7 @@ function CardMessage({ onStart }: { onStart: (spec: InferredSpec, plan: Generati
       inferred={inferred_spec}
       outputPlan={output_plan}
       onStart={onStart}
+      onRewriteBrief={onRewriteBrief}
       onModeChange={setConfirmationMode}
     />
   );
@@ -98,7 +113,7 @@ function CardMessage({ onStart }: { onStart: (spec: InferredSpec, plan: Generati
 // ---------------------------------------------------------------------------
 // MessageList
 // ---------------------------------------------------------------------------
-export function MessageList({ onStart }: MessageListProps) {
+export function MessageList({ onStart, onRewriteBrief }: MessageListProps) {
   const messages = useChatStore((s) => s.messages);
   const messageCount = messages.length;
   const bottomRef = React.useRef<HTMLDivElement>(null);
@@ -120,7 +135,7 @@ export function MessageList({ onStart }: MessageListProps) {
         </div>
       )}
       {messages.map((msg) => (
-        <MessageBubble key={msg.id} msg={msg} onStart={onStart} />
+        <MessageBubble key={msg.id} msg={msg} onStart={onStart} onRewriteBrief={onRewriteBrief} />
       ))}
       <div ref={bottomRef} />
     </div>

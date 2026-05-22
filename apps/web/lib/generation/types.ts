@@ -91,8 +91,11 @@ export interface GenerationOutput {
 
 export interface GenerationJobSnapshot {
   job_id: string;
+  client_job_id: string | null;
   status: GenerationJobStatus;
   source_image_ref: string | null;
+  user_prompt: string | null;
+  locale: Locale | string | null;
   marketing_kit_id: number | null;
   outputs: GenerationOutput[];
   error_message: string | null;
@@ -111,18 +114,28 @@ export interface GenerationPlanRequest {
   explicit_template_refs?: string[];
 }
 
+export interface GenerationJobOutputCreateRequest {
+  output_key: string;
+  output_kind: string;
+  template_ref: string;
+  template_name?: string | null;
+  aspect_ratio?: string | null;
+  width: number;
+  height: number;
+  prompt: string;
+  destination_type: OutputDestinationType;
+  marketing_kit_id?: number | null;
+  slot_id?: string | null;
+}
+
 export interface GenerationJobCreateRequest {
-  kit_client_id: string;
   source_image_ref: string;
+  user_prompt: string;
   locale: Locale;
-  user_prompt: string | null;
-  brand_color_hex: string;
-  style_prompt: string;
-  product: ProductProfilePayload;
-  output_plan: GenerationPlan;
-  spec: unknown;
-  template_scheme_ref?: string | null;
-  template_slot_overrides?: Record<string, string>;
+  client_job_id?: string | null;
+  marketing_kit_id?: number | null;
+  planner_payload: Record<string, unknown>;
+  outputs: GenerationJobOutputCreateRequest[];
 }
 
 export function canonicalJobOutputImageId(jobId: string, outputId: string): string {
