@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
-from apps.api.lib.db import get_session, json_param, session_scope
+from apps.api.lib.db import generated_assets_use_text_ids, get_session, json_param, session_scope
 from apps.api.lib.generation_jobs import (
     encode_asset_image_id,
     encode_kit_slot_image_id,
@@ -240,9 +240,17 @@ def _json_obj(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _valid_asset_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    asset_id = str(value).strip()
+    return asset_id if asset_id and asset_id not in {"None", "null", "undefined"} else None
+
+
 def _output_image_id(row: Any) -> str | None:
-    if row.asset_id:
-        return encode_asset_image_id(str(row.asset_id))
+    asset_id = _valid_asset_id(row.asset_id)
+    if asset_id:
+        return encode_asset_image_id(asset_id)
     if row.destination_type == "kit_slot" and row.marketing_kit_id is not None and row.slot_id:
         return encode_kit_slot_image_id(int(row.marketing_kit_id), str(row.slot_id))
     return None
@@ -304,7 +312,7 @@ def _job_out_from_rows(job: Any, outputs: list[Any]) -> GenerationJobOut:
                     int(row.marketing_kit_id) if row.marketing_kit_id is not None else None
                 ),
                 slot_id=row.slot_id,
-                asset_id=row.asset_id,
+                asset_id=_valid_asset_id(row.asset_id),
                 image_id=_output_image_id(row),
                 image_url=_output_image_url(row, str(job.id)),
                 error_message=row.error_message,
@@ -713,23 +721,21 @@ async def _run_generation_output(app: Any, job_id: str, output: Any) -> None:
                     prompt=str(output.prompt),
                 )
         else:
-            asset_file_token = f"asset_{uuid.uuid4().hex}"
-            asset_path = _asset_file_path(asset_file_token)
+            new_asset_id = f"asset_{uuid.uuid4().hex}"
+            asset_path = _asset_file_path(new_asset_id)
             asset_path.parent.mkdir(parents=True, exist_ok=True)
             asset_path.write_bytes(png_bytes)
             png_path = str(asset_path)
             with session_scope() as session:
-                row = session.execute(
-                    text(
-                        "INSERT INTO generated_assets"
-                        " (name, template_ref, output_kind, png_path,"
-                        "  source_job_id, source_output_id, source_image_ref, metadata)"
-                        " SELECT :name, :template_ref, :output_kind, :png_path,"
-                        "  gj.id, :output_id, gj.source_image_ref, "
-                        f"{json_param(session, 'metadata')}"
-                        " FROM generation_jobs gj WHERE gj.id = :job_id"
-                        " RETURNING id"
-                    ),
+                if generated_assets_use_text_ids(session):
+                    asset_columns = " (id, name, template_ref, output_kind, png_path,"
+                    asset_values = " :id, :name, :template_ref, :output_kind, :png_path,"
+                    asset_params: dict[str, Any] = {"id": new_asset_id}
+                else:
+                    asset_columns = " (name, template_ref, output_kind, png_path,"
+                    asset_values = " :name, :template_ref, :output_kind, :png_path,"
+                    asset_params = {}
+                asset_params.update(
                     {
                         "name": str(output.output_key),
                         "template_ref": output.template_ref,
@@ -738,11 +744,24 @@ async def _run_generation_output(app: Any, job_id: str, output: Any) -> None:
                         "output_id": output_id,
                         "job_id": job_id,
                         "metadata": json.dumps({"job_id": job_id}, ensure_ascii=False),
-                    },
+                    }
+                )
+                row = session.execute(
+                    text(
+                        "INSERT INTO generated_assets"
+                        f"{asset_columns}"
+                        "  source_job_id, source_output_id, source_image_ref, metadata)"
+                        f" SELECT{asset_values}"
+                        "  gj.id, :output_id, gj.source_image_ref, "
+                        f"{json_param(session, 'metadata')}"
+                        " FROM generation_jobs gj WHERE gj.id = :job_id"
+                        " RETURNING id"
+                    ),
+                    asset_params,
                 ).first()
                 if row is None:
                     raise RuntimeError("asset insert returned no id")
-                asset_id = str(row.id)
+                asset_id = _valid_asset_id(row.id) or new_asset_id
         with session_scope() as session:
             session.execute(
                 text(

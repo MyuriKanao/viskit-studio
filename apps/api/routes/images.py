@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from apps.api.lib.db import get_session, json_param
+from apps.api.lib.db import generated_assets_use_text_ids, get_session, json_param
 
 router = APIRouter(prefix="/api/images", tags=["editor"])
 
@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/images", tags=["editor"])
 # - asset:<generated_asset_id> for standalone generated/edited assets
 # Future job-output ids should use the same no-slash, URL-segment-safe style.
 _KIT_SLOT_RE = re.compile(r"^kit-slot:(?P<kit_id>\d+):(?P<slot_id>H[1-5]|M[1-9])$")
-_ASSET_RE = re.compile(r"^asset:(?P<asset_id>\d+)$")
+_ASSET_RE = re.compile(r"^asset:(?P<asset_id>[A-Za-z0-9_-]{1,80})$")
 _EDIT_RESULT_RE = re.compile(r"^edit-result:(?P<result_id>[A-Za-z0-9_-]{1,64})$")
 
 # In-memory OCR cache per image_id. Reset on process restart — acceptable for MVP.
@@ -110,7 +110,7 @@ class ImageTarget(BaseModel):
     image_id: str
     kit_id: int | None = None
     slot_id: str | None = None
-    asset_id: int | None = None
+    asset_id: str | None = None
     row_id: int | None = None
     png_path: str
 
@@ -144,7 +144,7 @@ def _lookup_kit_slot(session: Session, kit_id: int, slot_id: str) -> ImageTarget
     )
 
 
-def _lookup_asset(session: Session, asset_id: int) -> ImageTarget:
+def _lookup_asset(session: Session, asset_id: str) -> ImageTarget:
     row = session.execute(
         text("SELECT id, png_path FROM generated_assets WHERE id = :asset_id"),
         {"asset_id": asset_id},
@@ -155,7 +155,7 @@ def _lookup_asset(session: Session, asset_id: int) -> ImageTarget:
         kind="asset",
         image_id=f"asset:{asset_id}",
         asset_id=asset_id,
-        row_id=int(row.id),
+        row_id=None,
         png_path=str(row.png_path),
     )
 
@@ -170,7 +170,7 @@ def _resolve_image_target(image_id: str, session: Session) -> ImageTarget:
         )
     asset_match = _ASSET_RE.fullmatch(image_id)
     if asset_match:
-        return _lookup_asset(session, asset_id=int(asset_match.group("asset_id")))
+        return _lookup_asset(session, asset_id=asset_match.group("asset_id"))
     raise HTTPException(status_code=404, detail="unknown image_id")
 
 
@@ -293,8 +293,8 @@ def _copy_to_asset(
 ) -> SaveImageResponse:
     import uuid
 
-    asset_uuid = uuid.uuid4().hex[:16]
-    asset_path = _assets_dir() / f"edit-{asset_uuid}.png"
+    asset_id = f"asset_{uuid.uuid4().hex}"
+    asset_path = _assets_dir() / f"edit-{asset_id}.png"
     asset_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(edit_path, asset_path)
     metadata = json.dumps(
@@ -305,25 +305,36 @@ def _copy_to_asset(
         },
         ensure_ascii=False,
     )
-    row = session.execute(
-        text(
-            "INSERT INTO generated_assets"
-            " (name, png_path, source_kit_id, source_slot_id, metadata)"
-            " VALUES (:name, :png_path, :source_kit_id, :source_slot_id, "
-            f"{json_param(session, 'metadata')})"
-            " RETURNING id"
-        ),
+    if generated_assets_use_text_ids(session):
+        asset_columns = " (id, name, png_path, source_kit_id, source_slot_id, metadata)"
+        asset_values = " (:id, :name, :png_path, :source_kit_id, :source_slot_id, "
+        asset_params: dict[str, Any] = {"id": asset_id}
+    else:
+        asset_columns = " (name, png_path, source_kit_id, source_slot_id, metadata)"
+        asset_values = " (:name, :png_path, :source_kit_id, :source_slot_id, "
+        asset_params = {}
+    asset_params.update(
         {
             "name": f"Edited {target.image_id}",
             "png_path": str(asset_path),
             "source_kit_id": target.kit_id,
             "source_slot_id": target.slot_id,
             "metadata": metadata,
-        },
+        }
+    )
+    row = session.execute(
+        text(
+            "INSERT INTO generated_assets"
+            f"{asset_columns}"
+            f" VALUES{asset_values}"
+            f"{json_param(session, 'metadata')})"
+            " RETURNING id"
+        ),
+        asset_params,
     ).first()
     if row is None:
         raise HTTPException(status_code=500, detail="asset create failed")
-    asset_id = int(row.id)
+    asset_id = str(row.id or asset_id)
     image_id = f"asset:{asset_id}"
     return SaveImageResponse(
         mode="copy",
@@ -385,7 +396,7 @@ class SaveImageResponse(BaseModel):
     mode: Literal["replace", "copy"]
     image_id: str
     image_url: str
-    asset_id: int | None = None
+    asset_id: str | None = None
     replaced: bool
 
 

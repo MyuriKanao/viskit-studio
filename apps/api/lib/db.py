@@ -348,7 +348,7 @@ CREATE INDEX IF NOT EXISTS image_edits_image_id_idx ON image_edits(hero_or_detai
 CREATE INDEX IF NOT EXISTS image_edits_op_type_idx ON image_edits(op_type);
 
 CREATE TABLE IF NOT EXISTS generated_assets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     template_ref TEXT,
     output_kind TEXT,
@@ -590,6 +590,41 @@ def _ensure_sqlite_compat_columns(engine: Engine) -> None:
                     conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
         for sql in indexes:
             conn.exec_driver_sql(sql)
+        generated_asset_columns = conn.exec_driver_sql(
+            "PRAGMA table_info(generated_assets)"
+        ).fetchall()
+        id_column = next((row for row in generated_asset_columns if str(row[1]) == "id"), None)
+        id_type = str(id_column[2]).upper() if id_column is not None else ""
+        if "INT" not in id_type:
+            conn.exec_driver_sql(
+                "UPDATE generated_assets"
+                " SET id = 'asset_' || lower(hex(randomblob(16)))"
+                " WHERE id IS NULL OR trim(id) = '' OR id = 'None'"
+            )
+            conn.exec_driver_sql(
+                "UPDATE generation_outputs"
+                " SET asset_id = ("
+                "   SELECT ga.id FROM generated_assets ga"
+                "   WHERE ga.source_output_id = generation_outputs.id"
+                "   ORDER BY ga.created_at DESC LIMIT 1"
+                " )"
+                " WHERE (asset_id IS NULL OR trim(asset_id) = '' OR asset_id = 'None')"
+                " AND EXISTS ("
+                "   SELECT 1 FROM generated_assets ga"
+                "   WHERE ga.source_output_id = generation_outputs.id"
+                " )"
+            )
+
+
+def generated_assets_use_text_ids(session: Session) -> bool:
+    """Return true when SQLite stores generated asset ids as caller-provided text."""
+    bind = session.get_bind()
+    if bind.dialect.name != "sqlite":
+        return False
+    rows = session.connection().exec_driver_sql("PRAGMA table_info(generated_assets)").fetchall()
+    id_column = next((row for row in rows if str(row[1]) == "id"), None)
+    id_type = str(id_column[2]).upper() if id_column is not None else ""
+    return "INT" not in id_type
 
 
 def _ensure_sqlite_schema(engine: Engine) -> None:

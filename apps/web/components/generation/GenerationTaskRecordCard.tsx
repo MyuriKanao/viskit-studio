@@ -97,6 +97,13 @@ function outputImageSrc(output: GenerationOutput): string {
   return resolveApiImageSrc(output.image_url ?? output.download_url ?? output.png_path);
 }
 
+function canEditImageId(imageId: string): boolean {
+  return (
+    /^asset:(?!None$|null$|undefined$)[A-Za-z0-9_-]{1,80}$/.test(imageId) ||
+    /^kit-slot:\d+:[HM][1-9]$/.test(imageId)
+  );
+}
+
 function formatDateTime(value: string | null | undefined, locale: SupportedLocale): string {
   if (!value) return '—';
   const date = new Date(value);
@@ -266,6 +273,7 @@ function OutputRecordTile({
   const complete = outputIsComplete(output);
   const hrefPrefix = localePrefix(locale);
   const editHref = `${hrefPrefix}/editor/${encodeURIComponent(output.image_id)}`;
+  const canEdit = complete && canEditImageId(output.image_id);
   const downloadHref = resolveApiImageSrc(
     output.download_url ?? output.image_url ?? output.png_path
   );
@@ -315,10 +323,11 @@ function OutputRecordTile({
         <div className="flex items-center gap-s-1">
           <Link
             href={editHref}
-            aria-disabled={!complete}
+            prefetch={false}
+            aria-disabled={!canEdit}
             className={cn(
               'inline-flex h-7 flex-1 items-center justify-center gap-s-1 rounded-input border px-s-2 text-[11px] transition-colors',
-              complete
+              canEdit
                 ? 'border-border-subtle text-ink-secondary hover:border-accent hover:text-accent'
                 : 'pointer-events-none border-border-subtle text-ink-faint opacity-50'
             )}

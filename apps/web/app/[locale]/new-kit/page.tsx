@@ -15,6 +15,16 @@ import { useChatStore } from '@/lib/chat/store';
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 const LAST_JOB_STORAGE_KEY = 'viskit:new-kit:last-generation-job-id';
 
+function isLiveGenerationStatus(status: string | null | undefined): boolean {
+  return (
+    status === 'planned' || status === 'queued' || status === 'running' || status === 'stopping'
+  );
+}
+
+function queuePathFrom(pathname: string): string {
+  return pathname.replace(/\/new-kit$/, '/queue') || '/queue';
+}
+
 export default function NewKitPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -33,6 +43,7 @@ export default function NewKitPage() {
   const outputPlan = useChatStore((s) => s.output_plan);
   const sourceImageId = searchParams.get('source_image_id');
   const importedSourceRef = React.useRef<string | null>(null);
+  const terminalRedirectJobRef = React.useRef<string | null>(null);
 
   const {
     handleStart,
@@ -121,13 +132,26 @@ export default function NewKitPage() {
   }, [activeJobId, resumeJob, sourceImageId]);
 
   React.useEffect(() => {
-    if (!activeJobId || typeof window === 'undefined') return;
+    if (!activeJobId || !isLiveGenerationStatus(job?.status) || typeof window === 'undefined') {
+      return;
+    }
     window.localStorage.setItem(LAST_JOB_STORAGE_KEY, activeJobId);
     const params = new URLSearchParams(window.location.search);
     if (params.get('job_id') === activeJobId) return;
     params.set('job_id', activeJobId);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [activeJobId, pathname, router]);
+  }, [activeJobId, job?.status, pathname, router]);
+
+  React.useEffect(() => {
+    if (!job || isLiveGenerationStatus(job.status)) return;
+    if (terminalRedirectJobRef.current === job.job_id) return;
+    terminalRedirectJobRef.current = job.job_id;
+    setActiveJobId(null);
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(LAST_JOB_STORAGE_KEY);
+    }
+    router.replace(queuePathFrom(pathname), { scroll: false });
+  }, [job, pathname, router, setActiveJobId]);
 
   // Warmup ping to mitigate cold-start latency (B3.5); failures are non-fatal
   React.useEffect(() => {

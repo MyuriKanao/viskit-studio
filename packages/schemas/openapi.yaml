@@ -1641,7 +1641,7 @@ components:
       properties:
         asset_id:
           anyOf:
-            - type: integer
+            - type: string
             - type: 'null'
           title: Asset Id
         image_id:
